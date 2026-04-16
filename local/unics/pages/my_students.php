@@ -80,7 +80,7 @@ if ($is_admin) {
     echo html_writer::tag('div',
         html_writer::link(
             new moodle_url('/local/unics/pages/assign.php'),
-            '← Назначения педагог-учащийся',
+            'Назначения педагог-учащийся',
             ['class' => 'btn btn-outline-secondary btn-sm me-2']
         ) .
         html_writer::link(

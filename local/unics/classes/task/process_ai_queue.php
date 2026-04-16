@@ -71,6 +71,9 @@ class process_ai_queue extends \core\task\scheduled_task {
                     ]);
                 }
 
+                // 3. Автозапись учащегося на курс
+                self::enrol_student($student->mdl_user_id, (int)$umk->mdl_course_id);
+
                 $DB->set_field('unics_umk', 'status', 2, ['id' => $umk->id]);
                 $DB->update_record('unics_ai_queue', (object)[
                     'id'           => $task->id,
@@ -90,6 +93,50 @@ class process_ai_queue extends \core\task\scheduled_task {
                 $DB->set_field('unics_umk', 'status', 3, ['id' => $task->umk_id]);
                 mtrace("UMK #{$task->umk_id} — ошибка: " . $e->getMessage());
             }
+        }
+    }
+
+    /**
+     * Записать пользователя на курс через метод 'manual', если ещё не записан.
+     */
+    private static function enrol_student(int $mdl_user_id, int $course_id): void {
+        global $DB;
+
+        $enrol = enrol_get_plugin('manual');
+        if (!$enrol) {
+            mtrace("  [warn] плагин записи 'manual' недоступен");
+            return;
+        }
+
+        $instance = $DB->get_record('enrol', [
+            'courseid'  => $course_id,
+            'enrol'     => 'manual',
+            'status'    => 0,
+        ]);
+
+        if (!$instance) {
+            // Создаём экземпляр manual enrol для курса
+            $course = $DB->get_record('course', ['id' => $course_id], '*', MUST_EXIST);
+            $enrol->add_default_instance($course);
+            $instance = $DB->get_record('enrol', [
+                'courseid' => $course_id,
+                'enrol'    => 'manual',
+                'status'   => 0,
+            ]);
+        }
+
+        if (!$instance) {
+            mtrace("  [warn] не удалось получить экземпляр manual enrol для курса #{$course_id}");
+            return;
+        }
+
+        // Проверяем — вдруг уже записан
+        if (!is_enrolled(\context_course::instance($course_id), $mdl_user_id)) {
+            // Роль student в Moodle
+            $student_role = $DB->get_record('role', ['shortname' => 'student'], 'id');
+            $role_id = $student_role ? (int)$student_role->id : 5;
+            $enrol->enrol_user($instance, $mdl_user_id, $role_id);
+            mtrace("  Учащийся #{$mdl_user_id} записан на курс #{$course_id}");
         }
     }
 }

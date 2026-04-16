@@ -35,7 +35,7 @@ echo $OUTPUT->header();
 echo html_writer::div(
     html_writer::link(
         new moodle_url('/local/unics/pages/create_user.php'),
-        '+ ' . get_string('create_user', 'local_unics'),
+        get_string('create_user', 'local_unics'),
         ['class' => 'btn btn-primary mr-2']
     ) .
     html_writer::link(

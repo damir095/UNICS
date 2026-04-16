@@ -51,7 +51,7 @@ $records = $DB->get_records_sql(
 echo $OUTPUT->header();
 
 echo '<div class="mb-3 d-flex justify-content-between align-items-center">';
-echo '<a href="generate_umk.php" class="btn btn-primary">+ Создать новый УМК</a>';
+echo '<a href="generate_umk.php" class="btn btn-primary">Создать новый УМК</a>';
 echo '<a href="?run_now=1&sesskey=' . sesskey() . '" class="btn btn-outline-secondary btn-sm"
         onclick="return confirm(\'Запустить обработку очереди прямо сейчас?\')">'
     . 'Запустить обработку сейчас'

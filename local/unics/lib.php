@@ -54,6 +54,14 @@ function local_unics_extend_navigation(global_navigation $nav) {
         );
 
         $branch->add(
+            'Импорт из CSV',
+            new moodle_url('/local/unics/pages/import_users.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_import'
+        );
+
+        $branch->add(
             get_string('organizations', 'local_unics'),
             new moodle_url('/local/unics/pages/organizations.php'),
             navigation_node::TYPE_CUSTOM,
@@ -67,6 +75,14 @@ function local_unics_extend_navigation(global_navigation $nav) {
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_assign'
+        );
+
+        $branch->add(
+            'Запись на курс',
+            new moodle_url('/local/unics/pages/enrol_students.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_enrol'
         );
 
         $branch->add(

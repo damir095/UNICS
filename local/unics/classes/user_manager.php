@@ -105,37 +105,56 @@ class unics_user_manager {
     }
 
     /**
-     * Получить всех учащихся организации
+     * Получить учащихся: все (org_id=0) или конкретной организации
      */
     public static function get_students(int $org_id): array {
         global $DB;
+
+        if ($org_id > 0) {
+            $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
+                           s.id AS student_id, s.category, s.difficulty_level, s.class_number
+                    FROM {user} u
+                    JOIN {unics_students} s ON s.mdl_user_id = u.id
+                    WHERE s.organization_id = :org_id AND u.deleted = 0
+                    ORDER BY u.lastname, u.firstname";
+            return $DB->get_records_sql($sql, ['org_id' => $org_id]);
+        }
 
         $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
                        s.id AS student_id, s.category, s.difficulty_level, s.class_number
                 FROM {user} u
                 JOIN {unics_students} s ON s.mdl_user_id = u.id
-                WHERE s.organization_id = :org_id AND u.deleted = 0
+                WHERE u.deleted = 0
                 ORDER BY u.lastname, u.firstname";
-
-        return $DB->get_records_sql($sql, ['org_id' => $org_id]);
+        return $DB->get_records_sql($sql);
     }
 
     /**
-     * Получить всех педагогов организации
+     * Получить педагогов: все (org_id=0) или конкретной организации
      */
     public static function get_teachers(int $org_id): array {
         global $DB;
+
+        if ($org_id > 0) {
+            $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
+                           t.id AS teacher_id, t.subjects
+                    FROM {user} u
+                    JOIN {unics_teachers} t ON t.mdl_user_id = u.id
+                    JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+                    WHERE t.organization_id = :org_id AND u.deleted = 0
+                      AND uo.unics_role = 5
+                    ORDER BY u.lastname, u.firstname";
+            return $DB->get_records_sql($sql, ['org_id' => $org_id]);
+        }
 
         $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
                        t.id AS teacher_id, t.subjects
                 FROM {user} u
                 JOIN {unics_teachers} t ON t.mdl_user_id = u.id
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
-                WHERE t.organization_id = :org_id AND u.deleted = 0
-                  AND uo.unics_role = 5
+                WHERE u.deleted = 0 AND uo.unics_role = 5
                 ORDER BY u.lastname, u.firstname";
-
-        return $DB->get_records_sql($sql, ['org_id' => $org_id]);
+        return $DB->get_records_sql($sql);
     }
 
     /**

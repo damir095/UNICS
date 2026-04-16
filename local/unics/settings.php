@@ -15,6 +15,13 @@ if ($hassiteconfig) {
     ));
 
     $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_import',
+        'Импорт пользователей (CSV)',
+        new moodle_url('/local/unics/pages/import_users.php'),
+        'local/unics:manage'
+    ));
+
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
         'local_unics_orgs',
         get_string('organizations', 'local_unics'),
         new moodle_url('/local/unics/pages/organizations.php'),
@@ -25,6 +32,13 @@ if ($hassiteconfig) {
         'local_unics_assign',
         get_string('assignments', 'local_unics'),
         new moodle_url('/local/unics/pages/assign.php'),
+        'local/unics:manage'
+    ));
+
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_enrol',
+        'Запись учащихся на курс',
+        new moodle_url('/local/unics/pages/enrol_students.php'),
         'local/unics:manage'
     ));
 

@@ -130,7 +130,7 @@ if ($edit_type && $edit_id) {
 echo $OUTPUT->header();
 
 echo '<div class="mb-3">';
-echo '<a href="/local/unics/pages/users.php" class="btn btn-outline-secondary btn-sm">&larr; Пользователи</a>';
+echo '<a href="/local/unics/pages/users.php" class="btn btn-outline-secondary btn-sm">Пользователи</a>';
 echo '</div>';
 
 // ---- Форма редактирования (показывается вверху, если кликнули Изменить) ----
@@ -211,17 +211,13 @@ if (empty($tree)) {
 
         // Заголовок региона
         echo '<div class="card-header d-flex justify-content-between align-items-center">';
-        echo '<span><strong>' . s($region->name) . '</strong>';
-        $cat_label = $region->mdl_category_id
-            ? '<span class="badge badge-success ml-2">cat #' . $region->mdl_category_id . '</span>'
-            : '<span class="badge badge-warning ml-2">без категории</span>';
-        echo $cat_label . '</span>';
+        echo '<strong>' . s($region->name) . '</strong>';
 
         // Кнопки действий для региона
         echo '<div>';
         echo '<a href="?edit_type=region&edit_id=' . $region->id . '" class="btn btn-sm btn-outline-secondary mr-1">Изменить</a>';
         echo '<form method="post" class="d-inline"
-                onsubmit="return confirm(\'Удалить регион \'' . s(addslashes($region->name)) . '\'? Все районы должны быть удалены заранее.\')">';
+                onsubmit="return confirm(\'Удалить регион ' . s(addslashes($region->name)) . '? Все районы должны быть удалены заранее.\')">';
         echo '<input type="hidden" name="action"  value="delete">';
         echo '<input type="hidden" name="type"    value="region">';
         echo '<input type="hidden" name="del_id"  value="' . $region->id . '">';
@@ -239,17 +235,13 @@ if (empty($tree)) {
 
             // Заголовок района
             echo '<div class="d-flex justify-content-between align-items-center mb-2">';
-            echo '<span><strong>' . s($dist->name) . '</strong>';
-            $cat_label = $dist->mdl_category_id
-                ? '<small class="text-success ml-2">cat #' . $dist->mdl_category_id . '</small>'
-                : '<small class="text-danger ml-2">без категории</small>';
-            echo $cat_label . '</span>';
+            echo '<strong>' . s($dist->name) . '</strong>';
 
             // Кнопки действий для района
             echo '<div>';
             echo '<a href="?edit_type=district&edit_id=' . $dist->id . '" class="btn btn-sm btn-outline-secondary mr-1">Изменить</a>';
             echo '<form method="post" class="d-inline"
-                    onsubmit="return confirm(\'Удалить район \'' . s(addslashes($dist->name)) . '\'? Организации должны быть удалены заранее.\')">';
+                    onsubmit="return confirm(\'Удалить район ' . s(addslashes($dist->name)) . '? Организации должны быть удалены заранее.\')">';
             echo '<input type="hidden" name="action"  value="delete">';
             echo '<input type="hidden" name="type"    value="district">';
             echo '<input type="hidden" name="del_id"  value="' . $dist->id . '">';
@@ -265,16 +257,13 @@ if (empty($tree)) {
                 echo '<table class="table table-sm table-bordered mb-2">';
                 echo '<thead class="thead-light"><tr>
                     <th>Организация</th><th>Краткое</th><th>Тип</th>
-                    <th>Email</th><th>Категория Moodle</th><th>Действия</th>
+                    <th>Email</th><th>Действия</th>
                 </tr></thead><tbody>';
                 foreach ($dist->organizations as $org) {
                     $type_name = $org_types[$org->org_type] ?? '?';
-                    $cat_cell  = $org->mdl_category_id
-                        ? '<span class="text-success">cat #' . $org->mdl_category_id . '</span>'
-                        : '<span class="text-danger">' . get_string('not_linked', 'local_unics') . '</span>';
 
                     $del_form = '<form method="post" class="d-inline"
-                        onsubmit="return confirm(\'Удалить организацию \'' . s(addslashes($org->name)) . '\'?\')">'
+                        onsubmit="return confirm(\'Удалить организацию ' . s(addslashes($org->name)) . '?\')">'
                         . '<input type="hidden" name="action"  value="delete">'
                         . '<input type="hidden" name="type"    value="org">'
                         . '<input type="hidden" name="del_id"  value="' . $org->id . '">'
@@ -287,7 +276,6 @@ if (empty($tree)) {
                     echo '<td>' . s($org->short_name) . '</td>';
                     echo '<td>' . $type_name . '</td>';
                     echo '<td>' . s($org->email) . '</td>';
-                    echo '<td>' . $cat_cell . '</td>';
                     echo '<td class="text-nowrap">';
                     echo '<a href="?edit_type=org&edit_id=' . $org->id . '" class="btn btn-sm btn-outline-secondary mr-1">Изменить</a>';
                     echo $del_form;
@@ -300,7 +288,7 @@ if (empty($tree)) {
             }
 
             // Форма добавления организации в район
-            echo '<details><summary class="text-primary" style="cursor:pointer">+ Добавить организацию в этот район</summary>';
+            echo '<details><summary class="text-primary" style="cursor:pointer">Добавить организацию в этот район</summary>';
             echo '<form method="post" class="mt-2">';
             echo '<input type="hidden" name="action"      value="save">';
             echo '<input type="hidden" name="type"        value="org">';
@@ -338,7 +326,7 @@ if (empty($tree)) {
         }
 
         // Форма добавления района в регион
-        echo '<details class="mt-2"><summary class="text-primary" style="cursor:pointer">+ Добавить район в этот регион</summary>';
+        echo '<details class="mt-2"><summary class="text-primary" style="cursor:pointer">Добавить район в этот регион</summary>';
         echo '<form method="post" class="mt-2 form-inline">';
         echo '<input type="hidden" name="action"    value="save">';
         echo '<input type="hidden" name="type"      value="district">';

@@ -1,0 +1,250 @@
+-- ============================================================
+-- УНИКС — скрипт создания таблиц в базе данных Moodle
+-- Префикс таблиц: mdl_  (стандартный Moodle-префикс)
+-- СУБД: MySQL / MariaDB, кодировка utf8mb4
+-- Версия плагина: 0.4.1
+-- ============================================================
+-- Порядок создания важен: сначала справочники (регионы,
+-- районы, организации), затем пользовательские таблицы,
+-- затем связующие и журнальные.
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- 1. Регионы
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_regions` (
+    `id`              INT(11)      NOT NULL AUTO_INCREMENT,
+    `name`            VARCHAR(100) NOT NULL COMMENT 'Название региона',
+    `code`            VARCHAR(10)  DEFAULT NULL COMMENT 'Код региона (72 — Тюменская область)',
+    `mdl_category_id` BIGINT(20)   DEFAULT NULL COMMENT 'id из mdl_course_categories',
+    `is_active`       TINYINT(1)   NOT NULL DEFAULT 1,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 2. Районы / муниципальные образования
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_districts` (
+    `id`              INT(11)      NOT NULL AUTO_INCREMENT,
+    `region_id`       INT(11)      NOT NULL COMMENT 'id из mdl_unics_regions',
+    `name`            VARCHAR(100) NOT NULL,
+    `code`            VARCHAR(20)  DEFAULT NULL,
+    `mdl_category_id` BIGINT(20)   DEFAULT NULL COMMENT 'id из mdl_course_categories',
+    PRIMARY KEY (`id`),
+    KEY `idx_district_region` (`region_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 3. Организации (школы, центры, надомное обучение)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_organizations` (
+    `id`              INT(11)      NOT NULL AUTO_INCREMENT,
+    `district_id`     INT(11)      NOT NULL COMMENT 'id из mdl_unics_districts',
+    `name`            VARCHAR(200) NOT NULL,
+    `short_name`      VARCHAR(50)  DEFAULT NULL,
+    -- org_type: 1 — школа, 2 — центр ДО, 3 — надомная школа, 4 — интернат
+    `org_type`        TINYINT(4)   NOT NULL DEFAULT 1,
+    `address`         VARCHAR(300) DEFAULT NULL,
+    `phone`           VARCHAR(20)  DEFAULT NULL,
+    `email`           VARCHAR(100) DEFAULT NULL,
+    `logo_path`       VARCHAR(255) DEFAULT NULL,
+    `is_active`       TINYINT(1)   DEFAULT 1,
+    `mdl_category_id` BIGINT(20)   DEFAULT NULL COMMENT 'id из mdl_course_categories',
+    PRIMARY KEY (`id`),
+    KEY `idx_org_district` (`district_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 4. Привязка пользователей Moodle к организациям и ролям УНИКС
+--    unics_role:
+--      1 — региональный администратор
+--      2 — муниципальный администратор
+--      3 — администратор организации
+--      4 — методист
+--      5 — педагог
+--      6 — тьютор
+--      7 — учащийся
+--      8 — родитель
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_user_org` (
+    `id`              INT(11)    NOT NULL AUTO_INCREMENT,
+    `mdl_user_id`     BIGINT(20) NOT NULL COMMENT 'id из mdl_user',
+    `organization_id` INT(11)    NOT NULL COMMENT 'id из mdl_unics_organizations',
+    `unics_role`      TINYINT(4) NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_user_org` (`mdl_user_id`, `organization_id`),
+    KEY `idx_uorg_org` (`organization_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 5. Расширенный профиль учащегося
+--    category:
+--      1 — ОВЗ, 2 — семейное обучение,
+--      3 — длительное лечение, 4 — одарённый
+--    ovz_type (только для category=1):
+--      1 — нарушение зрения, 2 — нарушение слуха,
+--      3 — нарушение опорно-двигат., 4 — ЗПР,
+--      5 — РАС, 6 — прочее
+--    difficulty_level: 1 — базовый, 2 — стандартный, 3 — продвинутый
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_students` (
+    `id`               INT(11)    NOT NULL AUTO_INCREMENT,
+    `mdl_user_id`      BIGINT(20) NOT NULL COMMENT 'id из mdl_user',
+    `organization_id`  INT(11)    DEFAULT NULL COMMENT 'id из mdl_unics_organizations',
+    `category`         TINYINT(4) NOT NULL DEFAULT 2,
+    `ovz_type`         TINYINT(4) DEFAULT NULL,
+    `difficulty_level` TINYINT(4) NOT NULL DEFAULT 2,
+    `class_number`     TINYINT(4) DEFAULT NULL COMMENT 'Класс обучения 1–11',
+    `birth_date`       DATE       DEFAULT NULL,
+    `special_needs`    TEXT       DEFAULT NULL COMMENT 'Особые образовательные потребности',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_student_user` (`mdl_user_id`),
+    KEY `idx_student_org` (`organization_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 6. Расширенный профиль педагога / тьютора / методиста
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_teachers` (
+    `id`              INT(11)      NOT NULL AUTO_INCREMENT,
+    `mdl_user_id`     BIGINT(20)   NOT NULL COMMENT 'id из mdl_user',
+    `organization_id` INT(11)      DEFAULT NULL COMMENT 'id из mdl_unics_organizations',
+    `subjects`        VARCHAR(500) DEFAULT NULL COMMENT 'Преподаваемые предметы (через запятую)',
+    `qualification`   VARCHAR(200) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_teacher_user` (`mdl_user_id`),
+    KEY `idx_teacher_org` (`organization_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 7. Назначение педагога учащемуся
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_teacher_student` (
+    `id`          INT(11)    NOT NULL AUTO_INCREMENT,
+    `teacher_id`  INT(11)    NOT NULL COMMENT 'id из mdl_unics_teachers',
+    `student_id`  INT(11)    NOT NULL COMMENT 'id из mdl_unics_students',
+    `assigned_by` BIGINT(20) DEFAULT NULL COMMENT 'mdl_user_id администратора, создавшего привязку',
+    `assigned_at` DATETIME   DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_teacher_student` (`teacher_id`, `student_id`),
+    KEY `idx_ts_student` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 8. Привязка родителя к учащемуся
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_parent_student` (
+    `id`                 INT(11)    NOT NULL AUTO_INCREMENT,
+    `parent_mdl_user_id` BIGINT(20) NOT NULL COMMENT 'id из mdl_user (родитель)',
+    `student_id`         INT(11)    NOT NULL COMMENT 'id из mdl_unics_students',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_parent_student` (`parent_mdl_user_id`, `student_id`),
+    KEY `idx_ps_student` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 9. Отчёты по учащимся
+--    report_type: 1 — индивидуальный, 2 — сводный по группе
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_reports` (
+    `id`            INT(11)      NOT NULL AUTO_INCREMENT,
+    `student_id`    INT(11)      NOT NULL COMMENT 'id из mdl_unics_students',
+    `teacher_id`    INT(11)      NOT NULL COMMENT 'id из mdl_unics_teachers',
+    `mdl_course_id` BIGINT(20)   DEFAULT NULL COMMENT 'id из mdl_course (NULL для сводных)',
+    `report_type`   TINYINT(4)   NOT NULL DEFAULT 1,
+    `file_path`     VARCHAR(500) DEFAULT NULL COMMENT 'Путь к сгенерированному файлу PDF/DOCX',
+    `period_start`  DATE         DEFAULT NULL,
+    `period_end`    DATE         DEFAULT NULL,
+    `generated_at`  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_report_student` (`student_id`),
+    KEY `idx_report_teacher` (`teacher_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 10. Журнал аудита действий
+--     action: CREATE, UPDATE, DELETE
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_audit_log` (
+    `id`          BIGINT(20)   NOT NULL AUTO_INCREMENT,
+    `mdl_user_id` BIGINT(20)   NOT NULL COMMENT 'id из mdl_user (кто совершил действие)',
+    `action`      VARCHAR(50)  NOT NULL COMMENT 'CREATE / UPDATE / DELETE',
+    `table_name`  VARCHAR(50)  NOT NULL COMMENT 'Название таблицы без префикса mdl_',
+    `record_id`   INT(11)      DEFAULT NULL COMMENT 'id изменённой записи',
+    `old_value`   LONGTEXT     DEFAULT NULL COMMENT 'JSON — значения до изменения',
+    `new_value`   LONGTEXT     DEFAULT NULL COMMENT 'JSON — значения после изменения',
+    `ip_address`  VARCHAR(45)  DEFAULT NULL,
+    `changed_at`  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_audit_user` (`mdl_user_id`),
+    KEY `idx_audit_table` (`table_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 11. УМК (учебно-методические комплексы), сгенерированные ИИ
+--     status: 1 — в очереди, 2 — готов, 3 — ошибка
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_umk` (
+    `id`            INT(11)      NOT NULL AUTO_INCREMENT,
+    `student_id`    INT(11)      NOT NULL COMMENT 'id из mdl_unics_students',
+    `mdl_course_id` BIGINT(20)   DEFAULT NULL COMMENT 'id из mdl_course (куда добавлен материал)',
+    `title`         VARCHAR(200) NOT NULL,
+    `topic`         VARCHAR(300) DEFAULT NULL COMMENT 'Тема урока',
+    `ai_params`     LONGTEXT     DEFAULT NULL COMMENT 'JSON — параметры запроса к ИИ-модели',
+    `status`        TINYINT(4)   NOT NULL DEFAULT 1,
+    `generated_at`  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_umk_student` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 12. Материалы внутри УМК (текст, видео, аудио, тест)
+--     material_type: 1 — текст, 2 — видео, 3 — аудио, 4 — тест
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_umk_materials` (
+    `id`                   INT(11)  NOT NULL AUTO_INCREMENT,
+    `umk_id`               INT(11)  NOT NULL COMMENT 'id из mdl_unics_umk',
+    `mdl_course_module_id` BIGINT(20) NOT NULL COMMENT 'id из mdl_course_modules',
+    `material_type`        TINYINT(4) NOT NULL,
+    `sort_order`           INT(11)  DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_um_umk` (`umk_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------
+-- 13. Очередь задач ИИ-генерации
+--     status: 1 — ожидает, 2 — в обработке, 3 — готово, 4 — ошибка
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `mdl_unics_ai_queue` (
+    `id`              INT(11)   NOT NULL AUTO_INCREMENT,
+    `umk_id`          INT(11)   NOT NULL COMMENT 'id из mdl_unics_umk',
+    `generate_text`   TINYINT(1) DEFAULT 1 COMMENT '1 — генерировать текстовый материал',
+    `generate_audio`  TINYINT(1) DEFAULT 1 COMMENT '1 — генерировать аудио (TTS)',
+    `status`          TINYINT(4) NOT NULL DEFAULT 1,
+    `error_message`   TEXT      DEFAULT NULL,
+    `created_at`      DATETIME  DEFAULT CURRENT_TIMESTAMP,
+    `processed_at`    DATETIME  DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_queue_status` (`status`),
+    KEY `idx_queue_umk` (`umk_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- Конец скрипта
+-- Для применения на чистой Moodle-базе выполните:
+--   mysql -u root -p <имя_бд> < unics_tables.txt
+-- ============================================================
