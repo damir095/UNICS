@@ -39,6 +39,8 @@ class unics_user_manager {
                     'mdl_user_id'      => $mdl_user_id,
                     'organization_id'  => $data['organization_id'],
                     'category'         => $data['student_category'],
+                    'ovz_type'         => ((int)$data['student_category'] === 1 && !empty($data['ovz_type']))
+                                           ? (int)$data['ovz_type'] : null,
                     'difficulty_level' => $data['difficulty_level'],
                     'class_number'     => $data['class_number'] ?? null,
                     'special_needs'    => $data['special_needs'] ?? null,

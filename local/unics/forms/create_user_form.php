@@ -66,6 +66,20 @@ class unics_create_user_form extends moodleform {
         ];
         $mform->addElement('select', 'student_category', get_string('student_category', 'local_unics'), $categories);
 
+        // Подкатегория ОВЗ — только если выбрана категория ОВЗ (1)
+        $ovz_types = [
+            ''  => '— выберите вид ОВЗ —',
+            '1' => get_string('ovz_blind', 'local_unics'),
+            '2' => get_string('ovz_deaf', 'local_unics'),
+            '3' => get_string('ovz_motor', 'local_unics'),
+            '4' => get_string('ovz_zpd', 'local_unics'),
+            '5' => get_string('ovz_ras', 'local_unics'),
+            '6' => get_string('ovz_other', 'local_unics'),
+        ];
+        $mform->addElement('select', 'ovz_type', get_string('ovz_type', 'local_unics'), $ovz_types);
+        $mform->hideIf('ovz_type', 'unics_role', 'neq', '7');
+        $mform->hideIf('ovz_type', 'student_category', 'neq', '1');
+
         $levels = [
             '1' => get_string('level_weak', 'local_unics'),
             '2' => get_string('level_normal', 'local_unics'),

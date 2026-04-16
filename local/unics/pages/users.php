@@ -41,7 +41,12 @@ echo html_writer::div(
     html_writer::link(
         new moodle_url('/local/unics/pages/assign.php'),
         get_string('assignments', 'local_unics'),
-        ['class' => 'btn btn-secondary']
+        ['class' => 'btn btn-secondary mr-2']
+    ) .
+    html_writer::link(
+        new moodle_url('/local/unics/pages/organizations.php'),
+        get_string('organizations', 'local_unics'),
+        ['class' => 'btn btn-outline-secondary']
     ),
     'mb-3'
 );
