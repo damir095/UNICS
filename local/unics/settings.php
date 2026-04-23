@@ -15,6 +15,13 @@ if ($hassiteconfig) {
     ));
 
     $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_edit_user',
+        'Редактировать пользователя',
+        new moodle_url('/local/unics/pages/edit_user.php'),
+        'local/unics:manage'
+    ));
+
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
         'local_unics_import',
         'Импорт пользователей (CSV)',
         new moodle_url('/local/unics/pages/import_users.php'),
@@ -43,6 +50,34 @@ if ($hassiteconfig) {
     ));
 
     $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_templates',
+        'Шаблоны курсов',
+        new moodle_url('/local/unics/pages/course_templates.php'),
+        'local/unics:manage'
+    ));
+
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_demo',
+        'Демонстрационные курсы',
+        new moodle_url('/local/unics/pages/demo_courses.php'),
+        'local/unics:manage'
+    ));
+
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_enrol_teachers',
+        'Запись педагогов на курс',
+        new moodle_url('/local/unics/pages/enrol_teachers.php'),
+        'local/unics:manage'
+    ));
+
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_setup_roles',
+        'Настройка прав ролей',
+        new moodle_url('/local/unics/pages/setup_roles.php'),
+        'moodle/site:config'
+    ));
+
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
         'local_unics_my_students',
         'Мои учащиеся',
         new moodle_url('/local/unics/pages/my_students.php'),
@@ -68,28 +103,84 @@ if ($hassiteconfig) {
     $ADMIN->add('local_unics_cat', $settings);
 
     $settings->add(new admin_setting_heading(
-        'local_unics/groq_heading', 'Groq API (генерация текста, бесплатно)', ''
+        'local_unics/ai_heading', 'Провайдер генерации текста', ''
     ));
+
+    $settings->add(new admin_setting_configselect(
+        'local_unics/ai_provider',
+        'Провайдер ИИ',
+        'Groq — бесплатно, только email. GigaChat — Сбербанк, только для РФ. DeepSeek — китайский, дешёвый.',
+        'groq',
+        [
+            'groq'     => 'Groq (Llama / Mixtral) — бесплатно, email-регистрация',
+            'gigachat' => 'GigaChat Sber — бесплатно для РФ, нужен Sber Developer аккаунт',
+            'deepseek' => 'DeepSeek — дёшево, email-регистрация',
+        ]
+    ));
+
+    $settings->add(new admin_setting_configpasswordunmask(
+        'local_unics/ai_api_key',
+        'API-ключ',
+        'Groq: console.groq.com → API Keys.<br>'
+        . 'GigaChat: личный кабинет developers.sber.ru → Authorization Key (Base64).<br>'
+        . 'DeepSeek: platform.deepseek.com → API Keys.',
+        ''
+    ));
+
     $settings->add(new admin_setting_configtext(
-        'local_unics/groq_api_key',
-        'Groq API Key',
-        'Получить бесплатно без карты: console.groq.com → API Keys',
+        'local_unics/ai_model',
+        'Модель (необязательно)',
+        'Groq: llama-3.1-8b-instant, llama-3.3-70b-versatile, mixtral-8x7b-32768.<br>'
+        . 'GigaChat: GigaChat, GigaChat-Plus.<br>'
+        . 'DeepSeek: deepseek-chat.<br>'
+        . 'Оставьте пустым — будет выбрана модель по умолчанию.',
         '', PARAM_TEXT
-    ));
-    $settings->add(new admin_setting_configtext(
-        'local_unics/groq_model',
-        'Модель Groq',
-        'По умолчанию: llama-3.1-8b-instant. Также доступны: llama-3.3-70b-versatile, mixtral-8x7b-32768',
-        'llama-3.1-8b-instant', PARAM_TEXT
     ));
 
     $settings->add(new admin_setting_heading(
-        'local_unics/voicerss_heading', 'VoiceRSS API (синтез речи)', ''
+        'local_unics/tts_heading', 'Провайдер синтеза речи (TTS)', ''
     ));
-    $settings->add(new admin_setting_configtext(
+
+    $settings->add(new admin_setting_configselect(
+        'local_unics/tts_provider',
+        'TTS-провайдер',
+        'VoiceRSS — бесплатно 350 запросов/день, MP3. SaluteSpeech Sber — качественный русский голос, WAV, тот же ключ что и GigaChat.',
+        'voicerss',
+        [
+            'voicerss'      => 'VoiceRSS (MP3, ru-RU)',
+            'salute_speech' => 'SaluteSpeech Sber (WAV, ru-RU)',
+        ]
+    ));
+
+    $settings->add(new admin_setting_heading(
+        'local_unics/voicerss_heading', 'VoiceRSS', ''
+    ));
+    $settings->add(new admin_setting_configpasswordunmask(
         'local_unics/voicerss_api_key',
         'VoiceRSS API Key',
-        'Получить бесплатно (350 запросов/день): voicerss.org',
-        '', PARAM_TEXT
+        'Получить бесплатно (350 запросов/день): voicerss.org — только email.',
+        ''
+    ));
+
+    $settings->add(new admin_setting_heading(
+        'local_unics/salute_heading', 'SaluteSpeech Sber', ''
+    ));
+    $settings->add(new admin_setting_configpasswordunmask(
+        'local_unics/salute_speech_api_key',
+        'SaluteSpeech API Key',
+        'Authorization Key (Base64) из developers.sber.ru. Тот же ключ, что используется для GigaChat.',
+        ''
+    ));
+    $settings->add(new admin_setting_configselect(
+        'local_unics/salute_voice',
+        'Голос',
+        '',
+        'Nec_24000',
+        [
+            'Nec_24000' => 'Наталья (женский, нейтральный)',
+            'May_24000' => 'Майя (женский, живой)',
+            'Tur_24000' => 'Александр (мужской)',
+            'Bys_24000' => 'Сергей (мужской)',
+        ]
     ));
 }

@@ -78,11 +78,19 @@ function local_unics_extend_navigation(global_navigation $nav) {
         );
 
         $branch->add(
-            'Запись на курс',
+            'Запись учащихся на курс',
             new moodle_url('/local/unics/pages/enrol_students.php'),
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_enrol'
+        );
+
+        $branch->add(
+            'Запись педагогов на курс',
+            new moodle_url('/local/unics/pages/enrol_teachers.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_enrol_teachers'
         );
 
         $branch->add(
@@ -91,6 +99,14 @@ function local_unics_extend_navigation(global_navigation $nav) {
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_umk_status'
+        );
+
+        $branch->add(
+            'Настройка прав ролей',
+            new moodle_url('/local/unics/pages/setup_roles.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_setup_roles'
         );
     }
 }

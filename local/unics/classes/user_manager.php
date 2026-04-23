@@ -43,6 +43,7 @@ class unics_user_manager {
                                            ? (int)$data['ovz_type'] : null,
                     'difficulty_level' => $data['difficulty_level'],
                     'class_number'     => $data['class_number'] ?? null,
+                    'class_letter'     => !empty($data['class_letter']) ? $data['class_letter'] : null,
                     'special_needs'    => $data['special_needs'] ?? null,
                 ]);
                 break;
@@ -66,9 +67,9 @@ class unics_user_manager {
             role_assign($moodle_role_id, $mdl_user_id, $context->id);
         }
 
-        // 5. Устанавливаем кастомное поле профиля uniks_level (для учащихся)
+        // 5. Устанавливаем кастомное поле профиля unics_level (для учащихся)
         if ((int)$data['unics_role'] === 7) {
-            self::set_profile_field($mdl_user_id, 'uniks_level', $data['difficulty_level']);
+            self::set_student_level($mdl_user_id, (int)$data['difficulty_level']);
         }
 
         return $mdl_user_id;
@@ -94,10 +95,12 @@ class unics_user_manager {
 
         $sql = "SELECT u.id, u.firstname, u.lastname, u.middlename,
                        u.email, u.username, uo.unics_role, uo.organization_id,
-                       o.name AS org_name
+                       o.name AS org_name,
+                       s.class_number, s.class_letter
                 FROM {user} u
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
                 JOIN {unics_organizations} o ON o.id = uo.organization_id
+                LEFT JOIN {unics_students} s ON s.mdl_user_id = u.id
                 WHERE $where AND u.deleted = 0
                 ORDER BY u.lastname, u.firstname";
 
@@ -112,7 +115,8 @@ class unics_user_manager {
 
         if ($org_id > 0) {
             $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
-                           s.id AS student_id, s.category, s.difficulty_level, s.class_number
+                           s.id AS student_id, s.category, s.difficulty_level,
+                           s.class_number, s.class_letter
                     FROM {user} u
                     JOIN {unics_students} s ON s.mdl_user_id = u.id
                     WHERE s.organization_id = :org_id AND u.deleted = 0
@@ -121,7 +125,8 @@ class unics_user_manager {
         }
 
         $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
-                       s.id AS student_id, s.category, s.difficulty_level, s.class_number
+                       s.id AS student_id, s.category, s.difficulty_level,
+                       s.class_number, s.class_letter
                 FROM {user} u
                 JOIN {unics_students} s ON s.mdl_user_id = u.id
                 WHERE u.deleted = 0
@@ -135,24 +140,25 @@ class unics_user_manager {
     public static function get_teachers(int $org_id): array {
         global $DB;
 
+        // Роли 4 (методист), 5 (педагог), 6 (тьютор) — все имеют запись в unics_teachers
         if ($org_id > 0) {
             $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
-                           t.id AS teacher_id, t.subjects
+                           t.id AS teacher_id, t.subjects, uo.unics_role
                     FROM {user} u
                     JOIN {unics_teachers} t ON t.mdl_user_id = u.id
                     JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
                     WHERE t.organization_id = :org_id AND u.deleted = 0
-                      AND uo.unics_role = 5
+                      AND uo.unics_role IN (4, 5, 6)
                     ORDER BY u.lastname, u.firstname";
             return $DB->get_records_sql($sql, ['org_id' => $org_id]);
         }
 
         $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
-                       t.id AS teacher_id, t.subjects
+                       t.id AS teacher_id, t.subjects, uo.unics_role
                 FROM {user} u
                 JOIN {unics_teachers} t ON t.mdl_user_id = u.id
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
-                WHERE u.deleted = 0 AND uo.unics_role = 5
+                WHERE u.deleted = 0 AND uo.unics_role IN (4, 5, 6)
                 ORDER BY u.lastname, u.firstname";
         return $DB->get_records_sql($sql);
     }
@@ -212,6 +218,71 @@ class unics_user_manager {
     }
 
     /**
+     * Обновить основные данные пользователя Moodle и расширенный профиль УНИКС.
+     */
+    public static function update_user(int $mdl_user_id, array $data): void {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/user/lib.php');
+
+        $user = $DB->get_record('user', ['id' => $mdl_user_id], '*', MUST_EXIST);
+        foreach (['firstname', 'lastname', 'middlename', 'email'] as $f) {
+            if (isset($data[$f])) {
+                $user->$f = $data[$f];
+            }
+        }
+        user_update_user($user, false, false);
+
+        // Обновить расширенный профиль учащегося
+        $student = $DB->get_record('unics_students', ['mdl_user_id' => $mdl_user_id]);
+        if ($student) {
+            $student->category         = $data['student_category'] ?? $student->category;
+            $student->ovz_type         = ((int)($data['student_category'] ?? $student->category) === 1 && !empty($data['ovz_type']))
+                                           ? (int)$data['ovz_type'] : null;
+            $student->difficulty_level = $data['difficulty_level'] ?? $student->difficulty_level;
+            $student->class_number     = $data['class_number'] ?? $student->class_number;
+            $student->class_letter     = $data['class_letter'] ?? $student->class_letter;
+            $student->special_needs    = $data['special_needs'] ?? $student->special_needs;
+            $DB->update_record('unics_students', $student);
+            self::set_student_level($mdl_user_id, (int)$student->difficulty_level);
+        }
+
+        // Обновить расширенный профиль педагога/тьютора/методиста
+        $teacher = $DB->get_record('unics_teachers', ['mdl_user_id' => $mdl_user_id]);
+        if ($teacher) {
+            $teacher->subjects       = $data['subjects'] ?? $teacher->subjects;
+            $teacher->qualification  = $data['qualification'] ?? $teacher->qualification;
+            $DB->update_record('unics_teachers', $teacher);
+        }
+    }
+
+    /**
+     * Деактивировать пользователя (soft-delete через mdl_user.suspended).
+     */
+    public static function suspend_user(int $mdl_user_id): void {
+        global $DB;
+        $DB->set_field('user', 'suspended', 1, ['id' => $mdl_user_id]);
+    }
+
+    /**
+     * Получить полный профиль пользователя для формы редактирования.
+     */
+    public static function get_user_profile(int $mdl_user_id): ?object {
+        global $DB;
+
+        $sql = "SELECT u.id, u.firstname, u.lastname, u.middlename, u.email, u.username,
+                       uo.unics_role, uo.organization_id,
+                       s.id AS student_id, s.category AS student_category, s.ovz_type,
+                       s.difficulty_level, s.class_number, s.class_letter, s.special_needs,
+                       t.id AS teacher_id, t.subjects, t.qualification
+                FROM {user} u
+                JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+                LEFT JOIN {unics_students} s ON s.mdl_user_id = u.id
+                LEFT JOIN {unics_teachers} t ON t.mdl_user_id = u.id
+                WHERE u.id = :uid AND u.deleted = 0";
+        return $DB->get_record_sql($sql, ['uid' => $mdl_user_id]) ?: null;
+    }
+
+    /**
      * Получить список организаций для выпадающего списка
      */
     public static function get_organizations_menu(): array {
@@ -248,26 +319,30 @@ class unics_user_manager {
     }
 
     /**
-     * Установить кастомное поле профиля пользователя
+     * Публичный метод — установить/обновить уровень сложности учащегося в профиле Moodle.
+     * Вызывается при создании учащегося и при изменении его difficulty_level.
      */
-    private static function set_profile_field(int $user_id, string $shortname, $value): void {
+    public static function set_student_level(int $mdl_user_id, int $level): void {
         global $DB;
-
-        $field = $DB->get_record('user_info_field', ['shortname' => $shortname]);
-        if (!$field) {
-            return;
-        }
-
-        $existing = $DB->get_record('user_info_data', ['userid' => $user_id, 'fieldid' => $field->id]);
+        $field_id = self::ensure_profile_field();
+        $existing = $DB->get_record('user_info_data', ['userid' => $mdl_user_id, 'fieldid' => $field_id]);
         if ($existing) {
-            $existing->data = $value;
-            $DB->update_record('user_info_data', $existing);
+            $DB->set_field('user_info_data', 'data', (string)$level, ['id' => $existing->id]);
         } else {
             $DB->insert_record('user_info_data', (object)[
-                'userid'  => $user_id,
-                'fieldid' => $field->id,
-                'data'    => $value,
+                'userid'      => $mdl_user_id,
+                'fieldid'     => $field_id,
+                'data'        => (string)$level,
+                'dataformat'  => FORMAT_PLAIN,
             ]);
         }
+    }
+
+    /**
+     * Создаёт кастомное поле профиля unics_level если не существует.
+     * Возвращает id поля.
+     */
+    public static function ensure_profile_field(): int {
+        return \local_unics\course_template::ensure_profile_field();
     }
 }

@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/unics/db" VERSION="20260420" COMMENT="XMLDB file for local plugin unics"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd">
+  <TABLES>
+
+    <TABLE NAME="unics_regions" COMMENT="Регионы УНИКС">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="name"            TYPE="char" LENGTH="100" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="code"            TYPE="char" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="is_active"       TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="mdl_category_id" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="id из mdl_course_categories"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+    </TABLE>
+
+    <TABLE NAME="unics_districts" COMMENT="Районы / муниципальные образования">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="region_id"       TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="name"            TYPE="char" LENGTH="100" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="code"            TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="mdl_category_id" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="id из mdl_course_categories"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"   TYPE="primary" FIELDS="id"/>
+        <KEY NAME="region_id" TYPE="foreign" FIELDS="region_id" REFTABLE="unics_regions" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_district_region" UNIQUE="false" FIELDS="region_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_organizations" COMMENT="Организации (школы, центры, надомное обучение)">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="district_id" TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="name"        TYPE="char" LENGTH="200" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="short_name"  TYPE="char" LENGTH="50"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="org_type"    TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="address"     TYPE="char" LENGTH="300" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="phone"       TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="email"       TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="is_active"       TYPE="int"  LENGTH="2"   NOTNULL="false" DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_category_id" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="id из mdl_course_categories"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"     TYPE="primary" FIELDS="id"/>
+        <KEY NAME="district_id" TYPE="foreign" FIELDS="district_id" REFTABLE="unics_districts" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_org_district" UNIQUE="false" FIELDS="district_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_user_org" COMMENT="Привязка пользователей Moodle к организациям и ролям УНИКС">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"     TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="organization_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="unics_role"      TYPE="int" LENGTH="2"  NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
+        <KEY NAME="mdl_user_id"     TYPE="foreign" FIELDS="mdl_user_id"     REFTABLE="user"               REFFIELDS="id"/>
+        <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_user_org"  UNIQUE="true"  FIELDS="mdl_user_id, organization_id"/>
+        <INDEX NAME="idx_uorg_org" UNIQUE="false" FIELDS="organization_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_students" COMMENT="Расширенный профиль учащегося">
+      <FIELDS>
+        <FIELD NAME="id"               TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"      TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="organization_id"  TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="category"         TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="2"  SEQUENCE="false"/>
+        <FIELD NAME="ovz_type"         TYPE="int"  LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="difficulty_level" TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="2"  SEQUENCE="false"/>
+        <FIELD NAME="class_number"     TYPE="int"  LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="class_letter"     TYPE="char" LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="birth_date"       TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="special_needs"    TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
+        <KEY NAME="mdl_user_id"     TYPE="foreign" FIELDS="mdl_user_id"     REFTABLE="user"               REFFIELDS="id"/>
+        <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_student_user" UNIQUE="true"  FIELDS="mdl_user_id"/>
+        <INDEX NAME="idx_student_org" UNIQUE="false" FIELDS="organization_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_teachers" COMMENT="Расширенный профиль педагога / тьютора / методиста">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"     TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="organization_id" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="subjects"        TYPE="char" LENGTH="500" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="qualification"   TYPE="char" LENGTH="200" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
+        <KEY NAME="mdl_user_id"     TYPE="foreign" FIELDS="mdl_user_id"     REFTABLE="user"               REFFIELDS="id"/>
+        <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_teacher_user" UNIQUE="true"  FIELDS="mdl_user_id"/>
+        <INDEX NAME="idx_teacher_org" UNIQUE="false" FIELDS="organization_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_teacher_student" COMMENT="Назначение педагога учащемуся">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="teacher_id"  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="student_id"  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="assigned_by" TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="assigned_at" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="teacher_id" TYPE="foreign" FIELDS="teacher_id" REFTABLE="unics_teachers" REFFIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_teacher_student" UNIQUE="true"  FIELDS="teacher_id, student_id"/>
+        <INDEX NAME="idx_ts_student"     UNIQUE="false" FIELDS="student_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_parent_student" COMMENT="Привязка родителя к учащемуся">
+      <FIELDS>
+        <FIELD NAME="id"                 TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="parent_mdl_user_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="student_id"         TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_parent_student" UNIQUE="true"  FIELDS="parent_mdl_user_id, student_id"/>
+        <INDEX NAME="idx_ps_student"    UNIQUE="false" FIELDS="student_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_reports" COMMENT="Отчёты по учащимся (зарезервировано)">
+      <FIELDS>
+        <FIELD NAME="id"            TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"    TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="teacher_id"    TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_course_id" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="report_type"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="file_path"     TYPE="char" LENGTH="500" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="period_start"  TYPE="char" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="period_end"    TYPE="char" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="generated_at"  TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+        <KEY NAME="teacher_id" TYPE="foreign" FIELDS="teacher_id" REFTABLE="unics_teachers" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_report_student" UNIQUE="false" FIELDS="student_id"/>
+        <INDEX NAME="idx_report_teacher" UNIQUE="false" FIELDS="teacher_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_audit_log" COMMENT="Журнал аудита действий (зарезервировано)">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id" TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="action"      TYPE="char" LENGTH="50" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="table_name"  TYPE="char" LENGTH="50" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="record_id"   TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="old_value"   TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="new_value"   TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="ip_address"  TYPE="char" LENGTH="45" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="changed_at"  TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_audit_user"  UNIQUE="false" FIELDS="mdl_user_id"/>
+        <INDEX NAME="idx_audit_table" UNIQUE="false" FIELDS="table_name"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_umk" COMMENT="УМК, сгенерированные ИИ">
+      <FIELDS>
+        <FIELD NAME="id"             TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"     TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_course_id"  TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="title"          TYPE="char" LENGTH="200" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="topic"          TYPE="char" LENGTH="300" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="extra_prompt"   TYPE="text"             NOTNULL="false" SEQUENCE="false" COMMENT="Дополнительные указания педагога к промпту"/>
+        <FIELD NAME="target_section" TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="-1" SEQUENCE="false"/>
+        <FIELD NAME="status"         TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="generated_at"   TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_umk_student" UNIQUE="false" FIELDS="student_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_umk_materials" COMMENT="Материалы внутри УМК (текст, видео, аудио, тест)">
+      <FIELDS>
+        <FIELD NAME="id"                   TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="umk_id"               TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="mdl_course_module_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="material_type"        TYPE="int" LENGTH="2"  NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="sort_order"           TYPE="int" LENGTH="10" NOTNULL="false" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="umk_id"  TYPE="foreign" FIELDS="umk_id" REFTABLE="unics_umk" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_um_umk" UNIQUE="false" FIELDS="umk_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_ai_queue" COMMENT="Очередь задач ИИ-генерации">
+      <FIELDS>
+        <FIELD NAME="id"             TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="umk_id"         TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="generate_text"  TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="generate_audio" TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="status"         TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="error_message"  TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="created_at"     TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="processed_at"   TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="umk_id"  TYPE="foreign" FIELDS="umk_id" REFTABLE="unics_umk" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_queue_status" UNIQUE="false" FIELDS="status"/>
+        <INDEX NAME="idx_queue_umk"    UNIQUE="false" FIELDS="umk_id"/>
+      </INDEXES>
+    </TABLE>
+
+  </TABLES>
+</XMLDB>

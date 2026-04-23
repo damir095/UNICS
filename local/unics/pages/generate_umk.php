@@ -29,8 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $title          = required_param('title', PARAM_TEXT);
     $topic          = required_param('topic', PARAM_TEXT);
     $course_id      = required_param('course_id', PARAM_INT);
+    $target_section = optional_param('target_section', -1, PARAM_INT);
     $student_ids    = optional_param_array('student_ids', [], PARAM_INT);
     $generate_audio = optional_param('generate_audio', 0, PARAM_INT);
+    $extra_prompt   = optional_param('extra_prompt', '', PARAM_TEXT);
     $student_ids    = array_filter($student_ids);
 
     if (empty($title) || empty($topic) || empty($course_id) || empty($student_ids)) {
@@ -41,10 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
-    if (empty(get_config('local_unics', 'groq_api_key'))) {
+    if (empty(get_config('local_unics', 'ai_api_key'))) {
         redirect(
             new moodle_url('/local/unics/pages/generate_umk.php'),
-            'Не настроен Groq API key. Администрирование → Локальные плагины → УНИКС: Настройки ИИ',
+            'Не настроен API-ключ ИИ. Администрирование → Локальные плагины → УНИКС: Настройки ИИ',
             null, \core\output\notification::NOTIFY_ERROR
         );
     }
@@ -57,12 +59,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         ])) continue;
 
         $umk_id = $DB->insert_record('unics_umk', (object)[
-            'student_id'    => (int)$student_id,
-            'mdl_course_id' => (int)$course_id,
-            'title'         => $title,
-            'topic'         => $topic,
-            'status'        => 1,
-            'generated_at'  => date('Y-m-d H:i:s'),
+            'student_id'     => (int)$student_id,
+            'mdl_course_id'  => (int)$course_id,
+            'title'          => $title,
+            'topic'          => $topic,
+            'target_section' => $target_section,
+            'extra_prompt'   => $extra_prompt,
+            'status'         => 1,
+            'generated_at'   => date('Y-m-d H:i:s'),
         ]);
         $DB->insert_record('unics_ai_queue', (object)[
             'umk_id'         => $umk_id,
@@ -155,12 +159,13 @@ $default_student = optional_param('student_id', 0, PARAM_INT);
 echo $OUTPUT->header();
 echo $OUTPUT->heading('Сгенерировать учебный материал (ИИ)');
 
-$groq_key     = get_config('local_unics', 'groq_api_key');
+$ai_key       = get_config('local_unics', 'ai_api_key');
+$ai_provider  = get_config('local_unics', 'ai_provider') ?: 'groq';
 $voicerss_key = get_config('local_unics', 'voicerss_api_key');
 
-if (empty($groq_key)) {
+if (empty($ai_key)) {
     echo $OUTPUT->notification(
-        'Groq API key не настроен. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
+        'API-ключ ИИ не настроен. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
         'warning'
     );
 }
@@ -224,9 +229,52 @@ foreach ($courses as $c) {
     $course_opts .= html_writer::tag('option', htmlspecialchars($c->fullname), ['value' => $c->id]);
 }
 echo html_writer::tag('select', $course_opts, [
-    'name' => 'course_id', 'class' => 'form-control', 'required' => 'required',
+    'name' => 'course_id', 'id' => 'course_id_select', 'class' => 'form-control', 'required' => 'required',
 ]);
 echo html_writer::end_tag('div');
+
+echo html_writer::start_tag('div', ['class' => 'form-group']);
+echo html_writer::tag('label', 'Раздел курса <span class="text-danger">*</span>');
+echo html_writer::tag('select', html_writer::tag('option', '— создать новый раздел —', ['value' => '-1']), [
+    'name' => 'target_section', 'id' => 'target_section_select', 'class' => 'form-control',
+]);
+echo html_writer::tag('small', 'Выберите существующий раздел или оставьте «новый» — раздел будет создан автоматически.',
+    ['class' => 'form-text text-muted']);
+echo html_writer::end_tag('div');
+
+// JavaScript: загружает разделы при смене курса
+$sections_url = (new moodle_url('/local/unics/pages/get_sections.php'))->out(false);
+echo html_writer::script("
+(function() {
+    var courseSelect  = document.getElementById('course_id_select');
+    var sectionSelect = document.getElementById('target_section_select');
+    var sectionsUrl   = '{$sections_url}';
+
+    function loadSections(courseId) {
+        sectionSelect.innerHTML = '<option value=\"-1\">— создать новый раздел —</option>';
+        if (!courseId) return;
+        fetch(sectionsUrl + '?course_id=' + courseId)
+            .then(function(r) { return r.json(); })
+            .then(function(sections) {
+                sections.forEach(function(s) {
+                    var opt = document.createElement('option');
+                    opt.value = s.section;
+                    opt.textContent = s.name;
+                    sectionSelect.appendChild(opt);
+                });
+            })
+            .catch(function() {});
+    }
+
+    courseSelect.addEventListener('change', function() {
+        loadSections(this.value);
+    });
+
+    if (courseSelect.value) {
+        loadSections(courseSelect.value);
+    }
+})();
+");
 
 echo html_writer::start_tag('div', ['class' => 'form-check mb-3']);
 echo html_writer::empty_tag('input', [
@@ -290,6 +338,24 @@ if (empty($students)) {
 
 echo html_writer::end_tag('div'); // col-md-7
 echo html_writer::end_tag('div'); // row
+
+// Расширенное поле дополнительных указаний к промпту
+echo html_writer::start_tag('div', ['class' => 'form-group mt-3']);
+echo html_writer::tag('label',
+    'Дополнительные указания к генерации ' .
+    html_writer::tag('span', '(необязательно)', ['class' => 'text-muted font-weight-normal'])
+);
+echo html_writer::tag('textarea', '', [
+    'name'        => 'extra_prompt',
+    'class'       => 'form-control',
+    'rows'        => '4',
+    'placeholder' => 'Например: предмет — биология, тема связана с клеточным строением; акцент на схемах и классификациях; избегать сложных латинских терминов без пояснений; добавить пример из повседневной жизни.',
+]);
+echo html_writer::tag('small',
+    'Эти указания будут переданы ИИ дополнительно к профилю учащегося. Можно уточнить предмет, особенности темы, что выделить или что опустить.',
+    ['class' => 'form-text text-muted']
+);
+echo html_writer::end_tag('div');
 
 echo html_writer::tag('button', 'Запустить генерацию',
     ['type' => 'submit', 'class' => 'btn btn-primary mt-3 mr-2']);

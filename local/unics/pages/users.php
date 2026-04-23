@@ -74,14 +74,20 @@ if (empty($users)) {
     echo $OUTPUT->notification(get_string('no_users', 'local_unics'), 'info');
 } else {
     $table = new html_table();
-    $table->head = ['ФИО', 'Email', 'Логин', 'Роль', 'Организация', get_string('actions', 'local_unics')];
+    $table->head = ['ФИО', 'Email', 'Логин', 'Роль', 'Организация', 'Класс', get_string('actions', 'local_unics')];
     $table->attributes['class'] = 'table table-striped';
 
     foreach ($users as $user) {
         $fio = trim("{$user->lastname} {$user->firstname} {$user->middlename}");
         $role_label = $role_labels[$user->unics_role] ?? '—';
 
-        $edit_url = new moodle_url('/user/editadvanced.php', ['id' => $user->id]);
+        // Класс: только для учащихся (роль 7)
+        $class_cell = '—';
+        if ((int)$user->unics_role === 7 && !empty($user->class_number)) {
+            $class_cell = $user->class_number . ($user->class_letter ?? '');
+        }
+
+        $edit_url = new moodle_url('/local/unics/pages/edit_user.php', ['id' => $user->id]);
 
         $table->data[] = [
             $fio,
@@ -89,6 +95,7 @@ if (empty($users)) {
             $user->username,
             $role_label,
             $user->org_name,
+            $class_cell,
             html_writer::link($edit_url, get_string('edit', 'local_unics'), ['class' => 'btn btn-sm btn-outline-primary']),
         ];
     }

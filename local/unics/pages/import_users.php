@@ -26,15 +26,15 @@ if (optional_param('download_template', 0, PARAM_INT)) {
 
     fputcsv($out, [
         'lastname', 'firstname', 'middlename', 'email', 'username', 'password',
-        'unics_role', 'organization_id', 'class_number', 'category', 'difficulty_level', 'subjects'
+        'unics_role', 'organization_id', 'class_number', 'class_letter', 'category', 'difficulty_level', 'subjects'
     ]);
 
     // Пример: учащийся
     fputcsv($out, ['Иванов', 'Иван', 'Иванович', 'ivanov@example.com', 'ivanov_i', 'Pass123!',
-        '7', '1', '5', '2', '2', '']);
+        '7', '1', '5', 'А', '2', '2', '']);
     // Пример: педагог
     fputcsv($out, ['Петрова', 'Мария', 'Сергеевна', 'petrova@example.com', 'petrova_m', 'Pass123!',
-        '5', '1', '', '', '', 'Математика, Физика']);
+        '5', '1', '', '', '', '', 'Математика, Физика']);
 
     fclose($out);
     exit;
@@ -189,6 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                     'unics_role'        => $role,
                     'organization_id'   => $org_id,
                     'class_number'      => (int)($data['class_number'] ?? 0) ?: null,
+                    'class_letter'      => !empty($data['class_letter']) ? trim($data['class_letter']) : null,
                     'student_category'  => (int)($data['category'] ?? 2),
                     'ovz_type'          => null,
                     'difficulty_level'  => (int)($data['difficulty_level'] ?? 2),
@@ -258,6 +259,7 @@ $col_table->data = [
     ['unics_role',       'Да', '5 — Педагог, 6 — Тьютор, 7 — Учащийся, 8 — Родитель, 3 — Адм. орг., 4 — Методист'],
     ['organization_id',  'Да', 'ID организации из системы УНИКС'],
     ['class_number',     'Нет', 'Класс обучения 1–11 (только для учащихся)'],
+    ['class_letter',     'Нет', 'Буква класса: А, Б, В, Г, Д, Е, Ж (только для учащихся)'],
     ['category',         'Для учащихся', '1 — ОВЗ, 2 — Семейное, 3 — Лечение, 4 — Одарённый'],
     ['difficulty_level', 'Для учащихся', '1 — Базовый, 2 — Стандартный, 3 — Продвинутый'],
     ['subjects',         'Нет', 'Предметы через запятую (для педагогов)'],

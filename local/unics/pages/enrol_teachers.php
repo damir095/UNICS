@@ -8,33 +8,35 @@ require_capability('local/unics:manage', context_system::instance());
 global $DB;
 
 $PAGE->set_context(context_system::instance());
-$PAGE->set_url(new moodle_url('/local/unics/pages/enrol_students.php'));
-$PAGE->set_title('Запись учащихся на курс — УНИКС');
-$PAGE->set_heading('Запись учащихся на курс');
+$PAGE->set_url(new moodle_url('/local/unics/pages/enrol_teachers.php'));
+$PAGE->set_title('Запись педагогов на курс — УНИКС');
+$PAGE->set_heading('Запись педагогов на курс');
 $PAGE->set_pagelayout('admin');
 
 // ----------------------------------------------------------------
-// Обработка POST: записать выбранных студентов на курс
+// Обработка POST
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
-    $course_id   = required_param('course_id',  PARAM_INT);
-    $student_ids = optional_param_array('student_ids', [], PARAM_INT);
-    $group_id    = optional_param('group_id',   0, PARAM_INT);   // 0 = без группы
-    $new_group   = trim(optional_param('new_group', '', PARAM_TEXT)); // создать новую
+    $course_id       = required_param('course_id',      PARAM_INT);
+    $teacher_ids     = optional_param_array('teacher_ids', [], PARAM_INT);
+    $group_id        = optional_param('group_id',       0, PARAM_INT);
+    $new_group       = trim(optional_param('new_group', '', PARAM_TEXT));
+    $role_type       = optional_param('role_type', 'editingteacher', PARAM_ALPHA);
+    $separate_groups = optional_param('separate_groups', 0, PARAM_INT);
 
-    $student_ids = array_filter($student_ids);
+    $teacher_ids = array_filter($teacher_ids);
 
-    if (empty($course_id) || empty($student_ids)) {
+    if (empty($course_id) || empty($teacher_ids)) {
         redirect(
-            new moodle_url('/local/unics/pages/enrol_students.php'),
-            'Выберите курс и хотя бы одного учащегося.',
+            new moodle_url('/local/unics/pages/enrol_teachers.php'),
+            'Выберите курс и хотя бы одного педагога.',
             null, \core\output\notification::NOTIFY_WARNING
         );
     }
 
     // Создаём новую группу если указана
     if ($new_group !== '') {
-        $grp = new stdClass();
+        $grp           = new stdClass();
         $grp->courseid = $course_id;
         $grp->name     = $new_group;
         $group_id = groups_create_group($grp);
@@ -48,17 +50,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $instance = $DB->get_record('enrol', ['courseid' => $course_id, 'enrol' => 'manual', 'status' => 0]);
     }
 
-    $student_role = $DB->get_record('role', ['shortname' => 'student'], 'id');
-    $role_id  = $student_role ? (int)$student_role->id : 5;
+    // Определяем роль Moodle для записи
+    $role_shortname = ($role_type === 'teacher') ? 'teacher' : 'editingteacher';
+    $role_rec = $DB->get_record('role', ['shortname' => $role_shortname], 'id');
+    $role_id  = $role_rec ? (int)$role_rec->id : 3;
+
     $ctx      = \context_course::instance($course_id);
     $enrolled = 0;
     $skipped  = 0;
 
-    foreach ($student_ids as $student_id) {
-        $student = $DB->get_record('unics_students', ['id' => $student_id]);
-        if (!$student) continue;
+    foreach ($teacher_ids as $tid) {
+        $teacher = $DB->get_record('unics_teachers', ['id' => $tid]);
+        if (!$teacher) continue;
 
-        $mdl_uid = (int)$student->mdl_user_id;
+        $mdl_uid = (int)$teacher->mdl_user_id;
 
         if (!is_enrolled($ctx, $mdl_uid)) {
             $enrol->enrol_user($instance, $mdl_uid, $role_id);
@@ -67,11 +72,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             $skipped++;
         }
 
-        // Добавляем в группу (даже если уже был записан на курс)
         if ($group_id > 0) {
             if (!groups_is_member($group_id, $mdl_uid)) {
                 groups_add_member($group_id, $mdl_uid);
             }
+        }
+    }
+
+    // Настройка раздельных групп на курсе
+    if ($separate_groups) {
+        $DB->set_field('course', 'groupmode', 1, ['id' => $course_id]); // 1 = Separate groups
+        // Запрещаем accessallgroups для editingteacher на уровне курса
+        $ctx_course = \context_course::instance($course_id);
+        $et_role = $DB->get_record('role', ['shortname' => 'editingteacher'], 'id');
+        if ($et_role) {
+            assign_capability('moodle/site:accessallgroups', CAP_PROHIBIT, $et_role->id, $ctx_course->id, true);
+        }
+        // Для teacher (тьютор) — тоже
+        $t_role = $DB->get_record('role', ['shortname' => 'teacher'], 'id');
+        if ($t_role) {
+            assign_capability('moodle/site:accessallgroups', CAP_PROHIBIT, $t_role->id, $ctx_course->id, true);
         }
     }
 
@@ -83,11 +103,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $grp_name = $DB->get_field('groups', 'name', ['id' => $group_id]);
         $msg .= ". Группа: «{$grp_name}»";
     }
+    if ($separate_groups) {
+        $msg .= '. Режим «Раздельные группы» включён.';
+    }
 
     redirect(
-        new moodle_url('/local/unics/pages/enrol_students.php', [
-            'course_id' => $course_id,
-        ]),
+        new moodle_url('/local/unics/pages/enrol_teachers.php', ['course_id' => $course_id]),
         $msg, null, \core\output\notification::NOTIFY_SUCCESS
     );
 }
@@ -95,10 +116,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 // ----------------------------------------------------------------
 // Данные для страницы
 // ----------------------------------------------------------------
-$selected_course = optional_param('course_id',  0, PARAM_INT);
-$filter_district = optional_param('district_id', 0, PARAM_INT);
-$filter_org      = optional_param('org_id',      0, PARAM_INT);
-$filter_class    = optional_param('class_num',   0, PARAM_INT);
+$selected_course = optional_param('course_id', 0, PARAM_INT);
+$filter_org      = optional_param('org_id',    0, PARAM_INT);
 
 // Курсы
 $courses_raw  = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
@@ -107,25 +126,12 @@ foreach ($courses_raw as $c) {
     $courses_menu[$c->id] = $c->fullname;
 }
 
-// Районы
-$districts_raw  = $DB->get_records('unics_districts', null, 'name ASC', 'id, name');
-$districts_menu = [0 => '— все районы —'];
-foreach ($districts_raw as $d) {
-    $districts_menu[$d->id] = $d->name;
-}
-
-// Организации (зависят от района)
+// Организации
+$orgs_raw  = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
 $orgs_menu = [0 => '— все организации —'];
-if ($filter_district > 0) {
-    foreach ($DB->get_records('unics_organizations',
-        ['district_id' => $filter_district, 'is_active' => 1], 'name ASC', 'id, name') as $o) {
-        $orgs_menu[$o->id] = $o->name;
-    }
+foreach ($orgs_raw as $o) {
+    $orgs_menu[$o->id] = $o->name;
 }
-
-// Классы
-$classes_menu = [0 => '— все классы —'];
-for ($i = 1; $i <= 11; $i++) { $classes_menu[$i] = "{$i} класс"; }
 
 // Группы выбранного курса
 $groups_menu = [0 => '— без группы —'];
@@ -135,29 +141,23 @@ if ($selected_course > 0) {
     }
 }
 
-// Учащиеся с фильтрацией
-$sql_where  = 'u.deleted = 0';
+// Педагоги с фильтрацией
+$sql_where  = 'u.deleted = 0 AND uo.unics_role IN (4, 5, 6)';
 $sql_params = [];
 if ($filter_org > 0) {
-    $sql_where .= ' AND s.organization_id = :org_id';
+    $sql_where .= ' AND t.organization_id = :org_id';
     $sql_params['org_id'] = $filter_org;
-} elseif ($filter_district > 0) {
-    $sql_where .= ' AND o.district_id = :dist_id';
-    $sql_params['dist_id'] = $filter_district;
-}
-if ($filter_class > 0) {
-    $sql_where .= ' AND s.class_number = :class_num';
-    $sql_params['class_num'] = $filter_class;
 }
 
-$students = $DB->get_records_sql(
-    "SELECT s.id AS student_id, u.id AS mdl_user_id,
+$teachers = $DB->get_records_sql(
+    "SELECT t.id AS teacher_id, u.id AS mdl_user_id,
             u.lastname, u.firstname, u.middlename,
-            s.class_number, s.category,
+            t.subjects, uo.unics_role,
             o.name AS org_name
-     FROM {unics_students} s
-     JOIN {user} u ON u.id = s.mdl_user_id
-     LEFT JOIN {unics_organizations} o ON o.id = s.organization_id
+     FROM {unics_teachers} t
+     JOIN {user} u ON u.id = t.mdl_user_id
+     JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+     LEFT JOIN {unics_organizations} o ON o.id = t.organization_id
      WHERE {$sql_where}
      ORDER BY u.lastname, u.firstname",
     $sql_params
@@ -165,32 +165,31 @@ $students = $DB->get_records_sql(
 
 // Помечаем уже записанных + их группы
 $enrolled_users  = [];
-$student_groups  = []; // mdl_user_id => [group_name, ...]
+$teacher_groups  = [];
 if ($selected_course > 0) {
     $ctx_course = \context_course::instance($selected_course);
-    foreach ($students as $s) {
-        if (is_enrolled($ctx_course, (int)$s->mdl_user_id)) {
-            $enrolled_users[$s->student_id] = true;
+    foreach ($teachers as $t) {
+        if (is_enrolled($ctx_course, (int)$t->mdl_user_id)) {
+            $enrolled_users[$t->teacher_id] = true;
         }
-        // Группы пользователя в курсе
-        $ugroups = groups_get_user_groups($selected_course, (int)$s->mdl_user_id);
+        $ugroups = groups_get_user_groups($selected_course, (int)$t->mdl_user_id);
         $gnames  = [];
         foreach ($ugroups[0] ?? [] as $gid) {
             $gnames[] = $DB->get_field('groups', 'name', ['id' => $gid]);
         }
         if ($gnames) {
-            $student_groups[$s->mdl_user_id] = $gnames;
+            $teacher_groups[$t->mdl_user_id] = $gnames;
         }
     }
 }
 
-$categories = [1 => 'ОВЗ', 2 => 'Семейное', 3 => 'Лечение', 4 => 'Одарённый'];
+$unics_role_labels = [4 => 'Методист', 5 => 'Педагог', 6 => 'Тьютор'];
 
 // ----------------------------------------------------------------
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
-echo $OUTPUT->heading('Запись учащихся на курс');
+echo $OUTPUT->heading('Запись педагогов на курс');
 
 echo html_writer::link(
     new moodle_url('/local/unics/pages/users.php'),
@@ -198,16 +197,15 @@ echo html_writer::link(
     ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']
 );
 echo html_writer::link(
-    new moodle_url('/local/unics/pages/enrol_teachers.php'),
-    'Запись педагогов',
+    new moodle_url('/local/unics/pages/enrol_students.php'),
+    'Запись учащихся',
     ['class' => 'btn btn-outline-primary btn-sm mb-3']
 );
 
 // --- Форма фильтров ---
-$filter_url = new moodle_url('/local/unics/pages/enrol_students.php');
+$filter_url = new moodle_url('/local/unics/pages/enrol_teachers.php');
 echo html_writer::start_tag('form', ['method' => 'get', 'action' => $filter_url,
     'class' => 'p-3 bg-light border rounded mb-4']);
-
 echo html_writer::start_tag('div', ['class' => 'form-row align-items-end']);
 
 // Курс
@@ -217,25 +215,11 @@ echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
     ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()']);
 echo html_writer::end_tag('div');
 
-// Район
-echo html_writer::start_tag('div', ['class' => 'col-auto']);
-echo html_writer::tag('label', 'Район', ['class' => 'd-block mb-1']);
-echo html_writer::select($districts_menu, 'district_id', $filter_district, false,
-    ['class' => 'form-control', 'style' => 'min-width:170px']);
-echo html_writer::end_tag('div');
-
 // Организация
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
 echo html_writer::tag('label', 'Организация', ['class' => 'd-block mb-1']);
 echo html_writer::select($orgs_menu, 'org_id', $filter_org, false,
-    ['class' => 'form-control', 'style' => 'min-width:170px']);
-echo html_writer::end_tag('div');
-
-// Класс
-echo html_writer::start_tag('div', ['class' => 'col-auto']);
-echo html_writer::tag('label', 'Класс', ['class' => 'd-block mb-1']);
-echo html_writer::select($classes_menu, 'class_num', $filter_class, false,
-    ['class' => 'form-control', 'style' => 'min-width:120px']);
+    ['class' => 'form-control', 'style' => 'min-width:200px']);
 echo html_writer::end_tag('div');
 
 // Кнопка
@@ -243,29 +227,39 @@ echo html_writer::start_tag('div', ['class' => 'col-auto']);
 echo html_writer::tag('button', 'Применить', ['type' => 'submit', 'class' => 'btn btn-secondary']);
 echo html_writer::end_tag('div');
 
-echo html_writer::end_tag('div'); // form-row
+echo html_writer::end_tag('div');
 echo html_writer::end_tag('form');
 
-if (empty($students)) {
-    echo $OUTPUT->notification('Учащихся по выбранному фильтру не найдено.', 'info');
+if (empty($teachers)) {
+    echo $OUTPUT->notification('Педагогов по выбранному фильтру не найдено.', 'info');
     echo $OUTPUT->footer();
     exit;
 }
 
 if ($selected_course <= 0) {
-    echo $OUTPUT->notification('Выберите курс, чтобы увидеть статус записи и записать учащихся.', 'info');
+    echo $OUTPUT->notification('Выберите курс, чтобы увидеть статус записи и записать педагогов.', 'info');
 }
 
 // --- Форма записи ---
-$enrol_url = new moodle_url('/local/unics/pages/enrol_students.php', ['sesskey' => sesskey()]);
+$enrol_url = new moodle_url('/local/unics/pages/enrol_teachers.php', ['sesskey' => sesskey()]);
 echo html_writer::start_tag('form', ['method' => 'post', 'action' => $enrol_url]);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'course_id', 'value' => $selected_course]);
 
-// --- Выбор группы (показываем только если курс выбран) ---
+// --- Выбор группы и роли (только если курс выбран) ---
 if ($selected_course > 0) {
     echo html_writer::start_tag('div', ['class' => 'card mb-3']);
     echo html_writer::start_tag('div', ['class' => 'card-body py-2']);
     echo html_writer::start_tag('div', ['class' => 'form-row align-items-end']);
+
+    // Роль на курсе
+    echo html_writer::start_tag('div', ['class' => 'col-auto']);
+    echo html_writer::tag('label', 'Роль на курсе:', ['class' => 'font-weight-bold d-block mb-1']);
+    echo html_writer::select(
+        ['editingteacher' => 'Учитель (с правом редактирования)', 'teacher' => 'Учитель (без редактирования)'],
+        'role_type', 'editingteacher', false,
+        ['class' => 'form-control', 'style' => 'min-width:240px']
+    );
+    echo html_writer::end_tag('div');
 
     // Существующая группа
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
@@ -299,40 +293,65 @@ if ($selected_course > 0) {
         ['class' => 'col-12 mt-1']
     );
 
-    echo html_writer::end_tag('div'); // form-row
-    echo html_writer::end_tag('div'); // card-body
-    echo html_writer::end_tag('div'); // card
+    // Раздельные группы
+    echo html_writer::tag('div',
+        html_writer::tag('label', '', ['class' => 'd-block']) .
+        html_writer::tag('div',
+            html_writer::empty_tag('input', [
+                'type'  => 'checkbox',
+                'name'  => 'separate_groups',
+                'id'    => 'separate_groups',
+                'value' => '1',
+                'class' => 'mr-1',
+            ]) .
+            html_writer::tag('label',
+                '<strong>Включить режим «Раздельные группы» для курса</strong>' .
+                html_writer::tag('br', '') .
+                html_writer::tag('small',
+                    'Педагоги будут видеть только участников своей группы. ' .
+                    'Устанавливает groupmode=1 и запрещает accessallgroups на уровне курса.',
+                    ['class' => 'text-muted font-weight-normal']
+                ),
+                ['for' => 'separate_groups', 'class' => 'mb-0']
+            ),
+            ['class' => 'form-check']
+        ),
+        ['class' => 'col-12 mt-2']
+    );
+
+    echo html_writer::end_tag('div');
+    echo html_writer::end_tag('div');
+    echo html_writer::end_tag('div');
 }
 
-// --- Таблица учащихся ---
+// --- Таблица педагогов ---
 $table = new html_table();
 $table->head = [
     html_writer::tag('label',
         html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'check_all']) . ' Все',
         ['for' => 'check_all']
     ),
-    'Учащийся', 'Класс', 'Категория', 'Организация', 'Статус', 'Группы в курсе'
+    'Педагог', 'Роль', 'Предметы', 'Организация', 'Статус', 'Группы в курсе'
 ];
 $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
-foreach ($students as $s) {
-    $fio = htmlspecialchars(trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? '')));
-    $cat = $categories[$s->category] ?? '—';
+foreach ($teachers as $t) {
+    $fio  = htmlspecialchars(trim("{$t->lastname} {$t->firstname} " . ($t->middlename ?? '')));
+    $role = $unics_role_labels[$t->unics_role] ?? '—';
 
-    $is_enrolled  = isset($enrolled_users[$s->student_id]);
+    $is_enrolled  = isset($enrolled_users[$t->teacher_id]);
     $status_badge = $is_enrolled
         ? html_writer::tag('span', 'Записан',    ['class' => 'badge badge-success'])
         : html_writer::tag('span', 'Не записан', ['class' => 'badge badge-secondary']);
 
     $checkbox = html_writer::empty_tag('input', [
         'type'  => 'checkbox',
-        'name'  => 'student_ids[]',
-        'value' => $s->student_id,
-        'class' => 'student-check',
+        'name'  => 'teacher_ids[]',
+        'value' => $t->teacher_id,
+        'class' => 'teacher-check',
     ]);
 
-    // Группы пользователя
-    $gnames = $student_groups[$s->mdl_user_id] ?? [];
+    $gnames = $teacher_groups[$t->mdl_user_id] ?? [];
     $groups_cell = $gnames
         ? implode(', ', array_map(fn($g) => html_writer::tag('span', htmlspecialchars($g),
             ['class' => 'badge badge-info mr-1']), $gnames))
@@ -341,9 +360,9 @@ foreach ($students as $s) {
     $row = new html_table_row([
         $checkbox,
         html_writer::tag('strong', $fio),
-        $s->class_number ? "{$s->class_number} кл." : '—',
-        $cat,
-        htmlspecialchars($s->org_name ?? '—'),
+        $role,
+        htmlspecialchars($t->subjects ?? '—'),
+        htmlspecialchars($t->org_name ?? '—'),
         $status_badge,
         $groups_cell,
     ]);
@@ -362,12 +381,11 @@ echo html_writer::end_tag('form');
 
 echo html_writer::script("
 document.getElementById('check_all').addEventListener('change', function() {
-    document.querySelectorAll('.student-check').forEach(function(cb) {
+    document.querySelectorAll('.teacher-check').forEach(function(cb) {
         cb.checked = document.getElementById('check_all').checked;
     });
 });
 
-// Если заполнено поле новой группы — сбрасываем select существующей и наоборот
 var newGroupInput = document.querySelector('input[name=new_group]');
 var groupSelect   = document.querySelector('select[name=group_id]');
 if (newGroupInput && groupSelect) {

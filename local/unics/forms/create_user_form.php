@@ -91,6 +91,12 @@ class unics_create_user_form extends moodleform {
         $classes = array_combine(range(1, 11), range(1, 11));
         $mform->addElement('select', 'class_number', get_string('class_number', 'local_unics'), $classes);
 
+        $letters = ['' => '— без буквы —', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
+                    'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
+        $mform->addElement('select', 'class_letter', get_string('class_letter', 'local_unics'), $letters);
+        $mform->setType('class_letter', PARAM_TEXT);
+        $mform->hideIf('class_letter', 'unics_role', 'neq', '7');
+
         $mform->addElement('textarea', 'special_needs', get_string('special_needs', 'local_unics'),
             ['rows' => 3, 'cols' => 50]);
         $mform->setType('special_needs', PARAM_TEXT);
