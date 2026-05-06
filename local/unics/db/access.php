@@ -18,4 +18,9 @@ $capabilities = [
             'teacher'        => CAP_ALLOW,
         ],
     ],
+    'local/unics:viewownchild' => [
+        'captype'      => 'read',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes'   => [],
+    ],
 ];

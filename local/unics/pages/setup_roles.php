@@ -581,6 +581,11 @@ $role_matrix = [
             'moodle/site:accessallgroups',
             'moodle/site:viewreports',
         ],
+        // Жёсткий запрет — учащийся никогда не должен видеть панель управления УНИКС
+        'prohibit' => [
+            'local/unics:manage',
+            'local/unics:viewstudents',
+        ],
     ],
 
     // ------------------------------------------------------------
@@ -633,6 +638,11 @@ $role_matrix = [
                 'mod/forum:replypost',
             ]
         ),
+        // Жёсткий запрет — родитель не управляет системой УНИКС
+        'prohibit' => [
+            'local/unics:manage',
+            'local/unics:viewstudents',
+        ],
     ],
 
     // ------------------------------------------------------------

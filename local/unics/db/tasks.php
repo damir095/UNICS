@@ -11,4 +11,13 @@ $tasks = [
         'month'      => '*',
         'dayofweek'  => '*',
     ],
+    [
+        'classname'  => 'local_unics\task\evaluate_adaptive_levels',
+        'blocking'   => 0,
+        'minute'     => '0',
+        'hour'       => '2',
+        'day'        => '*',
+        'month'      => '*',
+        'dayofweek'  => '*',
+    ],
 ];

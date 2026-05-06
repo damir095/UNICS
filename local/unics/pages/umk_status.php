@@ -35,15 +35,13 @@ $status_labels = [
 ];
 
 $records = $DB->get_records_sql(
-    "SELECT u.id, u.title, u.topic, u.status, u.generated_at, u.mdl_course_id,
+    "SELECT u.id, u.title, u.topic, u.difficulty_level, u.status, u.generated_at, u.mdl_course_id,
             q.error_message, q.processed_at,
             c.fullname AS course_name,
-            usr.lastname, usr.firstname, usr.middlename
+            (SELECT COUNT(*) FROM {unics_umk_students} us WHERE us.umk_id = u.id) AS student_count
      FROM {unics_umk} u
-     JOIN {unics_students} s  ON s.id = u.student_id
-     JOIN {user} usr          ON usr.id = s.mdl_user_id
-     LEFT JOIN {course} c     ON c.id = u.mdl_course_id
-     LEFT JOIN {unics_ai_queue} q ON q.umk_id = u.id
+     LEFT JOIN {course} c          ON c.id    = u.mdl_course_id
+     LEFT JOIN {unics_ai_queue} q  ON q.umk_id = u.id
      ORDER BY u.generated_at DESC
      LIMIT 50"
 );
@@ -61,12 +59,13 @@ echo '</div>';
 if (empty($records)) {
     echo $OUTPUT->notification('Материалов пока нет. Создайте первый УМК.', 'info');
 } else {
+    $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
+
     $table = new html_table();
-    $table->head = ['Материал', 'Тема', 'Учащийся', 'Курс', 'Статус', 'Дата'];
-    $table->attributes['class'] = 'table table-striped';
+    $table->head = ['Материал', 'Тема', 'Уровень', 'Учащихся', 'Курс', 'Статус', 'Дата'];
+    $table->attributes['class'] = 'table table-striped table-sm';
 
     foreach ($records as $r) {
-        $fio    = trim("{$r->lastname} {$r->firstname} {$r->middlename}");
         $status = $status_labels[$r->status] ?? '<span class="badge badge-light">?</span>';
 
         if ($r->status == 4 && $r->error_message) {
@@ -81,10 +80,13 @@ if (empty($records)) {
               )
             : '—';
 
+        $lvl_label = $level_labels[$r->difficulty_level] ?? ('Ур.' . $r->difficulty_level);
+
         $table->data[] = [
             s($r->title),
             s($r->topic),
-            s($fio),
+            $lvl_label,
+            (int)$r->student_count,
             $course_link,
             $status,
             $r->generated_at ? userdate(strtotime($r->generated_at)) : '—',

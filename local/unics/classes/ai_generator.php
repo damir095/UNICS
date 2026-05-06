@@ -5,41 +5,27 @@ defined('MOODLE_INTERNAL') || die();
 
 class ai_generator {
 
-    // Поддерживаемые текстовые провайдеры
-    const PROVIDER_GROQ      = 'groq';
     const PROVIDER_GIGACHAT  = 'gigachat';
-    const PROVIDER_DEEPSEEK  = 'deepseek';
-
-    // Поддерживаемые TTS-провайдеры
-    const TTS_VOICERSS      = 'voicerss';
     const TTS_SALUTE_SPEECH = 'salute_speech';
 
     private string $provider;
     private string $api_key;
     private string $model;
-    private string $voicerss_key;
     private string $tts_provider;
     private string $salute_key;
 
     public function __construct() {
-        $this->provider     = get_config('local_unics', 'ai_provider') ?: self::PROVIDER_GROQ;
+        $this->provider     = get_config('local_unics', 'ai_provider') ?: self::PROVIDER_GIGACHAT;
         $this->api_key      = (string) get_config('local_unics', 'ai_api_key');
-        $this->voicerss_key = (string) get_config('local_unics', 'voicerss_api_key');
-        $this->tts_provider = get_config('local_unics', 'tts_provider') ?: self::TTS_VOICERSS;
+        $this->tts_provider = get_config('local_unics', 'tts_provider') ?: self::TTS_SALUTE_SPEECH;
         $this->salute_key   = (string) get_config('local_unics', 'salute_speech_api_key');
 
-        // Модель по умолчанию для каждого провайдера
-        $default_models = [
-            self::PROVIDER_GROQ     => 'llama-3.1-8b-instant',
-            self::PROVIDER_GIGACHAT => 'GigaChat',
-            self::PROVIDER_DEEPSEEK => 'deepseek-chat',
-        ];
-        $configured = get_config('local_unics', 'ai_model');
-        $this->model = $configured ?: ($default_models[$this->provider] ?? 'llama-3.1-8b-instant');
+        $configured  = get_config('local_unics', 'ai_model');
+        $this->model = $configured ?: 'GigaChat';
     }
 
     public function get_audio_ext(): string {
-        return ($this->tts_provider === self::TTS_SALUTE_SPEECH) ? 'wav' : 'mp3';
+        return 'wav';
     }
 
     // ----------------------------------------------------------------
@@ -159,78 +145,19 @@ class ai_generator {
     }
 
     // ----------------------------------------------------------------
-    // Генерация текста — маршрутизация по провайдеру
+    // Генерация текста
     // ----------------------------------------------------------------
-    public function generate_text(string $prompt): string {
+    public function generate_text(string $prompt, int $max_tokens = 1024): string {
         if (empty($this->api_key)) {
             throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
         }
-
-        switch ($this->provider) {
-            case self::PROVIDER_GIGACHAT:
-                return $this->generate_text_gigachat($prompt);
-            case self::PROVIDER_DEEPSEEK:
-                return $this->generate_text_openai_compat(
-                    $prompt, 'https://api.deepseek.com/chat/completions'
-                );
-            case self::PROVIDER_GROQ:
-            default:
-                return $this->generate_text_openai_compat(
-                    $prompt, 'https://api.groq.com/openai/v1/chat/completions'
-                );
-        }
+        return $this->generate_text_gigachat($prompt, $max_tokens);
     }
 
     // ----------------------------------------------------------------
-    // Groq / DeepSeek / любой OpenAI-совместимый провайдер
+    // GigaChat OAuth 2.0 — получить Bearer-токен
     // ----------------------------------------------------------------
-    private function generate_text_openai_compat(string $prompt, string $url): string {
-        $payload = json_encode([
-            'model'       => $this->model,
-            'messages'    => [['role' => 'user', 'content' => $prompt]],
-            'max_tokens'  => 1024,
-            'temperature' => 0.7,
-        ]);
-
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_HTTPHEADER     => [
-                'Content-Type: application/json',
-                'Authorization: Bearer ' . $this->api_key,
-            ],
-            CURLOPT_TIMEOUT        => 60,
-            CURLOPT_SSL_VERIFYPEER => true,
-        ]);
-
-        $response  = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curl_err  = curl_error($ch);
-        curl_close($ch);
-
-        if ($curl_err) {
-            throw new \moodle_exception('ИИ cURL ошибка: ' . $curl_err);
-        }
-        if ($http_code !== 200) {
-            throw new \moodle_exception('ИИ HTTP ' . $http_code . ': ' . mb_substr($response, 0, 300));
-        }
-
-        $text = json_decode($response, true)['choices'][0]['message']['content'] ?? '';
-        if (mb_strlen(trim($text)) < 50) {
-            throw new \moodle_exception('ИИ вернул пустой или слишком короткий ответ');
-        }
-
-        return $text;
-    }
-
-    // ----------------------------------------------------------------
-    // GigaChat (Sber) — OAuth 2.0 client_credentials
-    // api_key здесь = Authorization key из личного кабинета (Base64)
-    // ----------------------------------------------------------------
-    private function generate_text_gigachat(string $prompt): string {
-        // Шаг 1: получить access_token
+    private function get_gigachat_token(): string {
         $ch = curl_init('https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -246,7 +173,7 @@ class ai_generator {
                     mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)),
             ],
             CURLOPT_TIMEOUT        => 15,
-            CURLOPT_SSL_VERIFYPEER => false, // Сбербанк использует собственный CA
+            CURLOPT_SSL_VERIFYPEER => false,
         ]);
 
         $auth_resp = curl_exec($ch);
@@ -266,11 +193,22 @@ class ai_generator {
             throw new \moodle_exception('GigaChat: не удалось получить access_token');
         }
 
+        return $token;
+    }
+
+    // ----------------------------------------------------------------
+    // GigaChat (Sber) — OAuth 2.0 client_credentials
+    // api_key здесь = Authorization key из личного кабинета (Base64)
+    // ----------------------------------------------------------------
+    private function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
+        // Шаг 1: получить access_token
+        $token = $this->get_gigachat_token();
+
         // Шаг 2: запрос к API
         $payload = json_encode([
             'model'       => $this->model,
             'messages'    => [['role' => 'user', 'content' => $prompt]],
-            'max_tokens'  => 1024,
+            'max_tokens'  => $max_tokens,
             'temperature' => 0.7,
         ]);
 
@@ -309,22 +247,18 @@ class ai_generator {
     }
 
     // ----------------------------------------------------------------
-    // Генерация аудио — маршрутизация по TTS-провайдеру
-    // Возвращает бинарные аудиоданные (MP3 или WAV)
+    // Генерация аудио — SaluteSpeech Sber, возвращает WAV
     // ----------------------------------------------------------------
     public function generate_audio(string $text): string {
         $text = $this->strip_for_tts($text);
-        if ($this->tts_provider === self::TTS_SALUTE_SPEECH) {
-            return $this->generate_audio_salute($text);
-        }
-        return $this->generate_audio_voicerss($text);
+        return $this->generate_audio_salute($text);
     }
 
     // ----------------------------------------------------------------
     // Очистка текста перед передачей в TTS:
     // убирает markdown-разметку и LaTeX-формулы
     // ----------------------------------------------------------------
-    private function strip_for_tts(string $text): string {
+    public function strip_for_tts(string $text): string {
         // display math \[...\] и $$...$$ → "формула"
         $text = preg_replace('/\\\\\[.*?\\\\\]/su', 'формула', $text);
         $text = preg_replace('/\$\$.*?\$\$/su', 'формула', $text);
@@ -351,51 +285,6 @@ class ai_generator {
         $text = preg_replace('/\n{3,}/', "\n\n", $text);
 
         return trim($text);
-    }
-
-    // ----------------------------------------------------------------
-    // VoiceRSS TTS — возвращает MP3
-    // ----------------------------------------------------------------
-    private function generate_audio_voicerss(string $text): string {
-        if (empty($this->voicerss_key)) {
-            throw new \moodle_exception('VoiceRSS API key не настроен в настройках плагина');
-        }
-
-        $params = http_build_query([
-            'key' => $this->voicerss_key,
-            'src' => mb_substr($text, 0, 2999),
-            'hl'  => 'ru-ru',
-            'r'   => '-2',
-            'c'   => 'mp3',
-            'f'   => '44khz_16bit_stereo',
-        ]);
-
-        $ch = curl_init('https://api.voicerss.org/?' . $params);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 60,
-            CURLOPT_SSL_VERIFYPEER => true,
-        ]);
-
-        $audio     = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curl_err  = curl_error($ch);
-        curl_close($ch);
-
-        if ($curl_err) {
-            throw new \moodle_exception('VoiceRSS cURL error: ' . $curl_err);
-        }
-        if ($http_code !== 200) {
-            throw new \moodle_exception('VoiceRSS HTTP error: ' . $http_code);
-        }
-        if (str_starts_with((string)$audio, 'ERROR')) {
-            throw new \moodle_exception('VoiceRSS error: ' . $audio);
-        }
-        if (strlen($audio) < 1000) {
-            throw new \moodle_exception('VoiceRSS вернул некорректные аудиоданные');
-        }
-
-        return $audio;
     }
 
     // ----------------------------------------------------------------
@@ -481,6 +370,305 @@ class ai_generator {
         }
 
         return $audio;
+    }
+
+    // ----------------------------------------------------------------
+    // Генерация вопросов для теста
+    // Возвращает массив: [['text'=>..., 'answers'=>[...], 'correct'=>0], ...]
+    // ----------------------------------------------------------------
+    public function generate_quiz(array $profile, string $topic, string $source_text = '', int $num = 5): array {
+        $levels    = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
+        $class_num = $profile['class_number'] ?? 5;
+        $level     = $levels[$profile['difficulty_level'] ?? 2] ?? 'стандартный';
+
+        $src = $source_text !== ''
+            ? "\n\nОпирайся на следующий учебный текст:\n---\n" . mb_substr($source_text, 0, 2000) . "\n---"
+            : '';
+
+        $prompt = "Ты — педагог, составляющий тестовые задания для российских школьников.
+
+Составь ровно {$num} вопросов с множественным выбором по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
+
+Требования:
+- 4 варианта ответа для каждого вопроса
+- Ровно один правильный ответ
+- Вопросы проверяют понимание, а не механическое запоминание
+- Язык соответствует возрасту и уровню «{$level}»
+- ЗАПРЕЩЕНО использовать LaTeX-формулы, символы $ и обратную косую черту \\. Все формулы и уравнения записывай ТОЛЬКО обычным текстом: например «y = kx + b», «x в квадрате», «дробь k/x».
+
+Верни ответ СТРОГО в формате JSON, без пояснений и без markdown-тегов:
+{\"questions\":[{\"text\":\"Текст вопроса?\",\"answers\":[\"Вариант А\",\"Вариант Б\",\"Вариант В\",\"Вариант Г\"],\"correct\":0}]}
+correct — индекс правильного ответа (0, 1, 2 или 3).";
+
+        $raw = $this->generate_text($prompt, 4096);
+
+        // Нормализуем невалидные escape-последовательности перед парсингом
+        $fix_escapes = static function (string $s): string {
+            return preg_replace_callback('/\\\\(.)/u', static function (array $m): string {
+                if (in_array($m[1], ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'], true)) {
+                    return $m[0];
+                }
+                return '\\\\' . $m[1];
+            }, $s) ?? $s;
+        };
+
+        // Извлекаем JSON — GigaChat иногда добавляет пояснения вокруг
+        $json_str = '';
+        if (preg_match('/\{.*\}/su', $raw, $m)) {
+            $json_str = $m[0];
+        } else {
+            $json_str = $raw;
+        }
+
+        $data = json_decode($json_str, true) ?? json_decode($fix_escapes($json_str), true);
+
+        // Восстановление частичного JSON: если массив обрезан — закрываем его вручную
+        if (!isset($data['questions']) && $json_str !== '') {
+            $recovered = $json_str;
+            // Считаем непарные { и [, закрываем их
+            $open_brace   = substr_count($recovered, '{') - substr_count($recovered, '}');
+            $open_bracket = substr_count($recovered, '[') - substr_count($recovered, ']');
+            $recovered .= str_repeat('}', max(0, $open_brace));
+            $recovered .= str_repeat(']', max(0, $open_bracket));
+            // Закрываем ещё раз внешний объект если нужно
+            if (substr_count($recovered, '{') > substr_count($recovered, '}')) {
+                $recovered .= '}';
+            }
+            $data = json_decode($recovered, true) ?? json_decode($fix_escapes($recovered), true);
+        }
+
+        // Последний резерв — поиск отдельных question-объектов в сыром тексте
+        $result = [];
+        if (isset($data['questions']) && is_array($data['questions'])) {
+            foreach ($data['questions'] as $q) {
+                if (empty($q['text']) || empty($q['answers']) || !is_array($q['answers'])) {
+                    continue;
+                }
+                $correct = max(0, min((int)($q['correct'] ?? 0), count($q['answers']) - 1));
+                $result[] = [
+                    'text'    => trim($q['text']),
+                    'answers' => array_values($q['answers']),
+                    'correct' => $correct,
+                ];
+            }
+        }
+
+        if (empty($result)) {
+            throw new \moodle_exception('ИИ вернул некорректный формат теста: ' . mb_substr($raw, 0, 300));
+        }
+
+        return $result;
+    }
+
+    // ----------------------------------------------------------------
+    // Генерация текста задания (mod_assign)
+    // ----------------------------------------------------------------
+    public function generate_assignment_description(array $profile, string $topic, string $source_text = ''): string {
+        $levels    = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
+        $class_num = $profile['class_number'] ?? 5;
+        $level     = $levels[$profile['difficulty_level'] ?? 2] ?? 'стандартный';
+
+        $src = $source_text !== ''
+            ? "\n\nУчебный текст по теме:\n---\n" . mb_substr($source_text, 0, 1500) . "\n---"
+            : '';
+
+        $prompt = "Ты — педагог, составляющий практические задания для российских школьников.
+
+Составь одно письменное практическое задание по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
+
+Задание должно:
+- Опираться на изученный материал
+- Требовать развёрнутого ответа (3–7 предложений)
+- Соответствовать уровню «{$level}»
+- Быть конкретным и однозначно сформулированным
+
+Верни только текст задания. Без заголовков, без вводных слов — только само задание.";
+
+        return $this->generate_text($prompt);
+    }
+
+    // ----------------------------------------------------------------
+    // Генерация сценария видеопрезентации (5 слайдов)
+    // Возвращает массив: [['title'=>..., 'content'=>..., 'key_points'=>[...]], ...]
+    // ----------------------------------------------------------------
+    public function generate_video_script(array $profile, string $topic, string $source_text = ''): array {
+        $levels    = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
+        $class_num = $profile['class_number'] ?? 5;
+        $level     = $levels[$profile['difficulty_level'] ?? 2] ?? 'стандартный';
+
+        $src = $source_text !== ''
+            ? "\n\nОпирайся на следующий учебный текст:\n---\n" . mb_substr($source_text, 0, 2000) . "\n---"
+            : '';
+
+        $prompt = "Составь сценарий видеоурока по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
+
+Верни РОВНО 5 слайдов в формате JSON без пояснений и без markdown-обёртки:
+{\"slides\":[{\"title\":\"...\",\"content\":\"...\",\"key_points\":[\"...\",\"...\"]}]}
+
+Правила:
+- title: заголовок слайда до 60 символов
+- content: 3-4 предложения, доступный язык для {$class_num} класса, уровень «{$level}»
+- key_points: ровно 2-3 ключевых понятия или факта (без формул, только текст)
+- НЕ используй символы LaTeX, доллар \$ и обратную косую черту \\
+
+Логика слайдов:
+1. Введение — что такое тема и зачем её изучать
+2. Основное понятие 1
+3. Основное понятие 2
+4. Применение или пример из жизни
+5. Итог — главный вывод и вопрос для размышления";
+
+        $raw = $this->generate_text($prompt, 3000);
+
+        // Извлекаем JSON
+        $json_str = '';
+        if (preg_match('/\{.*\}/su', $raw, $m)) {
+            $json_str = $m[0];
+        } else {
+            $json_str = $raw;
+        }
+
+        $data = json_decode($json_str, true);
+
+        if ($data === null) {
+            $fixed = preg_replace_callback('/\\\\(.)/u', static function (array $m): string {
+                if (in_array($m[1], ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'], true)) {
+                    return $m[0];
+                }
+                return '\\\\' . $m[1];
+            }, $json_str);
+            $data = json_decode($fixed, true);
+        }
+
+        if (!isset($data['slides']) || !is_array($data['slides'])) {
+            throw new \moodle_exception('ИИ вернул некорректный формат видеосценария: ' . mb_substr($raw, 0, 300));
+        }
+
+        $result = [];
+        foreach ($data['slides'] as $s) {
+            if (empty($s['title']) || empty($s['content'])) {
+                continue;
+            }
+            $result[] = [
+                'title'      => trim((string)$s['title']),
+                'content'    => trim((string)$s['content']),
+                'key_points' => array_values((array)($s['key_points'] ?? [])),
+            ];
+        }
+
+        if (empty($result)) {
+            throw new \moodle_exception('ИИ не вернул ни одного слайда');
+        }
+
+        return $result;
+    }
+
+    // ----------------------------------------------------------------
+    // Генерация изображения через GigaChat text2image
+    // Возвращает бинарные данные JPEG или пустую строку при ошибке
+    // ----------------------------------------------------------------
+    public function generate_image(string $prompt): string {
+        if (empty($this->api_key)) {
+            throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
+        }
+
+        $token = $this->get_gigachat_token();
+
+        $payload = json_encode([
+            'model'         => $this->model,
+            'messages'      => [['role' => 'user', 'content' => $prompt]],
+            'function_call' => 'auto',
+            'functions'     => [[
+                'name'        => 'text2image',
+                'description' => 'Generates an image from a text description',
+                'parameters'  => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'query' => ['type' => 'string', 'description' => 'Image generation prompt'],
+                    ],
+                    'required' => ['query'],
+                ],
+            ]],
+        ]);
+
+        $ch = curl_init('https://gigachat.devices.sberbank.ru/api/v1/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $payload,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json',
+                'Accept: application/json',
+                'Authorization: Bearer ' . $token,
+            ],
+            CURLOPT_TIMEOUT        => 90,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+
+        $response  = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_err  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curl_err) {
+            throw new \moodle_exception('GigaChat image cURL ошибка: ' . $curl_err);
+        }
+        if ($http_code !== 200) {
+            throw new \moodle_exception('GigaChat image HTTP ' . $http_code . ': ' . mb_substr($response, 0, 200));
+        }
+
+        $data    = json_decode($response, true);
+        $content = (string)($data['choices'][0]['message']['content'] ?? '');
+
+        $uuid = '';
+        // Формат 1: <img src="UUID"/> или <img fuse="true" src="UUID"/>
+        if (preg_match('/<img[^>]+src=["\']?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})["\']?/i', $content, $m)) {
+            $uuid = $m[1];
+        }
+        // Формат 2: поле attachments (строка или объект)
+        if (empty($uuid)) {
+            $attachments = $data['choices'][0]['message']['attachments'] ?? [];
+            if (is_array($attachments) && !empty($attachments)) {
+                $first = $attachments[0];
+                $uuid  = is_array($first) ? (string)($first['id'] ?? reset($first)) : (string)$first;
+            }
+        }
+        // Формат 3: любой UUID в content (последний резерв)
+        if (empty($uuid) && $content !== '') {
+            if (preg_match('/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i', $content, $m)) {
+                $uuid = $m[1];
+            }
+        }
+
+        if (empty($uuid)) {
+            throw new \moodle_exception('GigaChat image: UUID изображения не найден в ответе');
+        }
+
+        // Скачиваем содержимое файла
+        $ch = curl_init('https://gigachat.devices.sberbank.ru/api/v1/files/' . $uuid . '/content');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/jpg',
+                'Authorization: Bearer ' . $token,
+            ],
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+
+        $img_data  = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_err  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curl_err) {
+            throw new \moodle_exception('GigaChat image download cURL ошибка: ' . $curl_err);
+        }
+        if ($http_code !== 200) {
+            throw new \moodle_exception('GigaChat image download HTTP ' . $http_code);
+        }
+
+        return (string) $img_data;
     }
 
     // ----------------------------------------------------------------

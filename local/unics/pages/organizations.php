@@ -26,6 +26,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $type    = required_param('type',    PARAM_ALPHA);
     $edit_id = optional_param('edit_id', 0, PARAM_INT);
 
+    if ($action === 'move_members') {
+        $from_org_id = required_param('from_org_id', PARAM_INT);
+        $to_org_id   = required_param('to_org_id',   PARAM_INT);
+        $moved = unics_organization_manager::move_members($from_org_id, $to_org_id);
+        redirect(
+            new moodle_url('/local/unics/pages/organizations.php'),
+            "Переведено участников: {$moved}.",
+            null,
+            \core\output\notification::NOTIFY_SUCCESS
+        );
+    }
+
     if ($action === 'delete') {
         $del_id = required_param('del_id', PARAM_INT);
         if ($type === 'region') {
@@ -202,6 +214,8 @@ echo '<button type="submit" class="btn btn-primary btn-sm">Создать рег
 echo '</form>';
 echo '</div></div>';
 
+$all_orgs_grouped = unics_organization_manager::get_organizations_grouped();
+
 // ---- Дерево организаций ----
 if (empty($tree)) {
     echo $OUTPUT->notification('Регионов пока нет. Добавьте первый регион выше.', 'info');
@@ -276,8 +290,15 @@ if (empty($tree)) {
                     echo '<td>' . s($org->short_name) . '</td>';
                     echo '<td>' . $type_name . '</td>';
                     echo '<td>' . s($org->email) . '</td>';
+                    $move_btn = '<button type="button" class="btn btn-sm btn-outline-info mr-1"'
+                        . ' data-toggle="modal" data-target="#moveOrgModal"'
+                        . ' data-org-id="' . $org->id . '"'
+                        . ' data-org-name="' . s($org->name) . '">'
+                        . 'Перевести всех</button>';
+
                     echo '<td class="text-nowrap">';
                     echo '<a href="?edit_type=org&edit_id=' . $org->id . '" class="btn btn-sm btn-outline-secondary mr-1">Изменить</a>';
+                    echo $move_btn;
                     echo $del_form;
                     echo '</td>';
                     echo '</tr>';
@@ -343,5 +364,59 @@ if (empty($tree)) {
         echo '</div>'; // card
     }
 }
+
+// ---- Модальное окно «Перевести всех участников» ----
+echo '
+<div class="modal fade" id="moveOrgModal" tabindex="-1" role="dialog" aria-labelledby="moveOrgModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="moveOrgModalLabel">Перевести всех участников</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <form method="post">
+        <input type="hidden" name="action"   value="move_members">
+        <input type="hidden" name="type"     value="org">
+        <input type="hidden" name="sesskey"  value="' . sesskey() . '">
+        <input type="hidden" name="from_org_id" id="moveFromOrgId" value="">
+        <div class="modal-body">
+          <p>Организация-источник: <strong id="moveOrgName"></strong></p>
+          <div class="form-group">
+            <label for="moveToOrgId">Перевести в организацию</label>
+            <select name="to_org_id" id="moveToOrgId" class="form-control" required>';
+
+foreach ($all_orgs_grouped as $oid => $olabel) {
+    echo '<option value="' . $oid . '">' . s($olabel) . '</option>';
+}
+
+echo '            </select>
+          </div>
+          <p class="text-warning small">Все участники исходной организации будут переведены в выбранную.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-info">Перевести</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById("moveOrgModal").addEventListener("show.bs.modal", function(e) {
+    var btn = e.relatedTarget;
+    document.getElementById("moveFromOrgId").value = btn.getAttribute("data-org-id");
+    document.getElementById("moveOrgName").textContent = btn.getAttribute("data-org-name");
+    // Скрыть саму исходную организацию из списка
+    var sel = document.getElementById("moveToOrgId");
+    var srcId = btn.getAttribute("data-org-id");
+    for (var i = 0; i < sel.options.length; i++) {
+        sel.options[i].hidden = (sel.options[i].value == srcId);
+    }
+    // Выбрать первый не скрытый вариант
+    for (var i = 0; i < sel.options.length; i++) {
+        if (!sel.options[i].hidden) { sel.selectedIndex = i; break; }
+    }
+});
+</script>';
 
 echo $OUTPUT->footer();

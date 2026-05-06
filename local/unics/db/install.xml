@@ -196,25 +196,22 @@
       </INDEXES>
     </TABLE>
 
-    <TABLE NAME="unics_umk" COMMENT="УМК, сгенерированные ИИ">
+    <TABLE NAME="unics_umk" COMMENT="УМК, сгенерированные ИИ (один на уровень сложности)">
       <FIELDS>
-        <FIELD NAME="id"             TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
-        <FIELD NAME="student_id"     TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
-        <FIELD NAME="mdl_course_id"  TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="title"          TYPE="char" LENGTH="200" NOTNULL="true"  SEQUENCE="false"/>
-        <FIELD NAME="topic"          TYPE="char" LENGTH="300" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="extra_prompt"   TYPE="text"             NOTNULL="false" SEQUENCE="false" COMMENT="Дополнительные указания педагога к промпту"/>
-        <FIELD NAME="target_section" TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="-1" SEQUENCE="false"/>
-        <FIELD NAME="status"         TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
-        <FIELD NAME="generated_at"   TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="id"               TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_course_id"    TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="difficulty_level" TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="2"   SEQUENCE="false" COMMENT="1=базовый 2=стандарт 3=продвинутый"/>
+        <FIELD NAME="mdl_group_id"     TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="Moodle group для ограничения доступа"/>
+        <FIELD NAME="title"            TYPE="char" LENGTH="200" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="topic"            TYPE="char" LENGTH="300" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="extra_prompt"     TYPE="text"              NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="target_section"   TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="-1"  SEQUENCE="false"/>
+        <FIELD NAME="status"           TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"   SEQUENCE="false"/>
+        <FIELD NAME="generated_at"     TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
-        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
-        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
       </KEYS>
-      <INDEXES>
-        <INDEX NAME="idx_umk_student" UNIQUE="false" FIELDS="student_id"/>
-      </INDEXES>
     </TABLE>
 
     <TABLE NAME="unics_umk_materials" COMMENT="Материалы внутри УМК (текст, видео, аудио, тест)">
@@ -234,16 +231,55 @@
       </INDEXES>
     </TABLE>
 
+    <TABLE NAME="unics_umk_students" COMMENT="Привязка учащихся к УМК (многие-ко-многим)">
+      <FIELDS>
+        <FIELD NAME="id"         TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="umk_id"     TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="student_id" TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="umk_id"     TYPE="foreign" FIELDS="umk_id"     REFTABLE="unics_umk"      REFFIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students"  REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_umk_student" UNIQUE="true" FIELDS="umk_id, student_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_comments" COMMENT="Комментарии педагога к работам учащегося">
+      <FIELDS>
+        <FIELD NAME="id"                   TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"           TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="teacher_mdl_user_id"  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="body"                 TYPE="text"             NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="created_at"           TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="unix timestamp"/>
+        <FIELD NAME="cmid"                 TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="course_modules.id — привязка к конкретной активности"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_comment_teacher" UNIQUE="false" FIELDS="teacher_mdl_user_id"/>
+        <INDEX NAME="idx_comment_cmid"    UNIQUE="false" FIELDS="cmid"/>
+      </INDEXES>
+    </TABLE>
+
     <TABLE NAME="unics_ai_queue" COMMENT="Очередь задач ИИ-генерации">
       <FIELDS>
-        <FIELD NAME="id"             TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
-        <FIELD NAME="umk_id"         TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
-        <FIELD NAME="generate_text"  TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1"  SEQUENCE="false"/>
-        <FIELD NAME="generate_audio" TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1"  SEQUENCE="false"/>
-        <FIELD NAME="status"         TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
-        <FIELD NAME="error_message"  TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="created_at"     TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="processed_at"   TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="id"                  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="umk_id"              TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="student_ids"         TYPE="text"             NOTNULL="false" SEQUENCE="false" COMMENT="JSON-массив student.id из unics_students"/>
+        <FIELD NAME="generate_text"       TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="generate_audio"      TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="generate_quiz"       TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false" COMMENT="1 — генерировать тест"/>
+        <FIELD NAME="generate_assignment" TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 — генерировать задание"/>
+        <FIELD NAME="generate_video"      TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 — генерировать видеопрезентацию"/>
+        <FIELD NAME="status"              TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="error_message"       TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="created_at"          TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="processed_at"        TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -252,6 +288,43 @@
       <INDEXES>
         <INDEX NAME="idx_queue_status" UNIQUE="false" FIELDS="status"/>
         <INDEX NAME="idx_queue_umk"    UNIQUE="false" FIELDS="umk_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_notifications" COMMENT="Журнал уведомлений УНИКС">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"  TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="notif_type"   TYPE="int"  LENGTH="2"   NOTNULL="true"  SEQUENCE="false" COMMENT="1=УМК готов 2=низкий балл 3=новое задание"/>
+        <FIELD NAME="subject"      TYPE="char" LENGTH="200" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="body"         TYPE="text"              NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="sent"         TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="created_at"   TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="unix timestamp"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_notif_user" UNIQUE="false" FIELDS="mdl_user_id"/>
+        <INDEX NAME="idx_notif_type" UNIQUE="false" FIELDS="notif_type"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_achievements" COMMENT="Достижения (значки) учащихся">
+      <FIELDS>
+        <FIELD NAME="id"         TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id" TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="badge_type" TYPE="int"  LENGTH="2"   NOTNULL="true"  SEQUENCE="false" COMMENT="1=Старательный 2=Активный 3=Отличник 4=Завершитель"/>
+        <FIELD NAME="awarded_at" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="unix timestamp"/>
+        <FIELD NAME="awarded_by" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="mdl_user_id педагога, 0=система"/>
+        <FIELD NAME="note"       TYPE="char" LENGTH="300" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_achiev_badge" UNIQUE="true" FIELDS="student_id, badge_type"/>
       </INDEXES>
     </TABLE>
 

@@ -1,16 +1,19 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/user_manager.php');
 
 require_login();
 
 global $USER, $DB;
 
+local_unics_require_not_student();
+
 $is_admin = has_capability('local/unics:manage', context_system::instance());
 $is_teacher = has_capability('local/unics:viewstudents', context_system::instance());
 
 if (!$is_admin && !$is_teacher) {
-    require_capability('local/unics:viewstudents', context_system::instance()); // бросит ошибку
+    require_capability('local/unics:viewstudents', context_system::instance());
 }
 
 $PAGE->set_context(context_system::instance());
@@ -104,7 +107,7 @@ if (empty($students)) {
 }
 
 $table = new html_table();
-$table->head = ['Учащийся', 'Класс', 'Категория', 'Уровень', 'Организация', 'Действия'];
+$table->head = ['Учащийся', 'Класс', 'Категория', 'Уровень', 'Организация', 'Действия', 'Отчёт / Комментарии'];
 $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($students as $s) {
@@ -118,6 +121,18 @@ foreach ($students as $s) {
         ['class' => 'btn btn-sm btn-outline-success']
     );
 
+    $report_link = html_writer::link(
+        new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $s->student_id]),
+        'Отчёт',
+        ['class' => 'btn btn-sm btn-outline-primary']
+    );
+
+    $comments_link = html_writer::link(
+        new moodle_url('/local/unics/pages/student_comments.php', ['student_id' => $s->student_id]),
+        'Комментарии',
+        ['class' => 'btn btn-sm btn-outline-secondary']
+    );
+
     $table->data[] = [
         html_writer::tag('strong', htmlspecialchars($fio)),
         $s->class_number ? "{$s->class_number} кл." : '—',
@@ -125,6 +140,7 @@ foreach ($students as $s) {
         $lvl,
         htmlspecialchars($s->org_name),
         $actions,
+        $report_link . ' ' . $comments_link,
     ];
 }
 

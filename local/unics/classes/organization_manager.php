@@ -107,6 +107,19 @@ class unics_organization_manager {
     }
 
     // ----------------------------------------------------------------
+    // ПЕРЕВОД УЧАСТНИКОВ
+    // ----------------------------------------------------------------
+
+    public static function move_members(int $from_org_id, int $to_org_id): int {
+        global $DB;
+        $count = $DB->count_records('unics_user_org', ['organization_id' => $from_org_id]);
+        if ($count > 0) {
+            $DB->set_field('unics_user_org', 'organization_id', $to_org_id, ['organization_id' => $from_org_id]);
+        }
+        return $count;
+    }
+
+    // ----------------------------------------------------------------
     // УДАЛЕНИЕ
     // ----------------------------------------------------------------
 

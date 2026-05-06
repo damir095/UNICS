@@ -60,5 +60,161 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026042003, 'local', 'unics');
     }
 
+    if ($oldversion < 2026042004) {
+        $table = new xmldb_table('unics_ai_queue');
+
+        $field = new xmldb_field('generate_quiz', XMLDB_TYPE_INTEGER, '2', null, null, null, '1', 'generate_audio');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $field = new xmldb_field('generate_assignment', XMLDB_TYPE_INTEGER, '2', null, null, null, '0', 'generate_quiz');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026042004, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026050001) {
+        $dbman = $DB->get_manager();
+
+        // Таблица комментариев педагога
+        $table = new xmldb_table('unics_comments');
+        $table->add_field('id',                  XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('student_id',          XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL);
+        $table->add_field('teacher_mdl_user_id', XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL);
+        $table->add_field('body',                XMLDB_TYPE_TEXT,    null,  null, XMLDB_NOTNULL);
+        $table->add_field('created_at',          XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_index('idx_comment_teacher', XMLDB_INDEX_NOTUNIQUE, ['teacher_mdl_user_id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // Поле generate_video в unics_ai_queue
+        $table = new xmldb_table('unics_ai_queue');
+        $field = new xmldb_field('generate_video', XMLDB_TYPE_INTEGER, '2', null, null, null, '0', 'generate_assignment');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026050001, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026050002) {
+        $dbman = $DB->get_manager();
+
+        // --- unics_umk: убираем student_id, добавляем difficulty_level + mdl_group_id ---
+        $table = new xmldb_table('unics_umk');
+
+        // Сначала удаляем FK-ключ
+        $key = new xmldb_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        if ($dbman->find_key_name($table, $key)) {
+            $dbman->drop_key($table, $key);
+        }
+
+        // Удаляем индекс на student_id
+        $index = new xmldb_index('idx_umk_student', XMLDB_INDEX_NOTUNIQUE, ['student_id']);
+        if ($dbman->index_exists($table, $index)) {
+            $dbman->drop_index($table, $index);
+        }
+
+        // Удаляем поле student_id
+        $field = new xmldb_field('student_id');
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+
+        // Добавляем difficulty_level
+        $field = new xmldb_field('difficulty_level', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '2', 'mdl_course_id');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Добавляем mdl_group_id
+        $field = new xmldb_field('mdl_group_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'difficulty_level');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // --- Новая таблица unics_umk_students ---
+        $table = new xmldb_table('unics_umk_students');
+        $table->add_field('id',         XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('umk_id',     XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('student_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('umk_id',     XMLDB_KEY_FOREIGN, ['umk_id'],     'unics_umk',      ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_index('uq_umk_student', XMLDB_INDEX_UNIQUE, ['umk_id', 'student_id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_ai_queue: добавляем student_ids ---
+        $table = new xmldb_table('unics_ai_queue');
+        $field = new xmldb_field('student_ids', XMLDB_TYPE_TEXT, null, null, null, null, null, 'umk_id');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026050002, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026050003) {
+        $dbman = $DB->get_manager();
+
+        // --- unics_notifications ---
+        $table = new xmldb_table('unics_notifications');
+        $table->add_field('id',          XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('mdl_user_id', XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL);
+        $table->add_field('notif_type',  XMLDB_TYPE_INTEGER, '2',   null, XMLDB_NOTNULL);
+        $table->add_field('subject',     XMLDB_TYPE_CHAR,    '200', null, XMLDB_NOTNULL);
+        $table->add_field('body',        XMLDB_TYPE_TEXT,    null,  null);
+        $table->add_field('sent',        XMLDB_TYPE_INTEGER, '2',   null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('created_at',  XMLDB_TYPE_INTEGER, '10',  null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('idx_notif_user', XMLDB_INDEX_NOTUNIQUE, ['mdl_user_id']);
+        $table->add_index('idx_notif_type', XMLDB_INDEX_NOTUNIQUE, ['notif_type']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_achievements ---
+        $table = new xmldb_table('unics_achievements');
+        $table->add_field('id',         XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('student_id', XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL);
+        $table->add_field('badge_type', XMLDB_TYPE_INTEGER, '2',   null, XMLDB_NOTNULL);
+        $table->add_field('awarded_at', XMLDB_TYPE_INTEGER, '10',  null);
+        $table->add_field('awarded_by', XMLDB_TYPE_INTEGER, '10',  null);
+        $table->add_field('note',       XMLDB_TYPE_CHAR,    '300', null);
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_index('uq_achiev_badge', XMLDB_INDEX_UNIQUE, ['student_id', 'badge_type']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026050003, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026050005) {
+        $dbman = $DB->get_manager();
+
+        // Добавляем cmid в unics_comments (привязка к активности курса)
+        $table = new xmldb_table('unics_comments');
+        $field = new xmldb_field('cmid', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'created_at');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        $index = new xmldb_index('idx_comment_cmid', XMLDB_INDEX_NOTUNIQUE, ['cmid']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_plugin_savepoint(true, 2026050005, 'local', 'unics');
+    }
+
     return true;
 }

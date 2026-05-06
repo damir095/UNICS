@@ -36,34 +36,34 @@ echo html_writer::div(
     html_writer::link(
         new moodle_url('/local/unics/pages/create_user.php'),
         get_string('create_user', 'local_unics'),
-        ['class' => 'btn btn-primary mr-2']
+        ['class' => 'btn btn-primary']
     ) .
     html_writer::link(
         new moodle_url('/local/unics/pages/assign.php'),
         get_string('assignments', 'local_unics'),
-        ['class' => 'btn btn-secondary mr-2']
+        ['class' => 'btn btn-secondary']
     ) .
     html_writer::link(
         new moodle_url('/local/unics/pages/organizations.php'),
         get_string('organizations', 'local_unics'),
         ['class' => 'btn btn-outline-secondary']
     ),
-    'mb-3'
+    'unics-btn-row'
 );
 
 // Форма фильтров
-echo html_writer::start_tag('form', ['method' => 'get', 'class' => 'form-inline mb-3']);
+echo html_writer::start_tag('form', ['method' => 'get', 'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
 
 // Фильтр по организации
 echo html_writer::select(
     [0 => get_string('all_orgs', 'local_unics')] + $orgs,
-    'org', $filter_org, false, ['class' => 'form-control mr-2']
+    'org', $filter_org, false, ['class' => 'form-control']
 );
 
 // Фильтр по роли
 echo html_writer::select(
     [0 => get_string('all_roles', 'local_unics')] + $role_labels,
-    'role', $filter_role, false, ['class' => 'form-control mr-2']
+    'role', $filter_role, false, ['class' => 'form-control']
 );
 
 echo html_writer::tag('button', 'Применить', ['type' => 'submit', 'class' => 'btn btn-outline-secondary']);

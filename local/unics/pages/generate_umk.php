@@ -1,10 +1,13 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/ai_generator.php');
 
 require_login();
 
 global $USER, $DB;
+
+local_unics_require_not_student();
 
 $is_admin   = has_capability('local/unics:manage', context_system::instance());
 $is_teacher = has_capability('local/unics:viewstudents', context_system::instance());
@@ -31,8 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $course_id      = required_param('course_id', PARAM_INT);
     $target_section = optional_param('target_section', -1, PARAM_INT);
     $student_ids    = optional_param_array('student_ids', [], PARAM_INT);
-    $generate_audio = optional_param('generate_audio', 0, PARAM_INT);
-    $extra_prompt   = optional_param('extra_prompt', '', PARAM_TEXT);
+    $generate_audio      = optional_param('generate_audio',      0, PARAM_INT);
+    $generate_quiz       = optional_param('generate_quiz',       1, PARAM_INT);
+    $generate_assignment = optional_param('generate_assignment', 0, PARAM_INT);
+    $generate_video      = optional_param('generate_video',      0, PARAM_INT);
+    $extra_prompt        = optional_param('extra_prompt',       '', PARAM_TEXT);
     $student_ids    = array_filter($student_ids);
 
     if (empty($title) || empty($topic) || empty($course_id) || empty($student_ids)) {
@@ -51,35 +57,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
-    $queued = 0;
+    // Группируем учащихся по уровню сложности
+    $level_groups = []; // level => [student_id, ...]
     foreach ($student_ids as $student_id) {
-        // Педагог может генерировать только для своих учеников
         if ($teacher_record && !$DB->record_exists('unics_teacher_student', [
             'teacher_id' => $teacher_record->id, 'student_id' => $student_id,
         ])) continue;
+        $st = $DB->get_record('unics_students', ['id' => $student_id], 'id, difficulty_level');
+        if (!$st) continue;
+        $level_groups[(int)$st->difficulty_level][] = (int)$student_id;
+    }
 
+    $queued = 0;
+    foreach ($level_groups as $level => $sids) {
         $umk_id = $DB->insert_record('unics_umk', (object)[
-            'student_id'     => (int)$student_id,
-            'mdl_course_id'  => (int)$course_id,
-            'title'          => $title,
-            'topic'          => $topic,
-            'target_section' => $target_section,
-            'extra_prompt'   => $extra_prompt,
-            'status'         => 1,
-            'generated_at'   => date('Y-m-d H:i:s'),
+            'difficulty_level' => $level,
+            'mdl_course_id'    => (int)$course_id,
+            'title'            => $title,
+            'topic'            => $topic,
+            'target_section'   => $target_section,
+            'extra_prompt'     => $extra_prompt,
+            'status'           => 1,
+            'generated_at'     => date('Y-m-d H:i:s'),
         ]);
         $DB->insert_record('unics_ai_queue', (object)[
-            'umk_id'         => $umk_id,
-            'generate_text'  => 1,
-            'generate_audio' => (int)$generate_audio,
-            'status'         => 1,
-            'created_at'     => date('Y-m-d H:i:s'),
+            'umk_id'              => $umk_id,
+            'student_ids'         => json_encode(array_values($sids)),
+            'generate_text'       => 1,
+            'generate_audio'      => (int)$generate_audio,
+            'generate_quiz'       => (int)$generate_quiz,
+            'generate_assignment' => (int)$generate_assignment,
+            'generate_video'      => (int)$generate_video,
+            'status'              => 1,
+            'created_at'          => date('Y-m-d H:i:s'),
         ]);
         $queued++;
     }
 
+    $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
+    $summary = [];
+    foreach ($level_groups as $lvl => $sids) {
+        $summary[] = ($level_names[$lvl] ?? 'Ур.' . $lvl) . ': ' . count($sids) . ' уч.';
+    }
+
     $msg  = $queued > 0
-        ? "Поставлено в очередь: {$queued} задач. Материалы появятся в курсе после обработки cron."
+        ? "Создано {$queued} задач по уровням (" . implode(', ', $summary) . "). Материалы появятся в курсе после обработки cron."
         : 'Не удалось добавить задачи — проверьте права доступа к учащимся.';
     $type = $queued > 0
         ? \core\output\notification::NOTIFY_SUCCESS
@@ -129,24 +151,24 @@ if ($filter_class > 0) {
 if ($teacher_record) {
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename,
-                s.class_number, o.name AS org_name
+                s.class_number, s.difficulty_level, o.name AS org_name
          FROM {unics_teacher_student} ts
          JOIN {unics_students} s  ON s.id  = ts.student_id
          JOIN {user} u            ON u.id  = s.mdl_user_id
          LEFT JOIN {unics_organizations} o ON o.id = s.organization_id
          WHERE {$where}
-         ORDER BY u.lastname, u.firstname",
+         ORDER BY s.difficulty_level ASC, u.lastname, u.firstname",
         $params
     );
 } else {
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename,
-                s.class_number, o.name AS org_name
+                s.class_number, s.difficulty_level, o.name AS org_name
          FROM {unics_students} s
          JOIN {user} u            ON u.id  = s.mdl_user_id
          LEFT JOIN {unics_organizations} o ON o.id = s.organization_id
          WHERE {$where}
-         ORDER BY u.lastname, u.firstname",
+         ORDER BY s.difficulty_level ASC, u.lastname, u.firstname",
         $params
     );
 }
@@ -159,19 +181,18 @@ $default_student = optional_param('student_id', 0, PARAM_INT);
 echo $OUTPUT->header();
 echo $OUTPUT->heading('Сгенерировать учебный материал (ИИ)');
 
-$ai_key       = get_config('local_unics', 'ai_api_key');
-$ai_provider  = get_config('local_unics', 'ai_provider') ?: 'groq';
-$voicerss_key = get_config('local_unics', 'voicerss_api_key');
+$ai_key      = get_config('local_unics', 'ai_api_key');
+$salute_key  = get_config('local_unics', 'salute_speech_api_key');
 
 if (empty($ai_key)) {
     echo $OUTPUT->notification(
-        'API-ключ ИИ не настроен. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
+        'API-ключ GigaChat не настроен. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
         'warning'
     );
 }
-if (empty($voicerss_key)) {
+if (empty($salute_key)) {
     echo $OUTPUT->notification(
-        'VoiceRSS API key не настроен — аудио генерироваться не будет. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
+        'SaluteSpeech API key не настроен — аудио генерироваться не будет. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
         'info'
     );
 }
@@ -276,14 +297,40 @@ echo html_writer::script("
 })();
 ");
 
-echo html_writer::start_tag('div', ['class' => 'form-check mb-3']);
-echo html_writer::empty_tag('input', [
-    'type' => 'checkbox', 'id' => 'gen_audio', 'name' => 'generate_audio',
-    'value' => '1', 'checked' => 'checked', 'class' => 'form-check-input',
-]);
-echo html_writer::tag('label', 'Сгенерировать аудиоматериал (TTS)',
-    ['for' => 'gen_audio', 'class' => 'form-check-label']);
+echo '<div class="card p-3 mb-2 bg-light border">';
+echo '<p class="font-weight-bold mb-2">Что генерировать:</p>';
+
+echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
+echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_text',
+    'disabled' => 'disabled', 'checked' => 'checked', 'class' => 'form-check-input']);
+echo html_writer::tag('label', 'Учебный текст (всегда)', ['for' => 'gen_text', 'class' => 'form-check-label text-muted']);
 echo html_writer::end_tag('div');
+
+echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
+echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_quiz', 'name' => 'generate_quiz',
+    'value' => '1', 'checked' => 'checked', 'class' => 'form-check-input']);
+echo html_writer::tag('label', 'Тест (5 вопросов с выбором ответа)', ['for' => 'gen_quiz', 'class' => 'form-check-label']);
+echo html_writer::end_tag('div');
+
+echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
+echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_assign', 'name' => 'generate_assignment',
+    'value' => '1', 'class' => 'form-check-input']);
+echo html_writer::tag('label', 'Письменное задание (развёрнутый ответ)', ['for' => 'gen_assign', 'class' => 'form-check-label']);
+echo html_writer::end_tag('div');
+
+echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
+echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_audio', 'name' => 'generate_audio',
+    'value' => '1', 'class' => 'form-check-input']);
+echo html_writer::tag('label', 'Аудиоматериал (TTS, SaluteSpeech)', ['for' => 'gen_audio', 'class' => 'form-check-label']);
+echo html_writer::end_tag('div');
+
+echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
+echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_video', 'name' => 'generate_video',
+    'value' => '1', 'class' => 'form-check-input']);
+echo html_writer::tag('label', 'Видеопрезентация (HTML5, 5 слайдов)', ['for' => 'gen_video', 'class' => 'form-check-label']);
+echo html_writer::end_tag('div');
+
+echo '</div>';
 
 echo html_writer::end_tag('div'); // col-md-5
 
@@ -307,29 +354,58 @@ echo html_writer::tag('label',
 if (empty($students)) {
     echo html_writer::tag('p', 'Нет учащихся по выбранному фильтру.', ['class' => 'text-muted']);
 } else {
+    $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
+    $by_level     = [];
+    foreach ($students as $s) {
+        $by_level[(int)($s->difficulty_level ?? 2)][] = $s;
+    }
+    ksort($by_level);
+
+    echo html_writer::tag('small',
+        'Для каждого уровня генерируется <strong>один</strong> вариант материала — все ученики уровня получат доступ к нему.',
+        ['class' => 'text-muted d-block mb-1']
+    );
+
     echo html_writer::start_tag('div', [
         'class' => 'border rounded p-2',
-        'style' => 'max-height:320px;overflow-y:auto;background:#fff',
+        'style' => 'max-height:360px;overflow-y:auto;background:#fff',
     ]);
 
-    foreach ($students as $s) {
-        $fio = htmlspecialchars(
-            "{$s->lastname} {$s->firstname}"
-            . ($s->class_number ? " — {$s->class_number} кл." : '')
-            . ($s->org_name ? " ({$s->org_name})" : '')
+    foreach ($by_level as $lvl => $group_students) {
+        $lvl_label = $level_labels[$lvl] ?? ('Уровень ' . $lvl);
+        $lvl_count = count($group_students);
+        echo html_writer::start_tag('div', ['class' => 'mb-2']);
+        echo html_writer::tag('div',
+            html_writer::tag('strong', $lvl_label . ' ур.' . $lvl)
+            . html_writer::tag('span', " — {$lvl_count} уч. ", ['class' => 'text-muted'])
+            . html_writer::tag('a', 'выбрать всех', [
+                'href'    => '#',
+                'class'   => 'small',
+                'onclick' => "document.querySelectorAll('.umk-lvl{$lvl}').forEach(c=>c.checked=true);return false;",
+            ]),
+            ['class' => 'font-weight-bold small text-secondary mb-1 border-bottom pb-1']
         );
-        $checked = ($default_student && $s->student_id == $default_student) ? ['checked' => 'checked'] : [];
 
-        echo html_writer::start_tag('div', ['class' => 'form-check']);
-        echo html_writer::empty_tag('input', array_merge([
-            'type'  => 'checkbox',
-            'name'  => 'student_ids[]',
-            'value' => $s->student_id,
-            'id'    => "u_{$s->student_id}",
-            'class' => 'form-check-input umk-cb',
-        ], $checked));
-        echo html_writer::tag('label', $fio,
-            ['for' => "u_{$s->student_id}", 'class' => 'form-check-label']);
+        foreach ($group_students as $s) {
+            $fio = htmlspecialchars(
+                "{$s->lastname} {$s->firstname}"
+                . ($s->class_number ? " — {$s->class_number} кл." : '')
+                . ($s->org_name ? " ({$s->org_name})" : '')
+            );
+            $checked = ($default_student && $s->student_id == $default_student) ? ['checked' => 'checked'] : [];
+
+            echo html_writer::start_tag('div', ['class' => 'form-check']);
+            echo html_writer::empty_tag('input', array_merge([
+                'type'  => 'checkbox',
+                'name'  => 'student_ids[]',
+                'value' => $s->student_id,
+                'id'    => "u_{$s->student_id}",
+                'class' => "form-check-input umk-cb umk-lvl{$lvl}",
+            ], $checked));
+            echo html_writer::tag('label', $fio,
+                ['for' => "u_{$s->student_id}", 'class' => 'form-check-label']);
+            echo html_writer::end_tag('div');
+        }
         echo html_writer::end_tag('div');
     }
 

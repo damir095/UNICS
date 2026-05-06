@@ -1,0 +1,197 @@
+/* ==========================================================================
+   УНИКС — Custom CSS  (автоматически подключается на всех страницах плагина)
+   Основной scope: .path-local-unics (выставляется Moodle на body)
+   ========================================================================== */
+
+:root {
+    --unics-primary:    #1565C0;
+    --unics-primary-dk: #0D47A1;
+    --unics-accent:     #29B6F6;
+    --unics-bg:         #F5F7FA;
+    --unics-shadow:     0 2px 10px rgba(21,101,192,.10);
+}
+
+/* ---- Фон страницы ---- */
+.path-local-unics #page-content,
+.path-local-unics #region-main-box {
+    background: var(--unics-bg);
+}
+
+/* ---- Заголовок страницы ---- */
+.path-local-unics #page-header {
+    background: var(--unics-primary);
+}
+.path-local-unics #page-header h1,
+.path-local-unics #page-header .h1,
+.path-local-unics #page-header .page-header-headings h1 {
+    color: #fff;
+}
+
+/* ---- Дашборд: карточки статистики ---- */
+.unics-stat-card {
+    border: none !important;
+    border-radius: .75rem;
+    box-shadow: var(--unics-shadow);
+    background: #fff;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.unics-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 24px rgba(21,101,192,.18);
+}
+.unics-stat-card .stat-value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--unics-primary);
+    line-height: 1.1;
+}
+.unics-stat-card .stat-label {
+    font-size: .75rem;
+    color: #607D8B;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+/* ---- Приветственный баннер ---- */
+.unics-welcome {
+    background: var(--unics-primary);
+    border-radius: .75rem;
+    color: #fff;
+    padding: 1.4rem 1.8rem;
+    margin-bottom: 1.5rem;
+}
+.unics-welcome h4,
+.unics-welcome h5 {
+    color: #fff;
+    margin-bottom: .25rem;
+}
+.unics-welcome .sub {
+    color: rgba(255,255,255,.82);
+    font-size: .88rem;
+}
+
+/* ---- Заголовки разделов ---- */
+.unics-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--unics-primary);
+    border-bottom: 2px solid var(--unics-accent);
+    padding-bottom: .35rem;
+    margin-bottom: 1rem;
+}
+
+/* ---- Таблицы ---- */
+.path-local-unics .table thead th {
+    background: #E3F2FD;
+    color: var(--unics-primary);
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    border-bottom: 2px solid var(--unics-accent) !important;
+}
+.path-local-unics .table td {
+    vertical-align: middle;
+}
+
+/* ---- Уровни сложности ---- */
+.unics-lvl {
+    display: inline-block;
+    padding: .15rem .65rem;
+    border-radius: 1rem;
+    font-size: .78rem;
+    font-weight: 600;
+}
+.unics-lvl-1 { background: #BBDEFB; color: #0D47A1; }
+.unics-lvl-2 { background: #FFF9C4; color: #E65100; }
+.unics-lvl-3 { background: #C8E6C9; color: #1B5E20; }
+
+/* ---- Строка заметки педагога (под строкой теста в таблице) ---- */
+tr.unics-note-row td {
+    background: #F0F7FF;
+    padding: .4rem .8rem .6rem 2.5rem;
+    border-top: none !important;
+}
+
+/* ---- Блок заметки педагога (везде) ---- */
+.unics-teacher-note {
+    background: #E3F2FD;
+    border-left: 4px solid var(--unics-primary) !important;
+    border-radius: .35rem;
+    padding: .55rem .9rem;
+    font-size: .88rem;
+}
+.unics-teacher-note .note-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: .2rem;
+}
+.unics-teacher-note .note-author {
+    font-weight: 600;
+    color: var(--unics-primary);
+    font-size: .8rem;
+}
+.unics-teacher-note .note-date {
+    color: #90A4AE;
+    font-size: .75rem;
+}
+.unics-teacher-note .note-body {
+    white-space: pre-wrap;
+    margin: 0;
+    color: #263238;
+}
+
+/* ---- Значки достижений ---- */
+.unics-badge-card {
+    border-radius: 1rem;
+    border: 2px solid #E0E0E0 !important;
+    transition: border-color .2s, background .2s;
+    text-align: center;
+}
+.unics-badge-card.earned {
+    border-color: #FFC107 !important;
+    background: #FFFDE7;
+}
+.unics-badge-card .badge-icon {
+    font-size: 2.4rem;
+    line-height: 1.3;
+    display: block;
+}
+.unics-badge-card:not(.earned) .badge-icon {
+    opacity: .25;
+    filter: grayscale(1);
+}
+.unics-badge-card .badge-name {
+    font-weight: 600;
+    font-size: .9rem;
+    margin-top: .4rem;
+}
+.unics-badge-card:not(.earned) .badge-name {
+    color: #9E9E9E;
+}
+
+/* ---- Прогресс-бар уровня ---- */
+.unics-level-bar .progress {
+    height: .5rem;
+    border-radius: 1rem;
+}
+
+/* ---- Карточки комментариев ---- */
+.unics-comment-card {
+    border: none !important;
+    border-left: 3px solid var(--unics-accent) !important;
+    border-radius: .5rem !important;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+}
+.unics-comment-card .card-header {
+    background: transparent;
+    border-bottom: 1px solid #E3F2FD;
+    font-size: .85rem;
+}
+
+/* ---- Дашборд: сетка действий ---- */
+.unics-action-grid .btn {
+    border-radius: .5rem;
+    padding: .65rem 1.1rem;
+    font-weight: 500;
+    font-size: .9rem;
+}
