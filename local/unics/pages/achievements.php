@@ -50,12 +50,14 @@ $total_got  = count($awards);
 
 echo $OUTPUT->header();
 
-// Кнопка назад
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $student_id]),
-    '← Отчёт',
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3']
-);
+// Кнопка назад — только для педагога/администратора/родителя, не для самого учащегося
+if ($USER->id !== $student->mdl_user_id) {
+    echo html_writer::link(
+        new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $student_id]),
+        'Отчёт',
+        ['class' => 'btn btn-outline-secondary btn-sm mb-3']
+    );
+}
 
 $fio = trim("{$mdl_user->lastname} {$mdl_user->firstname} " . ($mdl_user->middlename ?? ''));
 

@@ -21,7 +21,7 @@ echo $OUTPUT->header();
 echo '<div class="mb-3">';
 echo html_writer::link(
     new moodle_url('/local/unics/pages/users.php'),
-    '← Пользователи',
+    'Пользователи',
     ['class' => 'btn btn-outline-secondary btn-sm']
 );
 echo '</div>';

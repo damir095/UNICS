@@ -36,12 +36,33 @@ class core_renderer extends \theme_boost\output\core_renderer {
         $ismanager = has_capability('local/unics:manage', $ctx);
         $isteacher = !$ismanager && has_capability('local/unics:viewstudents', $ctx);
 
-        if (!$ismanager && !$isteacher) {
-            return '';
+        $currentpath = parse_url($this->page->url->out(false), PHP_URL_PATH);
+
+        // Учащийся: своя панель быстрого доступа
+        $student_rec = $DB->get_record('unics_students', ['mdl_user_id' => $USER->id]);
+        if ($student_rec && !$ismanager && !$isteacher) {
+            $links = [
+                ['/local/unics/pages/dashboard.php', [], 'Панель'],
+                ['/local/unics/pages/achievements.php', ['student_id' => $student_rec->id], 'Мои значки'],
+            ];
+
+            $html  = '<div class="unics-quicknav" role="navigation" aria-label="Навигация УНИКС">';
+            $html .= '<div class="unics-quicknav-inner"><div class="unics-qnav-links">';
+
+            foreach ($links as [$path, $params, $label]) {
+                $url    = (new moodle_url($path, $params))->out(false);
+                $active = ($currentpath === $path) ? ' active' : '';
+                $html  .= '<a href="' . htmlspecialchars($url, ENT_QUOTES) . '" '
+                        . 'class="unics-qnav-item' . $active . '">'
+                        . htmlspecialchars($label, ENT_QUOTES)
+                        . '</a>';
+            }
+
+            $html .= '</div></div></div>';
+            return $html;
         }
 
-        // Учащийся никогда не видит панель управления, даже если Moodle-роль назначена неверно.
-        if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+        if (!$ismanager && !$isteacher) {
             return '';
         }
 
@@ -51,7 +72,6 @@ class core_renderer extends \theme_boost\output\core_renderer {
         }
 
         if ($ismanager) {
-            $grouplabel = 'УНИКС · Управление';
             $links = [
                 ['/local/unics/pages/dashboard.php',    'Панель'],
                 ['/local/unics/pages/users.php',        'Пользователи'],
@@ -61,7 +81,6 @@ class core_renderer extends \theme_boost\output\core_renderer {
                 ['/local/unics/pages/umk_status.php',   'Очередь ИИ'],
             ];
         } else {
-            $grouplabel = 'УНИКС';
             $links = [
                 ['/local/unics/pages/my_students.php',  'Мои учащиеся'],
                 ['/local/unics/pages/generate_umk.php', 'Генерация УМК'],
@@ -69,11 +88,8 @@ class core_renderer extends \theme_boost\output\core_renderer {
             ];
         }
 
-        $currentpath = parse_url($this->page->url->out(false), PHP_URL_PATH);
-
         $html  = '<div class="unics-quicknav" role="navigation" aria-label="Навигация УНИКС">';
-        $html .= '<div class="unics-quicknav-inner">';
-        $html .= '<div class="unics-qnav-links">';
+        $html .= '<div class="unics-quicknav-inner"><div class="unics-qnav-links">';
 
         foreach ($links as [$path, $label]) {
             $url    = (new moodle_url($path))->out(false);
@@ -84,9 +100,7 @@ class core_renderer extends \theme_boost\output\core_renderer {
                     . '</a>';
         }
 
-        $html .= '</div>'; // .unics-qnav-links
-        $html .= '</div>'; // .unics-quicknav-inner
-        $html .= '</div>'; // .unics-quicknav
+        $html .= '</div></div></div>';
 
         return $html;
     }

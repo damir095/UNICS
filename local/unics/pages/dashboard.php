@@ -232,7 +232,7 @@ if ($is_admin) {
 
         echo '<div class="unics-welcome mb-4">';
         echo '<h4>Привет, ' . s($USER->firstname) . '!</h4>';
-        echo '<div class="sub">' . s($class_str) . ' · ' . s($categories[$student->category] ?? '—') . '</div>';
+        echo '<div class="sub">' . s($class_str) . '</div>';
         echo '</div>';
 
         // Последние 3 оценки

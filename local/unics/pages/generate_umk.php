@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     }
 
     $msg  = $queued > 0
-        ? "Создано {$queued} задач по уровням (" . implode(', ', $summary) . "). Материалы появятся в курсе после обработки cron."
+        ? "Создано {$queued} задач по уровням (" . implode(', ', $summary) . "). Материалы появятся в курсе автоматически в ближайшее время."
         : 'Не удалось добавить задачи — проверьте права доступа к учащимся.';
     $type = $queued > 0
         ? \core\output\notification::NOTIFY_SUCCESS
@@ -255,7 +255,7 @@ echo html_writer::tag('select', $course_opts, [
 echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-group']);
-echo html_writer::tag('label', 'Раздел курса <span class="text-danger">*</span>');
+echo html_writer::tag('label', 'Название раздела в курсе <span class="text-danger">*</span>');
 echo html_writer::tag('select', html_writer::tag('option', '— создать новый раздел —', ['value' => '-1']), [
     'name' => 'target_section', 'id' => 'target_section_select', 'class' => 'form-control',
 ]);

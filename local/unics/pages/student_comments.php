@@ -118,7 +118,7 @@ echo $OUTPUT->header();
 echo '<div class="mb-3 d-flex flex-wrap gap-2">';
 echo html_writer::link(
     new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $student_id]),
-    '← Отчёт по учащемуся',
+    'Отчёт по учащемуся',
     ['class' => 'btn btn-outline-secondary btn-sm']
 );
 if ($cmid > 0 && $cm_info) {

@@ -71,6 +71,14 @@
     }
 }
 
+// Переключатель режима редактирования: включённое состояние
+// Трек белый (виден на оранжевом фоне), ползунок оранжевый (показывает «вкл»)
+.navbar .editmode-switch-form .form-check-input:checked {
+    background-color: #fff !important;
+    border-color: rgba(255, 255, 255, .8) !important;
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='3' fill='%23E8621E'/></svg>") !important;
+}
+
 // Выпадающее меню пользователя
 .usermenu .dropdown-menu {
     border: none;
@@ -910,10 +918,44 @@ tr.unics-note-row td {
     }
 }
 
-// Отступ контента страницы для admin-layout
+// Отступ контента страницы для admin-layout и dashboard
 .pagelayout-admin #region-main,
-.path-local-unics #region-main {
+.path-local-unics #region-main,
+.pagelayout-mydashboard #region-main {
     padding-top: 1rem;
+}
+
+// ============================================================
+// 26. БЛОК «ОБЗОР КУРСОВ»
+// ============================================================
+
+// Boost core обнуляет padding у card-body через:
+//   .page-mycourses .drawers .block_myoverview > .card-body { padding-top: 0 !important }
+// Специфичность 0,4,0 — выше любого более короткого селектора.
+// Используем тот же селектор: при одинаковой специфичности побеждает
+// объявление, стоящее позже в каскаде (наш SCSS идёт после Boost).
+.page-mycourses .drawers .block_myoverview > .card-body {
+    padding-top: 1rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+}
+
+.page-mycourses {
+    // Отступ сверху от быстрой навигации
+    section.block_myoverview {
+        margin-top: 1.5rem;
+    }
+
+    // Прямой отступ заголовка блока (d-inline игнорирует padding родителя в ряде браузеров)
+    .block_myoverview h3.card-title {
+        margin-left: 0 !important;
+    }
+
+    // Горизонтальные отступы для фильтров, курсов и прочего контента
+    .block-myoverview {
+        padding-left: 0;
+        padding-right: 0;
+    }
 }
 
 // Файловый инпут — отступ от метки

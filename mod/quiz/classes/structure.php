@@ -820,7 +820,7 @@ class structure {
         $slot = $this->get_slot_by_number($slotnumber);
 
         // Get all the versions which exist.
-        $versions = version_options::get_version_menu_options($slot->questionid);
+        $versions = version_options::get_version_menu_options((int)$slot->questionid);
         $versioninfo = [];
 
         // Loop through them and set which one is selected.

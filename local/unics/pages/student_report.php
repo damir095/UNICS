@@ -143,14 +143,18 @@ $categories   = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => '
 $levels       = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 $umk_statuses = [1 => 'В очереди', 2 => 'Обрабатывается', 3 => 'Готов', 4 => 'Ошибка'];
 
+$is_own_view = ($USER->id == $student->mdl_user_id);
+
 echo $OUTPUT->header();
 
 echo '<div class="mb-3">';
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/my_students.php'),
-    '← Мои учащиеся',
-    ['class' => 'btn btn-outline-secondary btn-sm']
-);
+if ($is_admin || $is_teacher) {
+    echo html_writer::link(
+        new moodle_url('/local/unics/pages/my_students.php'),
+        'Мои учащиеся',
+        ['class' => 'btn btn-outline-secondary btn-sm']
+    );
+}
 echo ' ' . html_writer::link(
     new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student_id]),
     '⭐ Значки достижений',
@@ -178,8 +182,10 @@ echo '<div class="card-header bg-light"><strong>' . s($fio) . '</strong></div>';
 echo '<div class="card-body">';
 echo '<div class="row">';
 echo '<div class="col-md-3"><b>Класс:</b> ' . s($class_str) . '</div>';
-echo '<div class="col-md-3"><b>Категория:</b> ' . s($categories[$student->category] ?? '—') . '</div>';
-echo '<div class="col-md-3"><b>Уровень:</b> ' . s($levels[$student->difficulty_level] ?? '—') . '</div>';
+if (!$is_own_view) {
+    echo '<div class="col-md-3"><b>Категория:</b> ' . s($categories[$student->category] ?? '—') . '</div>';
+    echo '<div class="col-md-3"><b>Уровень:</b> ' . s($levels[$student->difficulty_level] ?? '—') . '</div>';
+}
 echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-' . $avg_badge_class . '">' . $avg_score . '%</span></div>';
 echo '</div>';
 echo '<div class="row mt-2">';
@@ -295,31 +301,33 @@ if (empty($enrolled_courses)) {
     echo '</tbody></table>';
 }
 
-// История УМК
-echo '<h5 class="mt-4">История генерации УМК (' . count($umk_list) . ')</h5>';
-if (empty($umk_list)) {
-    echo '<p class="text-muted">УМК ещё не генерировались.</p>';
-} else {
-    $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="thead-light"><tr>
-        <th>Название</th><th>Тема</th><th>Уровень</th><th>Курс</th><th>Статус</th><th>Дата</th>
-    </tr></thead><tbody>';
-    foreach ($umk_list as $u) {
-        $sl  = $umk_statuses[$u->status] ?? '?';
-        $sc  = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'][$u->status] ?? 'secondary';
-        $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '—';
-        $lvl = $level_labels[$u->difficulty_level] ?? '—';
-        echo '<tr>';
-        echo '<td>' . s($u->title) . '</td>';
-        echo '<td>' . s($u->topic) . '</td>';
-        echo '<td>' . s($lvl) . '</td>';
-        echo '<td>' . s($u->course_name ?? '—') . '</td>';
-        echo '<td><span class="badge badge-' . $sc . '">' . $sl . '</span></td>';
-        echo '<td>' . $dt . '</td>';
-        echo '</tr>';
+// История УМК — скрыта для учащегося при просмотре своего профиля
+if (!$is_own_view) {
+    echo '<h5 class="mt-4">История генерации УМК (' . count($umk_list) . ')</h5>';
+    if (empty($umk_list)) {
+        echo '<p class="text-muted">УМК ещё не генерировались.</p>';
+    } else {
+        $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
+        echo '<table class="table table-sm table-bordered">';
+        echo '<thead class="thead-light"><tr>
+            <th>Название</th><th>Тема</th><th>Уровень</th><th>Курс</th><th>Статус</th><th>Дата</th>
+        </tr></thead><tbody>';
+        foreach ($umk_list as $u) {
+            $sl  = $umk_statuses[$u->status] ?? '?';
+            $sc  = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'][$u->status] ?? 'secondary';
+            $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '—';
+            $lvl = $level_labels[$u->difficulty_level] ?? '—';
+            echo '<tr>';
+            echo '<td>' . s($u->title) . '</td>';
+            echo '<td>' . s($u->topic) . '</td>';
+            echo '<td>' . s($lvl) . '</td>';
+            echo '<td>' . s($u->course_name ?? '—') . '</td>';
+            echo '<td><span class="badge badge-' . $sc . '">' . $sl . '</span></td>';
+            echo '<td>' . $dt . '</td>';
+            echo '</tr>';
+        }
+        echo '</tbody></table>';
     }
-    echo '</tbody></table>';
 }
 
 // Комментарии педагога (последние 3)

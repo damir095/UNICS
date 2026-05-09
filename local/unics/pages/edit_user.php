@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 echo $OUTPUT->header();
 
 $return_url = new moodle_url('/local/unics/pages/users.php');
-echo '<p><a href="' . $return_url . '" class="btn btn-sm btn-outline-secondary">← Список пользователей</a></p>';
+echo '<p><a href="' . $return_url . '" class="btn btn-sm btn-outline-secondary">Список пользователей</a></p>';
 echo '<h4>' . s($profile->lastname . ' ' . $profile->firstname) . '
     <span class="badge bg-secondary ms-2">' . ($role_labels[$unics_role] ?? 'Роль ' . $unics_role) . '</span>
 </h4>';

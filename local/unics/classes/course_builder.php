@@ -155,10 +155,10 @@ class course_builder {
             // question_versions (Moodle 4.x)
             if ($has_qv && $qbe_id) {
                 $DB->insert_record('question_versions', (object)[
-                    'entryid'    => (int)$qbe_id,
-                    'version'    => 1,
-                    'questionid' => (int)$question->id,
-                    'status'     => 'ready',
+                    'questionbankentryid' => (int)$qbe_id,
+                    'version'             => 1,
+                    'questionid'          => (int)$question->id,
+                    'status'              => 'ready',
                 ]);
             }
 
@@ -424,7 +424,7 @@ class course_builder {
         $title_esc = s($title);
 
         $html = <<<HTML
-<div id="unics-pres" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:860px;margin:0 auto;border:1px solid #FFCCBC;border-radius:10px;overflow:hidden;box-shadow:0 4px 18px rgba(230,81,0,.15)">
+<div id="unics-pres" class="nolink" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:860px;margin:0 auto;border:1px solid #FFCCBC;border-radius:10px;overflow:hidden;box-shadow:0 4px 18px rgba(230,81,0,.15)">
   <div style="background:#E65100;color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center">
     <span style="font-size:1.1em;font-weight:700;letter-spacing:.01em">{$title_esc}</span>
     <span id="unics-counter" style="font-size:.9em;opacity:.85;white-space:nowrap;margin-left:12px">1 / {$total}</span>
@@ -446,13 +446,13 @@ class course_builder {
     <button id="unics-prev" onclick="unicsNav(-1)"
       style="padding:8px 22px;background:#E65100;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.95em;font-weight:600;transition:background .15s"
       onmouseover="this.style.background='#BF360C'" onmouseout="this.style.background='#E65100'">
-      ← Назад
+      Назад
     </button>
     <div id="unics-dots"></div>
     <button id="unics-next" onclick="unicsNav(1)"
       style="padding:8px 22px;background:#E65100;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.95em;font-weight:600;transition:background .15s"
       onmouseover="this.style.background='#BF360C'" onmouseout="this.style.background='#E65100'">
-      Далее →
+      Далее
     </button>
   </div>
   {$autoplay_note}
