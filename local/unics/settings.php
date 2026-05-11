@@ -101,6 +101,16 @@ if ($hassiteconfig) {
         'local/unics:manage'
     ));
 
+    // Подраздел «Геймификация»
+    $ADMIN->add('local_unics_cat', new admin_category('local_unics_game_cat', 'Геймификация'));
+
+    $ADMIN->add('local_unics_game_cat', new admin_externalpage(
+        'local_unics_shop',
+        get_string('shop', 'local_unics'),
+        new moodle_url('/local/unics/pages/shop.php'),
+        'local/unics:viewstudents'
+    ));
+
     // Настройки ИИ-генерации
     $settings = new admin_settingpage('local_unics_ai', 'Настройки ИИ');
     $ADMIN->add('local_unics_cat', $settings);

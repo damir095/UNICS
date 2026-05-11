@@ -95,3 +95,19 @@ $string['saved']                 = 'Сохранено';
 
 // Права
 $string['unics:manage']          = 'Управлять пользователями УНИКС';
+
+// Баллы и магазин
+$string['points']                = 'Баллы';
+$string['points_balance']        = 'Баланс баллов';
+$string['shop']                  = 'Магазин наград';
+$string['shop_items']            = 'Товары магазина';
+$string['buy']                   = 'Купить';
+$string['already_bought']        = 'Уже куплено';
+$string['not_enough_points']     = 'Недостаточно баллов';
+$string['points_history']        = 'История баллов';
+
+// Уведомления — новые типы
+$string['notif_level_up']        = 'Уровень повышен';
+$string['notif_level_down']      = 'Уровень понижен';
+$string['notif_badge_earned']    = 'Новый значок';
+$string['notif_new_comment']     = 'Заметка педагога';

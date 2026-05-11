@@ -29,9 +29,6 @@
         <KEY NAME="primary"   TYPE="primary" FIELDS="id"/>
         <KEY NAME="region_id" TYPE="foreign" FIELDS="region_id" REFTABLE="unics_regions" REFFIELDS="id"/>
       </KEYS>
-      <INDEXES>
-        <INDEX NAME="idx_district_region" UNIQUE="false" FIELDS="region_id"/>
-      </INDEXES>
     </TABLE>
 
     <TABLE NAME="unics_organizations" COMMENT="Организации (школы, центры, надомное обучение)">
@@ -51,9 +48,6 @@
         <KEY NAME="primary"     TYPE="primary" FIELDS="id"/>
         <KEY NAME="district_id" TYPE="foreign" FIELDS="district_id" REFTABLE="unics_districts" REFFIELDS="id"/>
       </KEYS>
-      <INDEXES>
-        <INDEX NAME="idx_org_district" UNIQUE="false" FIELDS="district_id"/>
-      </INDEXES>
     </TABLE>
 
     <TABLE NAME="unics_user_org" COMMENT="Привязка пользователей Moodle к организациям и ролям УНИКС">
@@ -69,8 +63,7 @@
         <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="uq_user_org"  UNIQUE="true"  FIELDS="mdl_user_id, organization_id"/>
-        <INDEX NAME="idx_uorg_org" UNIQUE="false" FIELDS="organization_id"/>
+        <INDEX NAME="uq_user_org" UNIQUE="true" FIELDS="mdl_user_id, organization_id"/>
       </INDEXES>
     </TABLE>
 
@@ -86,6 +79,7 @@
         <FIELD NAME="class_letter"     TYPE="char" LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="birth_date"       TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="special_needs"    TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="points"           TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0"  SEQUENCE="false" COMMENT="Накопленные баллы (геймификация)"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
@@ -93,8 +87,7 @@
         <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="uq_student_user" UNIQUE="true"  FIELDS="mdl_user_id"/>
-        <INDEX NAME="idx_student_org" UNIQUE="false" FIELDS="organization_id"/>
+        <INDEX NAME="uq_student_user" UNIQUE="true" FIELDS="mdl_user_id"/>
       </INDEXES>
     </TABLE>
 
@@ -112,8 +105,7 @@
         <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="uq_teacher_user" UNIQUE="true"  FIELDS="mdl_user_id"/>
-        <INDEX NAME="idx_teacher_org" UNIQUE="false" FIELDS="organization_id"/>
+        <INDEX NAME="uq_teacher_user" UNIQUE="true" FIELDS="mdl_user_id"/>
       </INDEXES>
     </TABLE>
 
@@ -131,8 +123,7 @@
         <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="uq_teacher_student" UNIQUE="true"  FIELDS="teacher_id, student_id"/>
-        <INDEX NAME="idx_ts_student"     UNIQUE="false" FIELDS="student_id"/>
+        <INDEX NAME="uq_teacher_student" UNIQUE="true" FIELDS="teacher_id, student_id"/>
       </INDEXES>
     </TABLE>
 
@@ -147,8 +138,7 @@
         <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="uq_parent_student" UNIQUE="true"  FIELDS="parent_mdl_user_id, student_id"/>
-        <INDEX NAME="idx_ps_student"    UNIQUE="false" FIELDS="student_id"/>
+        <INDEX NAME="uq_parent_student" UNIQUE="true" FIELDS="parent_mdl_user_id, student_id"/>
       </INDEXES>
     </TABLE>
 
@@ -169,10 +159,6 @@
         <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
         <KEY NAME="teacher_id" TYPE="foreign" FIELDS="teacher_id" REFTABLE="unics_teachers" REFFIELDS="id"/>
       </KEYS>
-      <INDEXES>
-        <INDEX NAME="idx_report_student" UNIQUE="false" FIELDS="student_id"/>
-        <INDEX NAME="idx_report_teacher" UNIQUE="false" FIELDS="teacher_id"/>
-      </INDEXES>
     </TABLE>
 
     <TABLE NAME="unics_audit_log" COMMENT="Журнал аудита действий (зарезервировано)">
@@ -226,9 +212,6 @@
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="umk_id"  TYPE="foreign" FIELDS="umk_id" REFTABLE="unics_umk" REFFIELDS="id"/>
       </KEYS>
-      <INDEXES>
-        <INDEX NAME="idx_um_umk" UNIQUE="false" FIELDS="umk_id"/>
-      </INDEXES>
     </TABLE>
 
     <TABLE NAME="unics_umk_students" COMMENT="Привязка учащихся к УМК (многие-ко-многим)">
@@ -287,7 +270,6 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="idx_queue_status" UNIQUE="false" FIELDS="status"/>
-        <INDEX NAME="idx_queue_umk"    UNIQUE="false" FIELDS="umk_id"/>
       </INDEXES>
     </TABLE>
 
@@ -326,6 +308,58 @@
       <INDEXES>
         <INDEX NAME="uq_achiev_badge" UNIQUE="true" FIELDS="student_id, badge_type"/>
       </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_points_log" COMMENT="Журнал начисления/списания баллов">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"  TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="points"      TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false" COMMENT="Положительные — начисление, отрицательные — списание"/>
+        <FIELD NAME="reason_type" TYPE="int"  LENGTH="2"   NOTNULL="true"  SEQUENCE="false" COMMENT="1=УМК 2=значок 3=уровень 4=тест 5=покупка"/>
+        <FIELD NAME="reason_text" TYPE="char" LENGTH="200" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="created_at"  TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_pts_type" UNIQUE="false" FIELDS="reason_type"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_shop_items" COMMENT="Товары магазина УНИКС">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="name"        TYPE="char" LENGTH="100" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="description" TYPE="char" LENGTH="300" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="cost"        TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="icon_emoji"  TYPE="char" LENGTH="10"  NOTNULL="true"  DEFAULT="🎁" SEQUENCE="false"/>
+        <FIELD NAME="item_type"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false" COMMENT="1=Титул/звание"/>
+        <FIELD NAME="is_active"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
+        <FIELD NAME="sort_order"  TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="0"  SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_shop_active" UNIQUE="false" FIELDS="is_active"/>
+        <INDEX NAME="idx_shop_sort"   UNIQUE="false" FIELDS="sort_order"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_purchases" COMMENT="Покупки учащихся в магазине">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"   TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="item_id"      TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="purchased_at" TYPE="int" LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students"  REFFIELDS="id"/>
+        <KEY NAME="item_id"    TYPE="foreign" FIELDS="item_id"    REFTABLE="unics_shop_items" REFFIELDS="id"/>
+      </KEYS>
     </TABLE>
 
   </TABLES>

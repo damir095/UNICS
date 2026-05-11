@@ -216,5 +216,86 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026050005, 'local', 'unics');
     }
 
+    if ($oldversion < 2026050006) {
+        $dbman = $DB->get_manager();
+
+        // --- unics_students.points ---
+        $table = new xmldb_table('unics_students');
+        $field = new xmldb_field('points', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'special_needs');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // --- unics_points_log ---
+        $table = new xmldb_table('unics_points_log');
+        $table->add_field('id',          XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('student_id',  XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL);
+        $table->add_field('points',      XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL);
+        $table->add_field('reason_type', XMLDB_TYPE_INTEGER, '2',   null, XMLDB_NOTNULL);
+        $table->add_field('reason_text', XMLDB_TYPE_CHAR,    '200', null, XMLDB_NOTNULL);
+        $table->add_field('created_at',  XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_index('idx_pts_type', XMLDB_INDEX_NOTUNIQUE, ['reason_type']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_shop_items ---
+        $table = new xmldb_table('unics_shop_items');
+        $table->add_field('id',          XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('name',        XMLDB_TYPE_CHAR,    '100', null, XMLDB_NOTNULL);
+        $table->add_field('description', XMLDB_TYPE_CHAR,    '300', null);
+        $table->add_field('cost',        XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL);
+        $table->add_field('icon_emoji',  XMLDB_TYPE_CHAR,    '10',  null, XMLDB_NOTNULL);
+        $table->add_field('item_type',   XMLDB_TYPE_INTEGER, '2',   null, XMLDB_NOTNULL, null, '1');
+        $table->add_field('is_active',   XMLDB_TYPE_INTEGER, '2',   null, XMLDB_NOTNULL, null, '1');
+        $table->add_field('sort_order',  XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('idx_shop_active', XMLDB_INDEX_NOTUNIQUE, ['is_active']);
+        $table->add_index('idx_shop_sort',   XMLDB_INDEX_NOTUNIQUE, ['sort_order']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_purchases ---
+        $table = new xmldb_table('unics_purchases');
+        $table->add_field('id',           XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('student_id',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('item_id',      XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('purchased_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students',  ['id']);
+        $table->add_key('item_id',    XMLDB_KEY_FOREIGN, ['item_id'],    'unics_shop_items', ['id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- Заполнить магазин базовыми товарами ---
+        if (!$DB->record_exists('unics_shop_items', [])) {
+            $items = [
+                ['name' => 'Умник',          'description' => 'Звание для начинающих отличников',        'cost' =>  100, 'icon' => '💡', 'sort' => 10],
+                ['name' => 'Книжный червь',  'description' => 'Для тех, кто много читает и учится',       'cost' =>  150, 'icon' => '📚', 'sort' => 20],
+                ['name' => 'Звёздный ученик','description' => 'Заслуженное звание активного учащегося',   'cost' =>  200, 'icon' => '⭐', 'sort' => 30],
+                ['name' => 'Меткий стрелок', 'description' => 'Для того, кто всегда попадает в цель',     'cost' =>  300, 'icon' => '🎯', 'sort' => 40],
+                ['name' => 'Суперзвезда',    'description' => 'Высшее звание для самых успешных учащихся','cost' =>  500, 'icon' => '🚀', 'sort' => 50],
+                ['name' => 'Чемпион',        'description' => 'Для настоящих чемпионов учёбы',            'cost' =>  750, 'icon' => '🏆', 'sort' => 60],
+            ];
+            foreach ($items as $i) {
+                $DB->insert_record('unics_shop_items', (object)[
+                    'name'        => $i['name'],
+                    'description' => $i['description'],
+                    'cost'        => $i['cost'],
+                    'icon_emoji'  => $i['icon'],
+                    'item_type'   => 1,
+                    'is_active'   => 1,
+                    'sort_order'  => $i['sort'],
+                ]);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026050006, 'local', 'unics');
+    }
+
     return true;
 }

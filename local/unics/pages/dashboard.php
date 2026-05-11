@@ -221,17 +221,25 @@ if ($is_admin) {
     $student = $DB->get_record('unics_students', ['mdl_user_id' => $USER->id]);
     if ($student) {
         // --- Учащийся ---
+        require_once(__DIR__ . '/../classes/points_manager.php');
         $mdl_user = $USER;
         $fio = trim("{$mdl_user->lastname} {$mdl_user->firstname}");
 
-        $categories = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => 'Длительное лечение', 4 => 'Одарённый'];
+        $categories  = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => 'Длительное лечение', 4 => 'Одарённый'];
+        $points_bal  = \local_unics\points_manager::get_balance((int)$student->id);
+        $active_title = \local_unics\points_manager::get_active_title((int)$student->id);
 
         $class_str = $student->class_number
             ? $student->class_number . ($student->class_letter ? " «{$student->class_letter}»" : '') . ' класс'
             : '—';
 
         echo '<div class="unics-welcome mb-4">';
-        echo '<h4>Привет, ' . s($USER->firstname) . '!</h4>';
+        echo '<h4>Привет, ' . s($USER->firstname) . '!';
+        if ($active_title) {
+            echo ' <span class="badge badge-warning ml-1" style="font-size:.8em;">'
+               . s($active_title->icon_emoji) . ' ' . s($active_title->name) . '</span>';
+        }
+        echo '</h4>';
         echo '<div class="sub">' . s($class_str) . '</div>';
         echo '</div>';
 
@@ -264,11 +272,15 @@ if ($is_admin) {
 
         // Статистика учащегося
         echo '<div class="row mb-4">';
-        echo '<div class="col-6 col-md-4 mb-3"><div class="card unics-stat-card p-3 text-center">';
+        echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
         echo '<div class="stat-value">' . (int)$courses_count . '</div><div class="stat-label mt-1">Курсов</div>';
         echo '</div></div>';
-        echo '<div class="col-6 col-md-4 mb-3"><div class="card unics-stat-card p-3 text-center">';
+        echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
         echo '<div class="stat-value">' . $badges_earned . ' / 4</div><div class="stat-label mt-1">Значков</div>';
+        echo '</div></div>';
+        echo '<div class="col-6 col-md-3 mb-3"><div class="card p-3 text-center" style="border-left:4px solid #f0a500;">';
+        echo '<div class="stat-value" style="color:#f0a500;font-size:1.6rem;font-weight:700;">🪙 ' . number_format($points_bal) . '</div>';
+        echo '<div class="stat-label mt-1">Баллов</div>';
         echo '</div></div>';
         echo '</div>';
 
@@ -283,6 +295,11 @@ if ($is_admin) {
             new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student->id]),
             'Мои значки',
             ['class' => 'btn btn-outline-warning']
+        );
+        echo html_writer::link(
+            new moodle_url('/local/unics/pages/shop.php'),
+            '🛍 Магазин',
+            ['class' => 'btn btn-warning']
         );
         echo '</div>';
 

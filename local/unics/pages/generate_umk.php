@@ -230,7 +230,7 @@ echo html_writer::start_tag('div', ['class' => 'row']);
 echo html_writer::start_tag('div', ['class' => 'col-md-5']);
 
 echo html_writer::start_tag('div', ['class' => 'form-group']);
-echo html_writer::tag('label', 'Название материала <span class="text-danger">*</span>');
+echo html_writer::tag('label', 'Название материала в разделе <span class="text-danger">*</span>');
 echo html_writer::empty_tag('input', [
     'type' => 'text', 'name' => 'title', 'class' => 'form-control', 'required' => 'required',
 ]);
@@ -255,7 +255,7 @@ echo html_writer::tag('select', $course_opts, [
 echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-group']);
-echo html_writer::tag('label', 'Название раздела в курсе <span class="text-danger">*</span>');
+echo html_writer::tag('label', 'Раздел <span class="text-danger">*</span>');
 echo html_writer::tag('select', html_writer::tag('option', '— создать новый раздел —', ['value' => '-1']), [
     'name' => 'target_section', 'id' => 'target_section_select', 'class' => 'form-control',
 ]);

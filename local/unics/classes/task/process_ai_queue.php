@@ -14,6 +14,7 @@ class process_ai_queue extends \core\task\scheduled_task {
         require_once($CFG->dirroot . '/local/unics/classes/user_manager.php');
         require_once($CFG->dirroot . '/local/unics/classes/notification_manager.php');
         require_once($CFG->dirroot . '/local/unics/classes/achievement_manager.php');
+        require_once($CFG->dirroot . '/local/unics/classes/points_manager.php');
         require_once($CFG->dirroot . '/group/lib.php');
 
         $generator = new \local_unics\ai_generator();
@@ -273,15 +274,28 @@ class process_ai_queue extends \core\task\scheduled_task {
                         mtrace("  [warn] Достижения не обновлены: " . $eb->getMessage());
                     }
 
+                    // Начислить баллы за готовый УМК
+                    try {
+                        \local_unics\points_manager::award(
+                            (int)$student->id,
+                            \local_unics\points_manager::POINTS_UMK_READY,
+                            \local_unics\points_manager::REASON_UMK_READY,
+                            'Готов УМК «' . mb_substr($umk->title, 0, 50) . '»'
+                        );
+                    } catch (\Throwable $ep) {
+                        mtrace("  [warn] Баллы не начислены: " . $ep->getMessage());
+                    }
+
                     // Уведомление учащемуся: материал готов
                     try {
-                        $course_rec = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
+                        $course_rec  = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
                         $course_name = $course_rec ? $course_rec->fullname : '';
                         \local_unics\notification_manager::notify_umk_ready(
                             (int)$student->mdl_user_id,
                             $umk->title,
                             $course_name,
-                            $umk_level
+                            $umk_level,
+                            \local_unics\points_manager::POINTS_UMK_READY
                         );
                     } catch (\Throwable $en) {
                         mtrace("  [warn] Уведомление учащемуся #{$student->mdl_user_id} не отправлено: " . $en->getMessage());

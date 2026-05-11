@@ -386,7 +386,7 @@ class course_builder {
             }
 
             $audio_icon = ($has_audio && !empty($slide_audios[$i]))
-                ? '<span id="unics-audio-icon-' . $i . '" style="margin-left:8px;font-size:.8em;color:#FFAB91" title="Озвучка активна">🔊</span>'
+                ? '<span id="unics-audio-icon-' . $i . '" style="margin-left:8px;font-size:.8em;color:#F5845A" title="Озвучка активна">🔊</span>'
                 : '';
 
             $img_html = '';
@@ -424,34 +424,36 @@ class course_builder {
         $title_esc = s($title);
 
         $html = <<<HTML
-<div id="unics-pres" class="nolink" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:860px;margin:0 auto;border:1px solid #FFCCBC;border-radius:10px;overflow:hidden;box-shadow:0 4px 18px rgba(230,81,0,.15)">
-  <div style="background:#E65100;color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center">
+<div id="unics-pres" class="nolink" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:860px;margin:0 auto;border:1px solid #FCDDD6;border-radius:10px;overflow:hidden;box-shadow:0 4px 18px rgba(242,101,69,.15)">
+  <div style="background:#F26545;color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center">
     <span style="font-size:1.1em;font-weight:700;letter-spacing:.01em">{$title_esc}</span>
     <span id="unics-counter" style="font-size:.9em;opacity:.85;white-space:nowrap;margin-left:12px">1 / {$total}</span>
   </div>
-  <div style="min-height:420px;padding:32px 40px;background:#FFF8F4">
+  <div style="min-height:420px;padding:32px 40px;background:#F5F6F9">
     <style>
-      .unics-slide-title{color:#E65100;margin-top:0;margin-bottom:16px;font-size:1.5em;font-weight:700;line-height:1.3}
-      .unics-slide-content{line-height:1.85;color:#263238;margin-bottom:20px;font-size:1.05em}
-      .unics-kp{background:#FFF3E0;border-left:4px solid #E65100;padding:14px 18px;border-radius:6px;margin-top:4px}
+      .unics-slide-title{color:#F26545;margin-top:0;margin-bottom:16px;font-size:1.5em;font-weight:700;line-height:1.3}
+      .unics-slide-content{line-height:1.85;color:#292F3B;margin-bottom:20px;font-size:1.05em}
+      .unics-kp{background:#FEF3F0;border-left:4px solid #F26545;padding:14px 18px;border-radius:6px;margin-top:4px}
       .unics-kp ul{margin:8px 0 0;padding-left:22px}
-      .unics-kp li{margin-bottom:5px;color:#37474F;font-size:1em}
-      .unics-dot{display:inline-block;width:11px;height:11px;border-radius:50%;background:#FFCCBC;margin:0 4px;cursor:pointer;transition:background .2s}
-      .unics-dot.active{background:#E65100}
+      .unics-kp li{margin-bottom:5px;color:#292F3B;font-size:1em}
+      .unics-dot{display:inline-block;width:11px;height:11px;border-radius:50%;background:#FCDDD6;margin:0 4px;cursor:pointer;transition:background .2s}
+      .unics-dot.active{background:#F26545}
+      #unics-pres a{color:inherit;text-decoration:none}
+      #unics-pres a:hover{opacity:.75;text-decoration:underline}
     </style>
     {$slides_html}
   </div>
   {$audio_html}
-  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;background:#FFF3E0;border-top:1px solid #FFCCBC">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;background:#FEF3F0;border-top:1px solid #FCDDD6">
     <button id="unics-prev" onclick="unicsNav(-1)"
-      style="padding:8px 22px;background:#E65100;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.95em;font-weight:600;transition:background .15s"
-      onmouseover="this.style.background='#BF360C'" onmouseout="this.style.background='#E65100'">
+      style="padding:8px 22px;background:#F26545;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.95em;font-weight:600;transition:background .15s"
+      onmouseover="this.style.background='#D44E30'" onmouseout="this.style.background='#F26545'">
       Назад
     </button>
     <div id="unics-dots"></div>
     <button id="unics-next" onclick="unicsNav(1)"
-      style="padding:8px 22px;background:#E65100;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.95em;font-weight:600;transition:background .15s"
-      onmouseover="this.style.background='#BF360C'" onmouseout="this.style.background='#E65100'">
+      style="padding:8px 22px;background:#F26545;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.95em;font-weight:600;transition:background .15s"
+      onmouseover="this.style.background='#D44E30'" onmouseout="this.style.background='#F26545'">
       Далее
     </button>
   </div>

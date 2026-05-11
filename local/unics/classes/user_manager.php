@@ -180,6 +180,22 @@ class unics_user_manager {
             'assigned_at' => date('Y-m-d H:i:s'),
         ]);
 
+        // Автоматически добавить педагога и учащегося в контакты Moodle Messaging
+        try {
+            require_once(dirname(__FILE__) . '/social_manager.php');
+            $teacher_rec = $DB->get_record('unics_teachers', ['id' => $teacher_id], 'mdl_user_id');
+            $student_rec = $DB->get_record('unics_students', ['id' => $student_id], 'mdl_user_id');
+            if ($teacher_rec && $student_rec) {
+                \local_unics\social_manager::sync_on_teacher_assign(
+                    (int)$teacher_rec->mdl_user_id,
+                    (int)$student_rec->mdl_user_id,
+                    $student_id
+                );
+            }
+        } catch (\Throwable $e) {
+            // Нефатально
+        }
+
         return true;
     }
 

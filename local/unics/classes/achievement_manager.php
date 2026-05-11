@@ -11,14 +11,74 @@ class achievement_manager {
     const BADGE_COMPLETER = 4; // 🎓 Завершитель: сдал хотя бы 1 тест с результатом ≥ 60%
 
     /**
-     * Проверить и выдать все применимые значки. Возвращает список новых badge_type.
+     * Проверить и выдать все применимые значки.
+     * При выдаче нового значка — начисляет баллы и отправляет уведомления.
+     * Возвращает список новых badge_type.
      */
     public static function evaluate_student(int $student_id, int $mdl_user_id): array {
+        global $DB;
+
         $awarded = [];
         if (self::check_diligent($student_id, $mdl_user_id))  $awarded[] = self::BADGE_DILIGENT;
         if (self::check_active($student_id, $mdl_user_id))    $awarded[] = self::BADGE_ACTIVE;
         if (self::check_excellent($student_id, $mdl_user_id)) $awarded[] = self::BADGE_EXCELLENT;
         if (self::check_completer($student_id, $mdl_user_id)) $awarded[] = self::BADGE_COMPLETER;
+
+        if (empty($awarded)) {
+            return [];
+        }
+
+        $badge_info = self::get_badge_info();
+
+        // Получить родителей учащегося для уведомлений
+        $parent_rows = $DB->get_records('unics_parent_student', ['student_id' => $student_id], '', 'parent_mdl_user_id');
+        $parent_uids = array_column((array)$parent_rows, 'parent_mdl_user_id');
+
+        $mdl_user = $DB->get_record('user', ['id' => $mdl_user_id, 'deleted' => 0]);
+        $student_name = $mdl_user ? fullname($mdl_user) : 'Учащийся';
+
+        foreach ($awarded as $badge_type) {
+            $info = $badge_info[$badge_type];
+
+            // Начислить баллы
+            try {
+                points_manager::award(
+                    $student_id,
+                    points_manager::POINTS_BADGE,
+                    points_manager::REASON_BADGE,
+                    'Значок «' . $info['name'] . '»'
+                );
+            } catch (\Throwable $e) {
+                // Нефатально
+            }
+
+            // Уведомить учащегося
+            try {
+                notification_manager::notify_badge_earned_student(
+                    $mdl_user_id,
+                    $info['icon'],
+                    $info['name'],
+                    points_manager::POINTS_BADGE
+                );
+            } catch (\Throwable $e) {
+                // Нефатально
+            }
+
+            // Уведомить родителей
+            try {
+                if (!empty($parent_uids)) {
+                    notification_manager::notify_badge_earned_parents(
+                        $parent_uids,
+                        $student_name,
+                        $info['icon'],
+                        $info['name']
+                    );
+                }
+            } catch (\Throwable $e) {
+                // Нефатально
+            }
+        }
+
         return $awarded;
     }
 

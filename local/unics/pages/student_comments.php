@@ -75,6 +75,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             $rec->cmid = $cmid;
         }
         $DB->insert_record('unics_comments', $rec);
+
+        // Уведомить учащегося о новой заметке
+        try {
+            require_once(__DIR__ . '/../classes/notification_manager.php');
+            $teacher_name = trim($USER->lastname . ' ' . $USER->firstname);
+            $context_lbl  = $cmid > 0 && $cm_info
+                ? ($module_label ?: 'активность курса')
+                : '';
+            \local_unics\notification_manager::notify_new_comment(
+                (int)$student->mdl_user_id,
+                $teacher_name,
+                $context_lbl
+            );
+        } catch (\Throwable $e) {
+            // Нефатально
+        }
     }
     redirect($page_url);
 }
