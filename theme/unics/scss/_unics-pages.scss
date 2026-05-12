@@ -1,0 +1,151 @@
+// =============================================================================
+// Кастомные стили для страниц плагина local_unics
+// (dashboard.php, student_report.php, course_builder.php и т.д.)
+//
+// Все правила, специфичные для УНИКС-страниц, держим здесь, а не разносим по
+// общим partial'ам, чтобы при отключении плагина их легко было исключить.
+// =============================================================================
+
+// Контейнер дашборда УНИКС.
+.unics-dashboard {
+    display: grid;
+    gap: 1.25rem;
+
+    @media (min-width: 768px) {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+}
+
+// Карточка-метрика на дашборде.
+.unics-metric {
+    background: var(--unics-surface);
+    border-radius: var(--unics-radius);
+    box-shadow: var(--unics-shadow-sm);
+    padding: 1.25rem;
+    border-left: 4px solid var(--unics-primary);
+
+    &__label {
+        color: var(--unics-text-muted);
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+
+    &__value {
+        font-size: 1.75rem;
+        font-weight: 600;
+        line-height: 1.2;
+        color: var(--unics-text);
+    }
+
+    // Цветовые модификаторы — для subject-color coding (см. design-refs §5b).
+    &--math      { border-left-color: #3F6BC4; }
+    &--literacy  { border-left-color: #A93D24; }
+    &--nature    { border-left-color: #3FB05E; }
+    &--history   { border-left-color: #8B5A2B; }
+    &--arts      { border-left-color: #9C4F9C; }
+}
+
+// Таблица отчётов УНИКС — горизонтальный скролл на мобильных (plan §4.5).
+.unics-report-table {
+    width: 100%;
+
+    @media (max-width: 575.98px) {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Бейджи статусов (используются в student_report, dashboard, очереди ИИ).
+// Цвета берутся из семантической палитры в _variables.scss.
+// -----------------------------------------------------------------------------
+.unics-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--unics-radius-pill);
+    font-size: 0.8125rem;
+    font-weight: 500;
+
+    &--ok       { background: var(--unics-success-bg); color: var(--unics-success); }
+    &--warning  { background: var(--unics-warning-bg); color: var(--unics-warning); }
+    &--error    { background: var(--unics-error-bg);   color: var(--unics-error); }
+    &--info     { background: var(--unics-info-bg);    color: var(--unics-info); }
+    &--neutral  { background: var(--unics-neutral-bg); color: var(--unics-neutral); }
+}
+
+// -----------------------------------------------------------------------------
+// Баланс баллов в navbar (геймификация).
+// -----------------------------------------------------------------------------
+.unics-points {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    background: var(--unics-primary);
+    color: #fff;
+    border-radius: var(--unics-radius-pill);
+    font-weight: 600;
+    font-size: 0.9375rem;
+
+    &__icon {
+        font-size: 1rem;
+        line-height: 1;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Toast-уведомления для бейджей / награждений.
+// Стиль предполагает aria-live="polite" на контейнере (см. core_renderer).
+// Анимация только fade — без подпрыгиваний (РАС-friendly, design-refs §6).
+// -----------------------------------------------------------------------------
+.unics-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 1090;
+    max-width: 360px;
+    padding: 1rem 1.25rem;
+    background: var(--unics-surface);
+    border-left: 4px solid var(--unics-primary);
+    border-radius: var(--unics-radius);
+    box-shadow: var(--unics-shadow-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+
+    &.is-visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        transition: none;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Карточка значка (страница «Мои достижения»).
+// Полученные — цветные, не полученные — desaturated с подсказкой.
+// -----------------------------------------------------------------------------
+.unics-achievement {
+    text-align: center;
+    padding: 1rem;
+
+    &__icon {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 0.5rem;
+        display: block;
+    }
+
+    &--locked {
+        opacity: 0.55;
+        filter: grayscale(1);
+
+        .unics-achievement__icon {
+            // Не размывать (это паттерн Duolingo), а именно обесцветить.
+            filter: none;
+        }
+    }
+}

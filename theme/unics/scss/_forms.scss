@@ -1,0 +1,30 @@
+// =============================================================================
+// Forms — larger padding for easier interaction (plan §4.3)
+// =============================================================================
+
+.form-control,
+.form-select {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    border-radius: var(--unics-radius);
+
+    &:focus {
+        border-color: var(--unics-primary);
+        box-shadow: var(--unics-focus-ring);
+    }
+}
+
+.form-label {
+    font-weight: 500;
+    margin-bottom: 0.35rem;
+}
+
+// Visible focus ring on every interactive element — accessibility.
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible,
+[tabindex]:focus-visible {
+    outline: none;
+    box-shadow: var(--unics-focus-ring);
+    border-radius: var(--unics-radius);
+}

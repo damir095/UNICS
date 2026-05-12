@@ -15,13 +15,6 @@ if ($hassiteconfig) {
     ));
 
     $ADMIN->add('local_unics_cat', new admin_externalpage(
-        'local_unics_edit_user',
-        'Редактировать пользователя',
-        new moodle_url('/local/unics/pages/edit_user.php'),
-        'local/unics:manage'
-    ));
-
-    $ADMIN->add('local_unics_cat', new admin_externalpage(
         'local_unics_import',
         'Импорт пользователей (CSV)',
         new moodle_url('/local/unics/pages/import_users.php'),
@@ -99,16 +92,6 @@ if ($hassiteconfig) {
         'История генерации УМК',
         new moodle_url('/local/unics/pages/umk_status.php'),
         'local/unics:manage'
-    ));
-
-    // Подраздел «Геймификация»
-    $ADMIN->add('local_unics_cat', new admin_category('local_unics_game_cat', 'Геймификация'));
-
-    $ADMIN->add('local_unics_game_cat', new admin_externalpage(
-        'local_unics_shop',
-        get_string('shop', 'local_unics'),
-        new moodle_url('/local/unics/pages/shop.php'),
-        'local/unics:viewstudents'
     ));
 
     // Настройки ИИ-генерации

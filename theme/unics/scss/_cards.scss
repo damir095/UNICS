@@ -1,0 +1,29 @@
+// =============================================================================
+// Cards & blocks
+// =============================================================================
+
+.card {
+    border: 0;
+    border-radius: var(--unics-radius);
+    box-shadow: var(--unics-shadow-sm);
+    background-color: var(--unics-surface);
+
+    .card-header {
+        background-color: transparent;
+        border-bottom: 2px solid var(--unics-primary);
+        font-weight: 600;
+    }
+
+    .card-body {
+        padding: 1.25rem;
+    }
+}
+
+.block {
+    border-radius: var(--unics-radius);
+    overflow: hidden;
+
+    .card-body {
+        background-color: var(--unics-surface);
+    }
+}

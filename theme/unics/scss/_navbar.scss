@@ -1,0 +1,27 @@
+// =============================================================================
+// Navbar
+// =============================================================================
+
+.navbar {
+    background-color: var(--unics-dark) !important;
+    box-shadow: var(--unics-shadow-nav);
+
+    .navbar-brand,
+    .nav-link {
+        color: #fff !important;
+
+        &:hover,
+        &:focus {
+            color: var(--unics-primary) !important;
+        }
+    }
+
+    .dropdown-menu {
+        border-radius: var(--unics-radius);
+        box-shadow: var(--unics-shadow-md);
+    }
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    color: var(--unics-primary);
+}

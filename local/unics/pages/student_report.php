@@ -208,14 +208,14 @@ if (count($grade_history) >= 2) {
     $chart->add_series($series);
     $chart->set_labels($chart_labels);
 
-    echo '<h5 class="mt-4">Динамика успеваемости</h5>';
+    echo '<h2 class="unics-section-title mt-4">Динамика успеваемости</h2>';
     echo '<div style="max-height:220px">';
     echo $OUTPUT->render_chart($chart, false);
     echo '</div>';
 }
 
 // Результаты тестов
-echo '<h5 class="mt-4">Результаты тестов</h5>';
+echo '<h2 class="unics-section-title mt-4">Результаты тестов</h2>';
 if (empty($quiz_grades)) {
     echo '<p class="text-muted">Тесты ещё не сданы.</p>';
 } else {
@@ -273,7 +273,7 @@ if (empty($quiz_grades)) {
 }
 
 // Записан на курсы
-echo '<h5 class="mt-4">Записан на курсы (' . count($enrolled_courses) . ')</h5>';
+echo '<h2 class="unics-section-title mt-4">Записан на курсы (' . count($enrolled_courses) . ')</h2>';
 if (empty($enrolled_courses)) {
     echo '<p class="text-muted">Не записан ни на один курс.</p>';
 } else {
@@ -303,7 +303,7 @@ if (empty($enrolled_courses)) {
 
 // История УМК — скрыта для учащегося при просмотре своего профиля
 if (!$is_own_view) {
-    echo '<h5 class="mt-4">История генерации УМК (' . count($umk_list) . ')</h5>';
+    echo '<h2 class="unics-section-title mt-4">История генерации УМК (' . count($umk_list) . ')</h2>';
     if (empty($umk_list)) {
         echo '<p class="text-muted">УМК ещё не генерировались.</p>';
     } else {
@@ -343,7 +343,7 @@ if ($is_admin || $is_teacher) {
         0, 3
     );
 
-    echo '<h5 class="mt-4">Общие заметки педагога</h5>';
+    echo '<h2 class="unics-section-title mt-4">Общие заметки педагога</h2>';
     if (empty($last_comments)) {
         echo '<p class="text-muted">Комментариев ещё нет.</p>';
     } else {

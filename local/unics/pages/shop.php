@@ -7,7 +7,12 @@ global $USER, $DB;
 // Только учащиеся имеют доступ к магазину
 $student = $DB->get_record('unics_students', ['mdl_user_id' => $USER->id]);
 if (!$student) {
-    throw new moodle_exception('accessdenied', 'error');
+    redirect(
+        new moodle_url('/local/unics/pages/dashboard.php'),
+        'Магазин доступен только учащимся.',
+        null,
+        \core\output\notification::NOTIFY_INFO
+    );
 }
 
 $ctx = context_system::instance();

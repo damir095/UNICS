@@ -45,33 +45,57 @@
     color: var(--unics-primary);
     line-height: 1.1;
 }
+/* #475569 ≈ 7.4:1 на белом — AAA. Решает axe color-contrast 4.37:1 (#607D8B). */
 .unics-stat-card .stat-label {
     font-size: .75rem;
-    color: #607D8B;
+    color: #475569;
     text-transform: uppercase;
     letter-spacing: .06em;
 }
 
+/* Карточка баланса баллов (детский dashboard). #b25e09 ≈ 4.6:1 на белом — AA.
+   Решает axe color-contrast 2.08:1 (#f0a500 inline). */
+.unics-points-card {
+    border-left: 4px solid #b25e09;
+}
+.unics-points-card .stat-value {
+    color: #b25e09;
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
 /* ---- Приветственный баннер ---- */
+/* Фон — deep-вариант оранжевого (#A93D24 ≈ 6:1 на белом, AA с запасом).
+   Решает axe color-contrast 2.56:1 (rgba(255,255,255,.82) на #F26545). */
 .unics-welcome {
-    background: var(--unics-primary);
+    background: #A93D24;
     border-radius: .75rem;
     color: #fff;
     padding: 1.4rem 1.8rem;
     margin-bottom: 1.5rem;
 }
+/* h2 — после фикса heading-order (WCAG 1.3.1, 2.4.6).
+   Размер сохранён близким к прежнему h4 (~1.25rem), чтобы визуал не подскочил. */
+.unics-welcome h2,
 .unics-welcome h4,
 .unics-welcome h5 {
     color: #fff;
-    margin-bottom: .25rem;
+    margin: 0 0 .25rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
 }
 .unics-welcome .sub {
-    color: rgba(255,255,255,.82);
+    color: #fff;
     font-size: .88rem;
 }
 
 /* ---- Заголовки разделов ---- */
+/* Класс работает и на <div>, и на <h2> — после heading-order фикса используем h2.
+   margin-top: 0 нужен, чтобы сбросить browser default для h2 (≈0.83em) и сохранить
+   прежний вертикальный ритм. */
 .unics-section-title {
+    margin-top: 0;
     font-size: 1rem;
     font-weight: 700;
     color: var(--unics-primary);
@@ -81,9 +105,11 @@
 }
 
 /* ---- Таблицы ---- */
+/* #0D47A1 ≈ 8.7:1 на #E3F2FD — AAA. Решает axe color-contrast 2.73:1
+   (var(--unics-primary) → #F26545 из темы) для ВСЕХ таблиц плагин-страниц. */
 .path-local-unics .table thead th {
     background: #E3F2FD;
-    color: var(--unics-primary);
+    color: #0D47A1;
     font-size: .8rem;
     text-transform: uppercase;
     letter-spacing: .05em;

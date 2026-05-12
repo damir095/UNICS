@@ -38,7 +38,7 @@ if ($is_admin) {
     $fio_admin = trim($USER->lastname . ' ' . $USER->firstname);
 
     echo '<div class="unics-welcome mb-4">';
-    echo '<h4>Добро пожаловать, ' . s($fio_admin) . '</h4>';
+    echo '<h2>Добро пожаловать, ' . s($fio_admin) . '</h2>';
     echo '<div class="sub">Панель администратора УНИКС</div>';
     echo '</div>';
 
@@ -60,7 +60,7 @@ if ($is_admin) {
     echo '</div>';
 
     // Быстрые действия
-    echo '<div class="unics-section-title">Быстрые действия</div>';
+    echo '<h2 class="unics-section-title">Быстрые действия</h2>';
     echo '<div class="unics-action-grid mb-4 d-flex flex-wrap gap-2">';
     $actions = [
         ['/local/unics/pages/users.php',         'btn-primary',          'Пользователи'],
@@ -80,7 +80,7 @@ if ($is_admin) {
     echo '</div>';
 
     // Последние УМК
-    echo '<div class="unics-section-title">Последние генерации УМК</div>';
+    echo '<h2 class="unics-section-title">Последние генерации УМК</h2>';
     if (empty($recent_umk)) {
         echo '<p class="text-muted">УМК ещё не создавались.</p>';
     } else {
@@ -173,7 +173,7 @@ if ($is_admin) {
 
     $fio_teacher = trim($USER->lastname . ' ' . $USER->firstname);
     echo '<div class="unics-welcome mb-4">';
-    echo '<h4>Добро пожаловать, ' . s($fio_teacher) . '</h4>';
+    echo '<h2>Добро пожаловать, ' . s($fio_teacher) . '</h2>';
     echo '<div class="sub">Личный кабинет педагога УНИКС</div>';
     echo '</div>';
 
@@ -204,7 +204,7 @@ if ($is_admin) {
     echo '</div>';
 
     // Быстрые действия
-    echo '<div class="unics-section-title">Быстрые действия</div>';
+    echo '<h2 class="unics-section-title">Быстрые действия</h2>';
     echo '<div class="unics-action-grid mb-4 d-flex flex-wrap gap-2">';
     echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
         'Мои учащиеся', ['class' => 'btn btn-primary']);
@@ -234,12 +234,12 @@ if ($is_admin) {
             : '—';
 
         echo '<div class="unics-welcome mb-4">';
-        echo '<h4>Привет, ' . s($USER->firstname) . '!';
+        echo '<h2>Привет, ' . s($USER->firstname) . '!';
         if ($active_title) {
             echo ' <span class="badge badge-warning ml-1" style="font-size:.8em;">'
                . s($active_title->icon_emoji) . ' ' . s($active_title->name) . '</span>';
         }
-        echo '</h4>';
+        echo '</h2>';
         echo '<div class="sub">' . s($class_str) . '</div>';
         echo '</div>';
 
@@ -278,8 +278,8 @@ if ($is_admin) {
         echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
         echo '<div class="stat-value">' . $badges_earned . ' / 4</div><div class="stat-label mt-1">Значков</div>';
         echo '</div></div>';
-        echo '<div class="col-6 col-md-3 mb-3"><div class="card p-3 text-center" style="border-left:4px solid #f0a500;">';
-        echo '<div class="stat-value" style="color:#f0a500;font-size:1.6rem;font-weight:700;">🪙 ' . number_format($points_bal) . '</div>';
+        echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card unics-points-card p-3 text-center">';
+        echo '<div class="stat-value">🪙 ' . number_format($points_bal) . '</div>';
         echo '<div class="stat-label mt-1">Баллов</div>';
         echo '</div></div>';
         echo '</div>';
@@ -305,7 +305,7 @@ if ($is_admin) {
 
         // Последние тесты
         if (!empty($last_grades)) {
-            echo '<div class="unics-section-title">Последние тесты</div>';
+            echo '<h2 class="unics-section-title">Последние тесты</h2>';
             echo '<table class="table table-sm table-bordered">';
             echo '<thead class="thead-light"><tr><th>Тест</th><th>Курс</th><th>Балл</th><th>%</th></tr></thead><tbody>';
             foreach ($last_grades as $g) {
@@ -330,7 +330,7 @@ if ($is_admin) {
 
         $fio_parent = trim($USER->lastname . ' ' . $USER->firstname);
         echo '<div class="unics-welcome mb-4">';
-        echo '<h4>Добро пожаловать, ' . s($fio_parent) . '</h4>';
+        echo '<h2>Добро пожаловать, ' . s($fio_parent) . '</h2>';
         echo '<div class="sub">Портал родителя УНИКС</div>';
         echo '</div>';
 
@@ -370,7 +370,7 @@ if ($is_admin) {
             }
         }
 
-        echo '<div class="unics-section-title">Мои дети</div>';
+        echo '<h2 class="unics-section-title">Мои дети</h2>';
         echo '<div class="row">';
         foreach ($children as $ch) {
             $fio = trim("{$ch->lastname} {$ch->firstname} " . ($ch->middlename ?? ''));

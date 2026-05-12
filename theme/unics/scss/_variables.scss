@@ -1,0 +1,77 @@
+// =============================================================================
+// УНИКС — CSS custom properties
+// Доступны во всех partial'ах ниже и в плагин-страницах local/unics/.
+// Также служат точкой переключения для будущих тем (dark / high-contrast).
+//
+// Обоснование контрастов и числовых значений — см. [[design-references]].
+// =============================================================================
+
+:root {
+    // Brand palette.
+    --unics-primary:        #F26545;  // акцент: фоны кнопок, borders, иконки, крупный текст
+    --unics-primary-hover:  #d9543a;  // hover на тех же поверхностях
+    --unics-primary-text:   #C44A2F;  // 4.6:1 на белом — WCAG AA для текста ссылок
+    --unics-primary-deep:   #A93D24;  // 6.0:1 — близко к AAA, для текста на светло-оранжевых поверхностях
+    --unics-bg:             #F5F6F9;
+    --unics-surface:        #FFFFFF;
+    --unics-dark:           #292F3B;
+    --unics-text:           #1F2430;
+    --unics-text-muted:     #6b7280;
+    --unics-border:         #e3e6ea;
+
+    // Semantic colors. Контраст ≥ 4.5:1 на белом. См. design-references §5a.
+    // Всегда применять В ПАРЕ с иконкой / текстовой меткой — недопустимо
+    // полагаться только на цвет (WCAG 1.4.1, 5-8% учащихся имеют дальтонизм).
+    --unics-success:        #1e7e34;
+    --unics-success-bg:     #e6f4ea;
+    --unics-warning:        #b25e09;
+    --unics-warning-bg:     #fff4e0;
+    --unics-error:          #a52022;
+    --unics-error-bg:       #fbe9e9;
+    --unics-info:           #1565c0;
+    --unics-info-bg:        #e8f0fa;
+    --unics-neutral:        #4a5160;
+    --unics-neutral-bg:     #eef0f4;
+
+    // Shape.
+    --unics-radius:         0.5rem;
+    --unics-radius-lg:      0.75rem;
+    --unics-radius-pill:    999px;
+
+    // -------------------------------------------------------------------------
+    // Spacing scale — 4/8-based. Используем ЭТИ токены, не хардкод rem/px.
+    // Обоснование шкалы и правила применения — см. [[spacing-system]] в wiki.
+    // -------------------------------------------------------------------------
+    --unics-space-0:   0;
+    --unics-space-1:   0.25rem;   // 4px  — icon↔text, padding-y бейджа
+    --unics-space-2:   0.5rem;    // 8px  — между связанными inline-элементами
+    --unics-space-3:   0.75rem;   // 12px — padding-y form-control, gap form-row
+    --unics-space-4:   1rem;      // 16px — БАЗА: gap между обычными элементами
+    --unics-space-5:   1.5rem;    // 24px — padding карточки, отступ между блоками
+    --unics-space-6:   2rem;      // 32px — между секциями на странице
+    --unics-space-7:   3rem;      // 48px — крупные разделители, hero-padding
+    --unics-space-8:   4rem;      // 64px — верх/низ страницы, hero-сечения
+
+    // Семантические алиасы — для читаемости в массовых местах.
+    --unics-gutter:         var(--unics-space-4);  // между соседними элементами
+    --unics-stack:          var(--unics-space-4);  // вертикальный gap между блоками
+    --unics-stack-tight:    var(--unics-space-2);  // плотный вертикальный gap
+    --unics-section-gap:    var(--unics-space-6);  // между секциями страницы
+    --unics-page-pad:       var(--unics-space-5);  // боковой padding контейнера
+
+    // Elevation.
+    --unics-shadow-sm:      0 1px 4px rgba(41, 47, 59, .10);
+    --unics-shadow-md:      0 4px 16px rgba(41, 47, 59, .12);
+    --unics-shadow-nav:     0 2px 6px rgba(0, 0, 0, .25);
+
+    // Focus.
+    --unics-focus-ring:     0 0 0 3px rgba(242, 101, 69, .35);
+
+    // Reading width — не больше 70 символов на строку для основного текста
+    // (типографический оптимум 45–75; WCAG 1.4.8 даёт 80 символов как максимум).
+    --unics-readable-width: 70ch;
+
+    // Touch targets.
+    --unics-touch-min:      44px;   // Apple HIG / WCAG 2.5.5 AAA
+    --unics-touch-cta:      60px;   // увеличенный CTA для детских страниц (моторика, ОВЗ)
+}

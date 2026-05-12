@@ -107,7 +107,7 @@ if (empty($students)) {
 }
 
 $table = new html_table();
-$table->head = ['Учащийся', 'Класс', 'Категория', 'Уровень', 'Организация', 'Действия', 'Отчёт / Комментарии'];
+$table->head = ['Учащийся', 'Класс', 'Категория', 'Уровень', 'Организация', 'Действия', 'Отчёт'];
 $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($students as $s) {
@@ -127,12 +127,6 @@ foreach ($students as $s) {
         ['class' => 'btn btn-sm btn-outline-primary']
     );
 
-    $comments_link = html_writer::link(
-        new moodle_url('/local/unics/pages/student_comments.php', ['student_id' => $s->student_id]),
-        'Комментарии',
-        ['class' => 'btn btn-sm btn-outline-secondary']
-    );
-
     $table->data[] = [
         html_writer::tag('strong', htmlspecialchars($fio)),
         $s->class_number ? "{$s->class_number} кл." : '—',
@@ -140,7 +134,7 @@ foreach ($students as $s) {
         $lvl,
         htmlspecialchars($s->org_name),
         $actions,
-        $report_link . ' ' . $comments_link,
+        $report_link,
     ];
 }
 

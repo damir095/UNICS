@@ -1,0 +1,26 @@
+// =============================================================================
+// Login page
+// =============================================================================
+
+#page-login-index {
+    #region-main {
+        max-width: 480px;
+        margin: 0 auto;
+    }
+
+    .loginbox {
+        border-radius: var(--unics-radius-lg);
+        box-shadow: var(--unics-shadow-md);
+        padding: 2rem;
+        background: var(--unics-surface);
+    }
+
+    .login-form-username,
+    .login-form-password {
+        margin-bottom: 1rem;
+    }
+
+    .login-form-submit .btn {
+        width: 100%;
+    }
+}

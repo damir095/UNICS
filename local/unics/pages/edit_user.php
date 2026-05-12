@@ -4,8 +4,17 @@ require_once(__DIR__ . '/../classes/user_manager.php');
 require_login();
 require_capability('local/unics:manage', context_system::instance());
 
-$user_id = required_param('id', PARAM_INT);
+$user_id = optional_param('id', 0, PARAM_INT);
 $action  = optional_param('action', 'edit', PARAM_ALPHA);
+
+if (!$user_id) {
+    redirect(
+        new moodle_url('/local/unics/pages/users.php'),
+        'Выберите пользователя для редактирования.',
+        null,
+        \core\output\notification::NOTIFY_INFO
+    );
+}
 
 $PAGE->set_url(new moodle_url('/local/unics/pages/edit_user.php', ['id' => $user_id]));
 $PAGE->set_title('Редактировать пользователя — УНИКС');

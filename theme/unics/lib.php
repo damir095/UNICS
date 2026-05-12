@@ -59,17 +59,48 @@ function theme_unics_get_pre_scss($theme): string {
 /**
  * Inject additional SCSS after the preset has been compiled.
  *
+ * Concatenates modular partials from scss/ in a defined order. The order matters:
+ *   _variables  → CSS custom properties used by everything below
+ *   _navbar     → navbar, breadcrumb (top of page)
+ *   _buttons    → button system (incl. .unics-cta)
+ *   _forms      → form-control, focus rings
+ *   _cards      → card / block surfaces
+ *   _layout     → typography, links, sidebar, body
+ *   _login      → login page only
+ *   _unics-pages → plugin-specific (local_unics) components
+ *
  * @param theme_config $theme
  * @return string SCSS
  */
 function theme_unics_get_extra_scss($theme): string {
     global $CFG;
 
-    $content = file_get_contents($CFG->dirroot . '/theme/unics/scss/unics.scss');
+    $partials = [
+        '_variables',
+        '_navbar',
+        '_buttons',
+        '_forms',
+        '_cards',
+        '_layout',
+        '_login',
+        '_unics-pages',
+    ];
+
+    $scssdir = $CFG->dirroot . '/theme/unics/scss/';
+    $content = '';
+
+    foreach ($partials as $partial) {
+        $path = $scssdir . $partial . '.scss';
+        if (is_readable($path)) {
+            $content .= "\n/* ===== {$partial}.scss ===== */\n";
+            $content .= file_get_contents($path);
+        }
+    }
 
     // Custom SCSS from theme settings (admin textarea).
     if (!empty($theme->settings->scss)) {
-        $content .= "\n" . $theme->settings->scss;
+        $content .= "\n/* ===== admin custom SCSS ===== */\n";
+        $content .= $theme->settings->scss;
     }
 
     return $content;
