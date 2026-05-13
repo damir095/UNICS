@@ -383,7 +383,7 @@ if (empty($students)) {
                 'class'   => 'small',
                 'onclick' => "document.querySelectorAll('.umk-lvl{$lvl}').forEach(c=>c.checked=true);return false;",
             ]),
-            ['class' => 'font-weight-bold small text-secondary mb-1 border-bottom pb-1']
+            ['class' => 'font-weight-bold small mb-1 border-bottom pb-1']
         );
 
         foreach ($group_students as $s) {

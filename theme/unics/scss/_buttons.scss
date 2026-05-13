@@ -13,7 +13,8 @@
 
 .btn {
     min-height: var(--unics-touch-min);
-    padding: 0.65rem 1.4rem;
+    padding: var(--unics-space-2) var(--unics-space-5);  // vert space-2 (8px) — иначе на 18px-базе + line-height 1.7 кнопка ~55px и НЕ совпадает с form-control 44px
+    line-height: 1.5;                                     // явно перебиваем $line-height-base: 1.7 — иначе btn растягивается
     border-radius: var(--unics-radius);
     font-weight: 500;
     transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
@@ -27,7 +28,7 @@
 
 .btn-sm {
     min-height: 36px;
-    padding: 0.4rem 1rem;
+    padding: var(--unics-space-2) var(--unics-space-4);
     font-size: 0.875rem;
 }
 
@@ -56,18 +57,24 @@
 }
 
 // -----------------------------------------------------------------------------
-// Outline-кнопки в состоянии "по умолчанию" — даём светло-серую заливку.
-// Без неё белая кнопка на --unics-bg (#F5F6F9) почти неотличима от фона.
-// При :hover Bootstrap уже заливает кнопку цветом контура — это сохраняем.
+// Outline-кнопки в состоянии "по умолчанию" — заливка контрастнее фона.
+// На --unics-bg (#F5F6F9) старая --unics-neutral-bg (#eef0f4) давала ~1.05:1
+// и кнопка терялась. Делим по семантике:
+//   - outline-primary → светлый персик (бренд-связь через hue contrast)
+//   - остальные       → ощутимо темнее серый
+// При :hover Bootstrap заливает кнопку цветом контура — это сохраняем.
 // -----------------------------------------------------------------------------
-.btn-outline-primary,
+.btn-outline-primary {
+    background-color: #FFE6DC;   // light peach, виден на белом за счёт hue contrast
+}
+
 .btn-outline-secondary,
 .btn-outline-success,
 .btn-outline-warning,
 .btn-outline-danger,
 .btn-outline-info,
 .btn-outline-dark {
-    background-color: var(--unics-neutral-bg);
+    background-color: #D2D6DC;   // ~1.3:1 к --unics-bg — кнопка читается как блок
 }
 
 // -----------------------------------------------------------------------------
@@ -76,7 +83,7 @@
 // -----------------------------------------------------------------------------
 .unics-cta {
     min-height: var(--unics-touch-cta);
-    padding: 0.75rem 1.75rem;
+    padding: var(--unics-space-3) var(--unics-space-6);
     font-size: 1.0625rem;       // 17px @ 18px-base — крупнее обычной кнопки
     font-weight: 600;
     border-radius: var(--unics-radius-lg);
@@ -84,7 +91,7 @@
     // Гарантируем интервал между двумя соседними CTA — предотвращаем
     // случайные двойные нажатия (WCAG 2.5.5, моторные ОВЗ).
     & + .unics-cta {
-        margin-left: 0.75rem;
+        margin-left: var(--unics-space-3);
     }
 }
 
@@ -93,7 +100,7 @@
 .btn i {
     width: 1.25em;
     height: 1.25em;
-    margin-right: 0.5rem;
+    margin-right: var(--unics-space-2);
     vertical-align: -0.15em;
 }
 

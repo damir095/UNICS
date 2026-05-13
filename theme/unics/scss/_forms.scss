@@ -4,9 +4,12 @@
 
 .form-control,
 .form-select {
-    padding: 0.5rem 1rem;
+    padding: var(--unics-space-2) var(--unics-space-4);
+    min-height: var(--unics-touch-min);    // парность с .btn (44px), иначе input ниже кнопки в одном ряду
     font-size: 1rem;
+    line-height: 1.5;                       // base 1.7 слишком высокий внутри input
     border-radius: var(--unics-radius);
+    text-overflow: ellipsis;                // длинные placeholder'ы не вылезают за границу
 
     &:focus {
         border-color: var(--unics-primary);
@@ -14,9 +17,22 @@
     }
 }
 
+// <select> (в т.ч. Moodle'овский html_writer::select → class="form-control")
+// нуждается в большем правом padding'е под нативную стрелку браузера и/или
+// SVG-arrow Bootstrap'а — иначе текст заходит прямо на стрелку.
+select.form-control,
+.form-select {
+    padding-right: var(--unics-space-7);    // 3rem (48px) — хватает на стрелку
+}
+
+// textarea не должна иметь min-height 44px на одну строку — снимаем.
+textarea.form-control {
+    min-height: auto;
+}
+
 .form-label {
     font-weight: 500;
-    margin-bottom: 0.35rem;
+    margin-bottom: var(--unics-space-2);
 }
 
 // Visible focus ring on every interactive element — accessibility.

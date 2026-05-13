@@ -9,7 +9,7 @@
 // Контейнер дашборда УНИКС.
 .unics-dashboard {
     display: grid;
-    gap: 1.25rem;
+    gap: var(--unics-space-5);
 
     @media (min-width: 768px) {
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -21,13 +21,13 @@
     background: var(--unics-surface);
     border-radius: var(--unics-radius);
     box-shadow: var(--unics-shadow-sm);
-    padding: 1.25rem;
+    padding: var(--unics-space-5);
     border-left: 4px solid var(--unics-primary);
 
     &__label {
         color: var(--unics-text-muted);
         font-size: 0.875rem;
-        margin-bottom: 0.25rem;
+        margin-bottom: var(--unics-space-1);
     }
 
     &__value {
@@ -62,7 +62,7 @@
 // -----------------------------------------------------------------------------
 .unics-badge {
     display: inline-block;
-    padding: 0.2rem 0.6rem;
+    padding: var(--unics-space-1) var(--unics-space-2);
     border-radius: var(--unics-radius-pill);
     font-size: 0.8125rem;
     font-weight: 500;
@@ -80,8 +80,8 @@
 .unics-points {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.3rem 0.75rem;
+    gap: var(--unics-space-1);
+    padding: var(--unics-space-1) var(--unics-space-3);
     background: var(--unics-primary);
     color: #fff;
     border-radius: var(--unics-radius-pill);
@@ -105,7 +105,7 @@
     right: 1.5rem;
     z-index: 1090;
     max-width: 360px;
-    padding: 1rem 1.25rem;
+    padding: var(--unics-space-4) var(--unics-space-5);
     background: var(--unics-surface);
     border-left: 4px solid var(--unics-primary);
     border-radius: var(--unics-radius);
@@ -125,17 +125,124 @@
 }
 
 // -----------------------------------------------------------------------------
+// Welcome-блок дашборда («Добро пожаловать, …»).
+// Не делаем его залитым primary-цветом, чтобы не конкурировать с оранжевой
+// шапкой #page-header сверху. Используем нейтральную карточку с левым
+// акцентом — связь с брендом через полосу, а не через фон.
+// -----------------------------------------------------------------------------
+.unics-welcome {
+    margin: var(--unics-space-5) 0;
+    padding: var(--unics-space-5) var(--unics-space-6);
+    background: var(--unics-surface);
+    border-left: 4px solid var(--unics-primary);
+    border-radius: var(--unics-radius);
+    box-shadow: var(--unics-shadow-sm);
+
+    h2 {
+        margin: 0;
+        color: var(--unics-text);
+        line-height: 1.3;
+    }
+
+    .sub {
+        margin-top: var(--unics-space-1);
+        color: var(--unics-text-muted);
+        font-size: 1rem;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Stat-карточка — наследует .card, но крупное центрированное значение.
+// -----------------------------------------------------------------------------
+.unics-stat-card {
+    text-align: center;
+    height: 100%;
+
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        color: var(--unics-primary-text);   // 4.6:1 на белом
+    }
+
+    .stat-label {
+        color: var(--unics-text-muted);
+        font-size: 0.9375rem;
+    }
+
+    &.unics-points-card {
+        background: linear-gradient(135deg, #FFF4F0, #FFFFFF);
+        border-left: 4px solid var(--unics-primary);
+
+        .stat-value {
+            color: var(--unics-primary-deep);  // 6.0:1 на светло-оранжевом
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Заголовки секций дашборда («Быстрые действия», «Последние УМК», …).
+// Чуть мельче h2, c левым акцентом — отличаются от страничного <h1>.
+// -----------------------------------------------------------------------------
+.unics-section-title {
+    margin: var(--unics-space-6) 0 var(--unics-space-4);
+    font-size: 1.375rem;
+    font-weight: 600;
+    color: var(--unics-text);
+    padding-left: var(--unics-space-3);
+    border-left: 4px solid var(--unics-primary);
+    line-height: 1.3;
+}
+
+// -----------------------------------------------------------------------------
+// Сетка быстрых действий — переопределяем gap (bootstrap gap-2 = 0.5rem мало).
+// -----------------------------------------------------------------------------
+.unics-action-grid {
+    gap: var(--unics-space-3) !important;   // bites bootstrap gap-2
+    margin-bottom: var(--unics-space-5);
+}
+
+// -----------------------------------------------------------------------------
+// Ряд кнопок (users.php — «Создать пользователя | Привязки | Организации»).
+// Без gap-класса от Bootstrap кнопки прилипают друг к другу.
+// -----------------------------------------------------------------------------
+.unics-btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--unics-space-3);
+    margin-bottom: var(--unics-space-4);
+}
+
+// -----------------------------------------------------------------------------
+// Метка уровня сложности — цветной чип, согласован с subject-color из
+// .unics-metric--*. 1-Базовый = синий, 2-Стандартный = оранжевый,
+// 3-Продвинутый = фиолетовый. Контраст ≥ 4.5:1 на светлом фоне.
+// -----------------------------------------------------------------------------
+.unics-lvl {
+    display: inline-block;
+    padding: var(--unics-space-1) var(--unics-space-2);
+    border-radius: var(--unics-radius-pill);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.2;
+
+    &-1 { background: #E3ECFA; color: #1F4D9B; }   // базовый — спокойный синий
+    &-2 { background: #FCE3D9; color: #A93D24; }   // стандартный — наш бренд
+    &-3 { background: #E9DEF2; color: #5E2D88; }   // продвинутый — фиолетовый
+}
+
+// -----------------------------------------------------------------------------
 // Карточка значка (страница «Мои достижения»).
 // Полученные — цветные, не полученные — desaturated с подсказкой.
 // -----------------------------------------------------------------------------
 .unics-achievement {
     text-align: center;
-    padding: 1rem;
+    padding: var(--unics-space-4);
 
     &__icon {
         width: 72px;
         height: 72px;
-        margin: 0 auto 0.5rem;
+        margin: 0 auto var(--unics-space-2);
         display: block;
     }
 

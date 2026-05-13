@@ -29,7 +29,7 @@ h3, .h3 { font-size: 1.375rem; }  // 24.75px
 // Параграфы — больше воздуха для детей с трудностями чтения (plan §4.4).
 // -----------------------------------------------------------------------------
 p {
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--unics-space-3);
 }
 
 // Контейнер «удобного для чтения» текста. Применяется на длинных страницах
@@ -128,7 +128,7 @@ a {
     left: -9999px;
     top: 1rem;
     z-index: 1080;
-    padding: 0.5rem 1rem;
+    padding: var(--unics-space-2) var(--unics-space-4);
     background: var(--unics-dark);
     color: #fff;
     border-radius: var(--unics-radius);

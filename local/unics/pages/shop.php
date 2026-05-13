@@ -87,7 +87,7 @@ if ($buy_error) {
 // Баланс
 echo '<div class="card mb-4" style="border-left: 4px solid #f0a500;">';
 echo '<div class="card-body d-flex align-items-center">';
-echo '<div style="font-size:3rem;line-height:1;margin-right:20px;">🪙</div>';
+echo '<div style="font-size:3rem;line-height:1;margin-right:var(--unics-space-5);">🪙</div>';
 echo '<div>';
 echo '<div style="font-size:2rem;font-weight:700;color:#f0a500;">' . number_format($balance) . '</div>';
 echo '<div class="text-muted">баллов на балансе</div>';

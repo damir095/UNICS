@@ -22,6 +22,34 @@
     }
 }
 
+// Breadcrumb — тёмный текст по умолчанию.
+// --unics-dark (#292F3B) даёт ~9.7:1 на оранжевом #F26545 и ~13:1 на белом —
+// универсально читается без знания фактического фон-класса родителя.
+// Раньше пытались красить ссылки белым через `.bg-primary` — но контейнер
+// breadcrumb'а в Moodle Boost 5 НЕ `.bg-primary`, селектор не цеплялся.
+.breadcrumb-item,
+.breadcrumb-item.active,
+.breadcrumb-item a {
+    color: var(--unics-dark);
+}
+.breadcrumb-item a:hover,
+.breadcrumb-item a:focus {
+    color: var(--unics-primary-deep);
+}
 .breadcrumb-item + .breadcrumb-item::before {
-    color: var(--unics-primary);
+    color: var(--unics-dark);
+    opacity: 0.55;
+}
+
+// Внутри тёмного navbar (если breadcrumb там) — белый.
+.navbar {
+    .breadcrumb-item,
+    .breadcrumb-item.active,
+    .breadcrumb-item a {
+        color: #fff;
+    }
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: rgba(255, 255, 255, .7);
+        opacity: 1;
+    }
 }

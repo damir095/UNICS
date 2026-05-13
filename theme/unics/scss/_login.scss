@@ -11,13 +11,13 @@
     .loginbox {
         border-radius: var(--unics-radius-lg);
         box-shadow: var(--unics-shadow-md);
-        padding: 2rem;
+        padding: var(--unics-space-6);
         background: var(--unics-surface);
     }
 
     .login-form-username,
     .login-form-password {
-        margin-bottom: 1rem;
+        margin-bottom: var(--unics-space-4);
     }
 
     .login-form-submit .btn {
