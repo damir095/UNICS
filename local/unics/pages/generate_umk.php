@@ -107,7 +107,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         ? \core\output\notification::NOTIFY_SUCCESS
         : \core\output\notification::NOTIFY_WARNING;
 
-    redirect(new moodle_url('/local/unics/pages/umk_status.php'), $msg, null, $type);
+    // Педагог не имеет доступа к umk_status.php (требует local/unics:manage) — редиректим в «Мои учащиеся».
+    $after_url = $is_admin
+        ? new moodle_url('/local/unics/pages/umk_status.php')
+        : new moodle_url('/local/unics/pages/my_students.php');
+    redirect($after_url, $msg, null, $type);
 }
 
 // ----------------------------------------------------------------

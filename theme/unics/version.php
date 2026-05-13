@@ -9,9 +9,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'theme_unics';
-$plugin->version   = 2026051200;
+$plugin->version   = 2026051401;
 $plugin->requires  = 2025041400; // Moodle 5.0.
-$plugin->release   = '0.6.0';
+$plugin->release   = '0.7.0';
 $plugin->maturity  = MATURITY_ALPHA;
 
 $plugin->dependencies = [

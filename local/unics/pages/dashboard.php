@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
 global $USER, $DB;
@@ -7,6 +8,7 @@ global $USER, $DB;
 $ctx        = context_system::instance();
 $is_admin   = has_capability('local/unics:manage',       $ctx);
 $is_teacher = has_capability('local/unics:viewstudents', $ctx);
+$is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
 
 $PAGE->set_context($ctx);
 $PAGE->set_url(new moodle_url('/local/unics/pages/dashboard.php'));
@@ -110,6 +112,44 @@ if ($is_admin) {
 // ----------------------------------------------------------------
 // ПЕДАГОГ
 // ----------------------------------------------------------------
+} elseif ($is_methodist) {
+
+    // --- Методист ---
+    $fio_methodist = trim($USER->lastname . ' ' . $USER->firstname);
+    echo '<div class="unics-welcome mb-4">';
+    echo '<h2>Здравствуйте, ' . s($fio_methodist) . '</h2>';
+    echo '<div class="sub">Портал методиста УНИКС</div>';
+    echo '</div>';
+
+    $total_students = $DB->count_records('unics_students');
+    $umk_active     = $DB->count_records_sql(
+        "SELECT COUNT(*) FROM {unics_ai_queue} WHERE status IN (1, 2)"
+    );
+    $umk_ready      = $DB->count_records('unics_umk', ['status' => 3]);
+
+    echo '<div class="row mb-4">';
+    echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
+    echo '<div class="stat-value">' . $total_students . '</div>';
+    echo '<div class="stat-label mt-1">Учащихся в системе</div>';
+    echo '</div></div>';
+    echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
+    echo '<div class="stat-value">' . $umk_active . '</div>';
+    echo '<div class="stat-label mt-1">УМК в очереди</div>';
+    echo '</div></div>';
+    echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
+    echo '<div class="stat-value">' . $umk_ready . '</div>';
+    echo '<div class="stat-label mt-1">УМК готово</div>';
+    echo '</div></div>';
+    echo '</div>';
+
+    echo '<h2 class="unics-section-title">Быстрые действия</h2>';
+    echo '<div class="unics-action-grid mb-4 d-flex flex-wrap gap-2">';
+    echo html_writer::link(new moodle_url('/local/unics/pages/generate_umk.php'),
+        'Сгенерировать УМК', ['class' => 'btn btn-success']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
+        'Все учащиеся', ['class' => 'btn btn-outline-primary']);
+    echo '</div>';
+
 } elseif ($is_teacher) {
 
     $teacher_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
@@ -210,8 +250,8 @@ if ($is_admin) {
         'Мои учащиеся', ['class' => 'btn btn-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/generate_umk.php'),
         'Генерация УМК', ['class' => 'btn btn-success']);
-    echo html_writer::link(new moodle_url('/local/unics/pages/umk_status.php'),
-        'История УМК', ['class' => 'btn btn-outline-secondary']);
+    // «История УМК» (umk_status.php) требует local/unics:manage — педагогу не показываем,
+    // иначе клик ведёт на accessdenied. Своей истории УМК у педагога пока нет (T-8).
     echo '</div>';
 
 // ----------------------------------------------------------------

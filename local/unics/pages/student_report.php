@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
 global $USER, $DB;
@@ -25,6 +26,9 @@ if ($is_admin) {
             'teacher_id' => $teacher_rec->id,
             'student_id' => $student_id,
         ]);
+    } else {
+        // Методист (Cross-1): viewstudents без unics_teachers, видит всех учащихся.
+        $access = local_unics_is_methodist();
     }
 }
 if (!$access) {
@@ -301,8 +305,9 @@ if (empty($enrolled_courses)) {
     echo '</tbody></table>';
 }
 
-// История УМК — скрыта для учащегося при просмотре своего профиля
-if (!$is_own_view) {
+// История УМК — служебная информация педагогики (статусы очереди генерации).
+// Не показываем ни ученику (своя), ни родителю — путает «УМК с ошибкой» с оценкой ребёнка.
+if ($is_admin || $is_teacher) {
     echo '<h2 class="unics-section-title mt-4">История генерации УМК (' . count($umk_list) . ')</h2>';
     if (empty($umk_list)) {
         echo '<p class="text-muted">УМК ещё не генерировались.</p>';

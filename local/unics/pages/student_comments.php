@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
 global $USER, $DB;
@@ -18,13 +19,17 @@ if (!$is_admin && !$is_teacher) {
 $student  = $DB->get_record('unics_students', ['id' => $student_id], '*', MUST_EXIST);
 $mdl_user = $DB->get_record('user', ['id' => $student->mdl_user_id, 'deleted' => 0], '*', MUST_EXIST);
 
-// Педагог может комментировать только своих учащихся
+// Педагог может комментировать только своих учащихся; методист — всех.
 if (!$is_admin) {
     $teacher_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
-    if (!$teacher_rec || !$DB->record_exists('unics_teacher_student', [
-        'teacher_id' => $teacher_rec->id,
-        'student_id' => $student_id,
-    ])) {
+    if ($teacher_rec) {
+        if (!$DB->record_exists('unics_teacher_student', [
+            'teacher_id' => $teacher_rec->id,
+            'student_id' => $student_id,
+        ])) {
+            throw new moodle_exception('accessdenied', 'error');
+        }
+    } else if (!local_unics_is_methodist()) {
         throw new moodle_exception('accessdenied', 'error');
     }
 }

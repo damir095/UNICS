@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
 global $USER, $DB;
@@ -24,6 +25,9 @@ if (!$access && $is_teacher) {
             'teacher_id' => $teacher_rec->id,
             'student_id' => $student_id,
         ]);
+    } else {
+        // Методист (Cross-1): видит всех учащихся.
+        $access = local_unics_is_methodist();
     }
 }
 if (!$access && $USER->id === (int)$student->mdl_user_id) {

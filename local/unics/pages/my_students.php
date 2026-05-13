@@ -24,9 +24,10 @@ $PAGE->set_pagelayout('standard');
 
 // Определяем режим доступа
 $teacher_record = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+$is_methodist = $is_teacher && !$is_admin && !$teacher_record && local_unics_is_methodist();
 
-if ($is_admin && !$teacher_record) {
-    // Администратор без профиля педагога — показываем всех учащихся
+if (($is_admin && !$teacher_record) || $is_methodist) {
+    // Администратор без профиля педагога ИЛИ методист — показываем всех учащихся
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
                 s.class_number, s.category, s.difficulty_level,
@@ -38,7 +39,7 @@ if ($is_admin && !$teacher_record) {
          WHERE u.deleted = 0
          ORDER BY u.lastname, u.firstname"
     );
-    $mode = 'admin';
+    $mode = $is_methodist ? 'methodist' : 'admin';
 } elseif ($teacher_record) {
     // Педагог — только привязанные учащиеся
     $students = $DB->get_records_sql(
@@ -77,6 +78,8 @@ if ($mode === 'noprofile') {
 
 if ($mode === 'admin') {
     echo $OUTPUT->notification('Вы вошли как администратор. Отображаются все учащиеся системы.', 'info');
+} elseif ($mode === 'methodist') {
+    echo $OUTPUT->notification('Вы вошли как методист. Отображаются все учащиеся системы — выберите, кому сгенерировать УМК.', 'info');
 }
 
 if ($is_admin) {

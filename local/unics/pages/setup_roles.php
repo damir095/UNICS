@@ -428,6 +428,9 @@ $role_matrix = [
             $caps_view_participants,
             $caps_messaging,
             [
+                // УНИКС: методист видит учащихся (для генерации УМК), но не управляет
+                // пользователями/орг (это manage). Cross-1, см. [[ux-review-by-role]].
+                'local/unics:viewstudents',
                 'moodle/course:create',
                 'moodle/course:delete',
                 'moodle/course:viewhiddenactivities',

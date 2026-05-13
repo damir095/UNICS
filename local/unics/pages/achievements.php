@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/achievement_manager.php');
 
 require_login();
@@ -22,6 +23,9 @@ if (!$access && $is_teacher) {
         $access = $DB->record_exists('unics_teacher_student', [
             'teacher_id' => $teacher_rec->id, 'student_id' => $student_id,
         ]);
+    } else {
+        // Методист (Cross-1): видит всех учащихся.
+        $access = local_unics_is_methodist();
     }
 }
 if (!$access) {

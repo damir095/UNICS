@@ -16,6 +16,64 @@ function local_unics_require_not_student(): void {
 }
 
 /**
+ * Возвращает true, если пользователь — методист.
+ * Методист = Moodle-роль с shortname='methodist' и нет записи в unics_teachers.
+ * Capability local/unics:viewstudents проверяется отдельно вызывающим кодом.
+ *
+ * @param int|null $userid id пользователя; null = текущий $USER->id
+ * @return bool
+ */
+function local_unics_is_methodist(?int $userid = null): bool {
+    global $DB, $USER;
+    if ($userid === null) {
+        $userid = (int)$USER->id;
+    }
+    if (!$userid) {
+        return false;
+    }
+    if ($DB->record_exists('unics_teachers', ['mdl_user_id' => $userid])) {
+        return false;
+    }
+    return $DB->record_exists_sql(
+        "SELECT 1 FROM {role_assignments} ra
+           JOIN {role} r ON r.id = ra.roleid
+          WHERE ra.userid = :uid AND r.shortname = 'methodist'",
+        ['uid' => $userid]
+    );
+}
+
+/**
+ * Возвращает роль пользователя в УНИКС: student | parent | admin | methodist | teacher | guest.
+ * Приоритет совпадает с порядком веток в local_unics_extend_navigation.
+ *
+ * @param int|null $userid id пользователя; null = текущий $USER->id
+ * @return string
+ */
+function local_unics_get_role_for_user(?int $userid = null): string {
+    global $DB, $USER;
+    if ($userid === null) {
+        $userid = (int)$USER->id;
+    }
+    if (!$userid || isguestuser($userid)) {
+        return 'guest';
+    }
+    if ($DB->record_exists('unics_students', ['mdl_user_id' => $userid])) {
+        return 'student';
+    }
+    if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $userid])) {
+        return 'parent';
+    }
+    $ctx = context_system::instance();
+    if (has_capability('local/unics:manage', $ctx, $userid)) {
+        return 'admin';
+    }
+    if (has_capability('local/unics:viewstudents', $ctx, $userid)) {
+        return local_unics_is_methodist($userid) ? 'methodist' : 'teacher';
+    }
+    return 'guest';
+}
+
+/**
  * Убирает пункты редактирования профиля из настроек навигации для учащихся.
  * Также редиректит учащегося со страниц редактирования профиля Moodle.
  */
@@ -123,8 +181,38 @@ function local_unics_extend_navigation(global_navigation $nav) {
         return;
     }
 
-    // Педагог должен быть реальным педагогом УНИКС, а не просто иметь роль Moodle.
-    if ($is_teacher && !$is_admin && !$DB->record_exists('unics_teachers', ['mdl_user_id' => $USER->id])) {
+    $is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
+
+    if ($is_teacher && !$is_admin && !$is_methodist
+        && !$DB->record_exists('unics_teachers', ['mdl_user_id' => $USER->id])) {
+        // viewstudents есть, но это не методист и не реальный педагог УНИКС.
+        return;
+    }
+
+    // Меню методиста — короткое, без «Мои учащиеся» (нет своих, но видит всех).
+    if ($is_methodist) {
+        $branch = $nav->add(
+            'УНИКС — Портал методиста',
+            new moodle_url('/local/unics/pages/dashboard.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_root',
+            new pix_icon('i/cohort', '')
+        );
+        $branch->add(
+            'Все учащиеся',
+            new moodle_url('/local/unics/pages/my_students.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_all_students'
+        );
+        $branch->add(
+            'Генерация УМК (ИИ)',
+            new moodle_url('/local/unics/pages/generate_umk.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_umk'
+        );
         return;
     }
 
