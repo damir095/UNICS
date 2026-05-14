@@ -16,7 +16,20 @@ if (!$is_admin && !$is_teacher) {
     require_capability('local/unics:viewstudents', context_system::instance());
 }
 
+$is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
+
+// teacher_record используется для фильтрации по unics_teacher_student.
+// У методиста запись в unics_teachers тоже есть (там org-привязка),
+// но он НЕ должен фильтроваться через teacher_student — он видит всех учащихся
+// своей организации.
 $teacher_record = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+if ($is_methodist) {
+    $methodist_org_id = ($teacher_record && $teacher_record->organization_id)
+        ? (int)$teacher_record->organization_id : 0;
+    $teacher_record   = false; // отключаем teacher_student-фильтр для методиста
+} else {
+    $methodist_org_id = 0;
+}
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/generate_umk.php'));
@@ -163,6 +176,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 $filter_org   = optional_param('filter_org',   0, PARAM_INT);
 $filter_class = optional_param('filter_class', 0, PARAM_INT);
 
+// Методист — фильтр организации форсирован на его орг.
+if ($is_methodist && $methodist_org_id) {
+    $filter_org = $methodist_org_id;
+}
+
 // Меню организаций
 $orgs_menu = [0 => '— все организации —'];
 foreach ($DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name') as $o) {
@@ -263,9 +281,14 @@ echo html_writer::start_tag('form', ['method' => 'get', 'action' => $filter_url,
     'class' => 'form-inline mb-4 p-3 bg-light border rounded']);
 echo html_writer::tag('strong', 'Фильтр учащихся:', ['class' => 'mr-3']);
 
-echo html_writer::tag('label', 'Организация:', ['class' => 'mr-1']);
-echo html_writer::select($orgs_menu, 'filter_org', $filter_org, false,
-    ['class' => 'form-control form-control-sm mr-3']);
+if ($is_methodist) {
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_org',
+        'value' => (int)$filter_org]);
+} else {
+    echo html_writer::tag('label', 'Организация:', ['class' => 'mr-1']);
+    echo html_writer::select($orgs_menu, 'filter_org', $filter_org, false,
+        ['class' => 'form-control form-control-sm mr-3']);
+}
 
 echo html_writer::tag('label', 'Класс:', ['class' => 'mr-1']);
 echo html_writer::select($classes_menu, 'filter_class', $filter_class, false,
@@ -463,7 +486,23 @@ echo html_writer::tag('label',
 );
 
 if (empty($students)) {
-    echo html_writer::tag('p', 'Нет учащихся по выбранному фильтру.', ['class' => 'text-muted']);
+    $hint = 'Нет учащихся по выбранному фильтру.';
+    if ($teacher_record) {
+        // Реальный педагог — список зависит от unics_teacher_student.
+        $bound_count = $DB->count_records('unics_teacher_student',
+            ['teacher_id' => $teacher_record->id]);
+        if ($bound_count === 0) {
+            $hint .= ' У вас пока нет привязанных учащихся — обратитесь к методисту/'
+                . 'администратору, чтобы они выполнили привязку «педагог↔учащийся» '
+                . 'на странице «Привязки».';
+        } else {
+            $hint .= ' Привязанных учащихся: ' . $bound_count
+                . '. Если они не показаны — снимите фильтр класса/организации.';
+        }
+    } elseif ($is_methodist && empty($methodist_org_id)) {
+        $hint .= ' Ваш профиль методиста не привязан к организации — обратитесь к администратору.';
+    }
+    echo html_writer::tag('p', $hint, ['class' => 'text-muted']);
 } else {
     $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
     $by_level     = [];

@@ -11,6 +11,9 @@ if (!has_capability('local/unics:manage', $ctx)
     require_capability('local/unics:viewstudents', $ctx); // throws с понятным сообщением
 }
 
+$is_admin_user = has_capability('local/unics:manage', $ctx);
+$is_methodist  = !$is_admin_user && local_unics_is_methodist();
+
 global $DB;
 
 $PAGE->set_context(context_system::instance());
@@ -56,6 +59,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 $num_topics > 0 ? $num_topics : null,
                 $topic_names
             );
+
+            // Автоматически записать создателя курса как editing teacher,
+            // чтобы методист сразу мог редактировать только что созданный курс.
+            // Админам это не нужно (у них site-wide capability), но запись
+            // не вредит и упрощает логику.
+            require_once($CFG->dirroot . '/enrol/manual/lib.php');
+            $manual_plugin   = enrol_get_plugin('manual');
+            $enrol_instance  = $DB->get_record('enrol',
+                ['courseid' => $created_course->id, 'enrol' => 'manual']);
+            if (!$enrol_instance && $manual_plugin) {
+                $manual_plugin->add_default_instance(
+                    $DB->get_record('course', ['id' => $created_course->id])
+                );
+                $enrol_instance = $DB->get_record('enrol',
+                    ['courseid' => $created_course->id, 'enrol' => 'manual']);
+            }
+            $editingteacher_roleid = (int)$DB->get_field('role', 'id',
+                ['shortname' => 'editingteacher']);
+            if ($enrol_instance && $manual_plugin && $editingteacher_roleid) {
+                $manual_plugin->enrol_user($enrol_instance, (int)$USER->id,
+                    $editingteacher_roleid);
+            }
         } catch (\Throwable $e) {
             $error_msg = 'Ошибка создания курса: ' . $e->getMessage();
         }
@@ -102,8 +127,10 @@ echo $OUTPUT->header();
 echo $OUTPUT->heading('Создание курса по шаблону');
 
 echo html_writer::link(
-    new moodle_url('/local/unics/pages/users.php'),
-    'Назад к пользователям',
+    $is_methodist
+        ? new moodle_url('/local/unics/pages/dashboard.php')
+        : new moodle_url('/local/unics/pages/users.php'),
+    $is_methodist ? 'На дашборд' : 'Назад к пользователям',
     ['class' => 'btn btn-outline-secondary btn-sm mb-3']
 );
 

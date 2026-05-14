@@ -1,11 +1,29 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/user_manager.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_not_student();
+
+$sys_ctx       = context_system::instance();
+$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
+$is_methodist  = !$is_admin_user
+    && has_capability('local/unics:viewstudents', $sys_ctx)
+    && local_unics_is_methodist();
+
+if (!$is_admin_user && !$is_methodist) {
+    require_capability('local/unics:manage', $sys_ctx);
+}
 
 global $USER, $DB;
+
+$methodist_org_id = 0;
+if ($is_methodist) {
+    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
+        ? (int)$methodist_rec->organization_id : 0;
+}
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/assign.php'));
@@ -63,6 +81,11 @@ if ($action === 'remove_ps' && confirm_sesskey()) {
 $filter_org   = optional_param('filter_org',   0, PARAM_INT);
 $filter_class = optional_param('filter_class', 0, PARAM_INT);
 
+// Методист видит только свою организацию.
+if ($is_methodist && $methodist_org_id) {
+    $filter_org = $methodist_org_id;
+}
+
 // Списки для фильтров
 $orgs_menu = [0 => '— все организации —'];
 foreach ($DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name') as $o) {
@@ -101,15 +124,17 @@ $students = $DB->get_records_sql(
 );
 
 // ----------------------------------------------------------------
-// Педагоги и родители (всегда все)
+// Педагоги и родители. Для методиста — только своей организации.
 // ----------------------------------------------------------------
-$teachers     = unics_user_manager::get_teachers(0);
+$scope_org_id = ($is_methodist && $methodist_org_id) ? $methodist_org_id : 0;
+
+$teachers     = unics_user_manager::get_teachers($scope_org_id);
 $teachers_menu = ['' => get_string('select_teacher', 'local_unics')];
 foreach ($teachers as $t) {
     $teachers_menu[$t->teacher_id] = "{$t->lastname} {$t->firstname}";
 }
 
-$parents_raw  = unics_user_manager::get_users(0, 8);
+$parents_raw  = unics_user_manager::get_users($scope_org_id, 8);
 $parents_menu = ['' => get_string('select_parent', 'local_unics')];
 foreach ($parents_raw as $p) {
     $parents_menu[$p->id] = "{$p->lastname} {$p->firstname}";
@@ -164,11 +189,12 @@ foreach ($ts_map as $row) {
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('assignments', 'local_unics'));
 
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/users.php'),
-    'Назад к пользователям',
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3']
-);
+$back_url   = $is_methodist
+    ? new moodle_url('/local/unics/pages/dashboard.php')
+    : new moodle_url('/local/unics/pages/users.php');
+$back_label = $is_methodist ? 'На дашборд' : 'Назад к пользователям';
+echo html_writer::link($back_url, $back_label,
+    ['class' => 'btn btn-outline-secondary btn-sm mb-3']);
 
 // ================================================================
 // Блок: Педагог → Учащийся
@@ -181,9 +207,14 @@ echo html_writer::start_tag('form', ['method' => 'get', 'action' => $filter_url,
     'class' => 'form-inline mb-3 p-3 bg-light border rounded']);
 echo html_writer::tag('strong', 'Фильтр учащихся:', ['class' => 'mr-3']);
 
-echo html_writer::tag('label', 'Организация:', ['class' => 'mr-1']);
-echo html_writer::select($orgs_menu, 'filter_org', $filter_org, false,
-    ['class' => 'form-control form-control-sm mr-3']);
+if ($is_methodist) {
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_org',
+        'value' => (int)$filter_org]);
+} else {
+    echo html_writer::tag('label', 'Организация:', ['class' => 'mr-1']);
+    echo html_writer::select($orgs_menu, 'filter_org', $filter_org, false,
+        ['class' => 'form-control form-control-sm mr-3']);
+}
 
 echo html_writer::tag('label', 'Класс:', ['class' => 'mr-1']);
 echo html_writer::select($classes_menu, 'filter_class', $filter_class, false,

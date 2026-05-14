@@ -1,11 +1,30 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once($CFG->dirroot . '/group/lib.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_not_student();
 
-global $DB;
+$sys_ctx       = context_system::instance();
+$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
+$is_methodist  = !$is_admin_user
+    && has_capability('local/unics:viewstudents', $sys_ctx)
+    && local_unics_is_methodist();
+
+if (!$is_admin_user && !$is_methodist) {
+    require_capability('local/unics:manage', $sys_ctx); // throw с понятным сообщением
+}
+
+global $DB, $USER;
+
+// Организация методиста — для последующего org-scoping списков.
+$methodist_org_id = 0;
+if ($is_methodist) {
+    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
+        ? (int)$methodist_rec->organization_id : 0;
+}
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_students.php'));
@@ -100,6 +119,12 @@ $filter_district = optional_param('district_id', 0, PARAM_INT);
 $filter_org      = optional_param('org_id',      0, PARAM_INT);
 $filter_class    = optional_param('class_num',   0, PARAM_INT);
 
+// Методист видит только свою организацию: принудительно фиксируем фильтр.
+if ($is_methodist && $methodist_org_id) {
+    $filter_org      = $methodist_org_id;
+    $filter_district = 0;
+}
+
 // Курсы
 $courses_raw  = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
 $courses_menu = [0 => '— выберите курс —'];
@@ -192,11 +217,12 @@ $categories = [1 => 'ОВЗ', 2 => 'Семейное', 3 => 'Лечение', 4 
 echo $OUTPUT->header();
 echo $OUTPUT->heading('Запись учащихся на курс');
 
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/users.php'),
-    'Назад к пользователям',
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']
-);
+$back_url   = $is_methodist
+    ? new moodle_url('/local/unics/pages/dashboard.php')
+    : new moodle_url('/local/unics/pages/users.php');
+$back_label = $is_methodist ? 'На дашборд' : 'Назад к пользователям';
+echo html_writer::link($back_url, $back_label,
+    ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']);
 echo html_writer::link(
     new moodle_url('/local/unics/pages/enrol_teachers.php'),
     'Запись педагогов',
@@ -217,19 +243,26 @@ echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
     ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()']);
 echo html_writer::end_tag('div');
 
-// Район
-echo html_writer::start_tag('div', ['class' => 'col-auto']);
-echo html_writer::tag('label', 'Район', ['class' => 'd-block mb-1']);
-echo html_writer::select($districts_menu, 'district_id', $filter_district, false,
-    ['class' => 'form-control', 'style' => 'min-width:170px']);
-echo html_writer::end_tag('div');
+if ($is_methodist) {
+    // Методист: район/организация фиксированы — отдаём как hidden,
+    // чтобы фильтр сохранялся при submit, но не показывался селектором.
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'org_id',
+        'value' => (int)$filter_org]);
+} else {
+    // Район
+    echo html_writer::start_tag('div', ['class' => 'col-auto']);
+    echo html_writer::tag('label', 'Район', ['class' => 'd-block mb-1']);
+    echo html_writer::select($districts_menu, 'district_id', $filter_district, false,
+        ['class' => 'form-control', 'style' => 'min-width:170px']);
+    echo html_writer::end_tag('div');
 
-// Организация
-echo html_writer::start_tag('div', ['class' => 'col-auto']);
-echo html_writer::tag('label', 'Организация', ['class' => 'd-block mb-1']);
-echo html_writer::select($orgs_menu, 'org_id', $filter_org, false,
-    ['class' => 'form-control', 'style' => 'min-width:170px']);
-echo html_writer::end_tag('div');
+    // Организация
+    echo html_writer::start_tag('div', ['class' => 'col-auto']);
+    echo html_writer::tag('label', 'Организация', ['class' => 'd-block mb-1']);
+    echo html_writer::select($orgs_menu, 'org_id', $filter_org, false,
+        ['class' => 'form-control', 'style' => 'min-width:170px']);
+    echo html_writer::end_tag('div');
+}
 
 // Класс
 echo html_writer::start_tag('div', ['class' => 'col-auto']);

@@ -15,17 +15,25 @@ $is_teacher = has_capability('local/unics:viewstudents', $ctx);
 $student  = $DB->get_record('unics_students', ['id' => $student_id], '*', MUST_EXIST);
 $mdl_user = $DB->get_record('user', ['id' => $student->mdl_user_id, 'deleted' => 0], '*', MUST_EXIST);
 
-// Контроль доступа
+// Контроль доступа.
+// Методист проверяется отдельно: у него есть запись в unics_teachers
+// (там org-привязка), но он смотрит на учащихся своей организации,
+// а не через unics_teacher_student.
+$is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
 $access = $is_admin;
+if (!$access && $is_methodist) {
+    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
+        ? (int)$methodist_rec->organization_id : 0;
+    $access = $methodist_org_id > 0
+        && (int)$student->organization_id === $methodist_org_id;
+}
 if (!$access && $is_teacher) {
     $teacher_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
     if ($teacher_rec) {
         $access = $DB->record_exists('unics_teacher_student', [
             'teacher_id' => $teacher_rec->id, 'student_id' => $student_id,
         ]);
-    } else {
-        // Методист (Cross-1): видит всех учащихся.
-        $access = local_unics_is_methodist();
     }
 }
 if (!$access) {

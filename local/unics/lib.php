@@ -235,11 +235,32 @@ function local_unics_extend_navigation(global_navigation $nav) {
             'local_unics_all_students'
         );
         $branch->add(
+            'Привязки',
+            new moodle_url('/local/unics/pages/assign.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_assign'
+        );
+        $branch->add(
             'Шаблоны курсов',
             new moodle_url('/local/unics/pages/course_templates.php'),
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_course_templates'
+        );
+        $branch->add(
+            'Запись учащихся на курс',
+            new moodle_url('/local/unics/pages/enrol_students.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_enrol_students'
+        );
+        $branch->add(
+            'Запись педагогов на курс',
+            new moodle_url('/local/unics/pages/enrol_teachers.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_enrol_teachers'
         );
         $branch->add(
             'Генерация УМК (ИИ)',
@@ -254,6 +275,13 @@ function local_unics_extend_navigation(global_navigation $nav) {
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_umk_status_methodist'
+        );
+        $branch->add(
+            'Отчёт по организации',
+            new moodle_url('/local/unics/pages/org_report.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_org_report'
         );
         return;
     }

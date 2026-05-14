@@ -1,11 +1,29 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once($CFG->dirroot . '/group/lib.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_not_student();
 
-global $DB;
+$sys_ctx       = context_system::instance();
+$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
+$is_methodist  = !$is_admin_user
+    && has_capability('local/unics:viewstudents', $sys_ctx)
+    && local_unics_is_methodist();
+
+if (!$is_admin_user && !$is_methodist) {
+    require_capability('local/unics:manage', $sys_ctx);
+}
+
+global $DB, $USER;
+
+$methodist_org_id = 0;
+if ($is_methodist) {
+    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
+        ? (int)$methodist_rec->organization_id : 0;
+}
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_teachers.php'));
@@ -81,7 +99,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
     // Настройка раздельных групп на курсе
     if ($separate_groups) {
-        $DB->set_field('course', 'groupmode', 1, ['id' => $course_id]); // 1 = Separate groups
+        $DB->set_field('course', 'groupmode',      1, ['id' => $course_id]); // 1 = Separate groups
+        $DB->set_field('course', 'groupmodeforce', 1, ['id' => $course_id]); // не даём активностям переопределять
         // Запрещаем accessallgroups для editingteacher на уровне курса
         $ctx_course = \context_course::instance($course_id);
         $et_role = $DB->get_record('role', ['shortname' => 'editingteacher'], 'id');
@@ -118,6 +137,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 // ----------------------------------------------------------------
 $selected_course = optional_param('course_id', 0, PARAM_INT);
 $filter_org      = optional_param('org_id',    0, PARAM_INT);
+
+if ($is_methodist && $methodist_org_id) {
+    $filter_org = $methodist_org_id;
+}
 
 // Курсы
 $courses_raw  = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
@@ -191,11 +214,12 @@ $unics_role_labels = [4 => 'Методист', 5 => 'Педагог', 6 => 'Ть
 echo $OUTPUT->header();
 echo $OUTPUT->heading('Запись педагогов на курс');
 
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/users.php'),
-    'Назад к пользователям',
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']
-);
+$back_url   = $is_methodist
+    ? new moodle_url('/local/unics/pages/dashboard.php')
+    : new moodle_url('/local/unics/pages/users.php');
+$back_label = $is_methodist ? 'На дашборд' : 'Назад к пользователям';
+echo html_writer::link($back_url, $back_label,
+    ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']);
 echo html_writer::link(
     new moodle_url('/local/unics/pages/enrol_students.php'),
     'Запись учащихся',
@@ -215,12 +239,17 @@ echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
     ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()']);
 echo html_writer::end_tag('div');
 
-// Организация
-echo html_writer::start_tag('div', ['class' => 'col-auto']);
-echo html_writer::tag('label', 'Организация', ['class' => 'd-block mb-1']);
-echo html_writer::select($orgs_menu, 'org_id', $filter_org, false,
-    ['class' => 'form-control', 'style' => 'min-width:200px']);
-echo html_writer::end_tag('div');
+if ($is_methodist) {
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'org_id',
+        'value' => (int)$filter_org]);
+} else {
+    // Организация
+    echo html_writer::start_tag('div', ['class' => 'col-auto']);
+    echo html_writer::tag('label', 'Организация', ['class' => 'd-block mb-1']);
+    echo html_writer::select($orgs_menu, 'org_id', $filter_org, false,
+        ['class' => 'form-control', 'style' => 'min-width:200px']);
+    echo html_writer::end_tag('div');
+}
 
 // Кнопка
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
@@ -298,11 +327,12 @@ if ($selected_course > 0) {
         html_writer::tag('label', '', ['class' => 'd-block']) .
         html_writer::tag('div',
             html_writer::empty_tag('input', [
-                'type'  => 'checkbox',
-                'name'  => 'separate_groups',
-                'id'    => 'separate_groups',
-                'value' => '1',
-                'class' => 'mr-1',
+                'type'    => 'checkbox',
+                'name'    => 'separate_groups',
+                'id'      => 'separate_groups',
+                'value'   => '1',
+                'class'   => 'mr-1',
+                'checked' => 'checked',
             ]) .
             html_writer::tag('label',
                 '<strong>Включить режим «Раздельные группы» для курса</strong>' .

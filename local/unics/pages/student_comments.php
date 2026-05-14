@@ -19,18 +19,28 @@ if (!$is_admin && !$is_teacher) {
 $student  = $DB->get_record('unics_students', ['id' => $student_id], '*', MUST_EXIST);
 $mdl_user = $DB->get_record('user', ['id' => $student->mdl_user_id, 'deleted' => 0], '*', MUST_EXIST);
 
-// Педагог может комментировать только своих учащихся; методист — всех.
+// Педагог может комментировать только своих учащихся;
+// методист — всех учащихся своей организации.
 if (!$is_admin) {
-    $teacher_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
-    if ($teacher_rec) {
-        if (!$DB->record_exists('unics_teacher_student', [
-            'teacher_id' => $teacher_rec->id,
-            'student_id' => $student_id,
-        ])) {
+    $is_methodist = local_unics_is_methodist();
+    if ($is_methodist) {
+        $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+        $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
+            ? (int)$methodist_rec->organization_id : 0;
+        if ($methodist_org_id === 0
+            || (int)$student->organization_id !== $methodist_org_id) {
             throw new moodle_exception('accessdenied', 'error');
         }
-    } else if (!local_unics_is_methodist()) {
-        throw new moodle_exception('accessdenied', 'error');
+    } else {
+        $teacher_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+        if (!$teacher_rec
+            || !$DB->record_exists('unics_teacher_student', [
+                'teacher_id' => $teacher_rec->id,
+                'student_id' => $student_id,
+            ])
+        ) {
+            throw new moodle_exception('accessdenied', 'error');
+        }
     }
 }
 

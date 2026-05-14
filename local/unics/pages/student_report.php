@@ -8,17 +8,28 @@ global $USER, $DB;
 $student_id = required_param('student_id', PARAM_INT);
 $ctx        = context_system::instance();
 
-$is_admin   = has_capability('local/unics:manage',       $ctx);
-$is_teacher = has_capability('local/unics:viewstudents', $ctx);
+$is_admin     = has_capability('local/unics:manage',       $ctx);
+$is_teacher   = has_capability('local/unics:viewstudents', $ctx);
+$is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
 
 $student  = $DB->get_record('unics_students',      ['id' => $student_id],                   '*', MUST_EXIST);
 $mdl_user = $DB->get_record('user',                ['id' => $student->mdl_user_id, 'deleted' => 0], '*', MUST_EXIST);
 $org      = $DB->get_record('unics_organizations', ['id' => $student->organization_id]);
 
-// Контроль доступа
+// Контроль доступа.
+// Порядок важен: методист проверяется ДО педагога, потому что у методиста
+// тоже есть запись в unics_teachers (там org-привязка), но он не привязан
+// к учащимся через unics_teacher_student.
 $access = false;
 if ($is_admin) {
     $access = true;
+} elseif ($is_methodist) {
+    // Методист видит учащихся своей организации.
+    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
+        ? (int)$methodist_rec->organization_id : 0;
+    $access = $methodist_org_id > 0
+        && (int)$student->organization_id === $methodist_org_id;
 } elseif ($is_teacher) {
     $teacher_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
     if ($teacher_rec) {
@@ -26,9 +37,6 @@ if ($is_admin) {
             'teacher_id' => $teacher_rec->id,
             'student_id' => $student_id,
         ]);
-    } else {
-        // Методист (Cross-1): viewstudents без unics_teachers, видит всех учащихся.
-        $access = local_unics_is_methodist();
     }
 }
 if (!$access) {

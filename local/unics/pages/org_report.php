@@ -1,12 +1,30 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/organization_manager.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
-global $DB;
+local_unics_require_not_student();
+
+$sys_ctx       = context_system::instance();
+$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
+$is_methodist  = !$is_admin_user
+    && has_capability('local/unics:viewstudents', $sys_ctx)
+    && local_unics_is_methodist();
+
+if (!$is_admin_user && !$is_methodist) {
+    require_capability('local/unics:manage', $sys_ctx);
+}
+global $DB, $USER;
 
 $org_id = optional_param('org_id', 0, PARAM_INT);
+
+// Методист: всегда видит только свою организацию — фиксируем org_id.
+if ($is_methodist) {
+    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+    $org_id = ($methodist_rec && $methodist_rec->organization_id)
+        ? (int)$methodist_rec->organization_id : 0;
+}
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/org_report.php', ['org_id' => $org_id]));
@@ -26,18 +44,20 @@ echo html_writer::link(
 );
 echo '</div>';
 
-// Селектор организации
-echo '<form method="get" class="form-inline mb-4">';
-echo '<label class="mr-2 font-weight-bold">Организация:</label>';
-echo '<select name="org_id" class="form-control mr-2" style="max-width:400px">';
-echo '<option value="0">— Выберите организацию —</option>';
-foreach ($orgs as $oid => $olabel) {
-    $sel = ($oid == $org_id) ? ' selected' : '';
-    echo '<option value="' . $oid . '"' . $sel . '>' . s($olabel) . '</option>';
+// Селектор организации — только для админа. Методист видит свою орг автоматически.
+if (!$is_methodist) {
+    echo '<form method="get" class="form-inline mb-4">';
+    echo '<label class="mr-2 font-weight-bold">Организация:</label>';
+    echo '<select name="org_id" class="form-control mr-2" style="max-width:400px">';
+    echo '<option value="0">— Выберите организацию —</option>';
+    foreach ($orgs as $oid => $olabel) {
+        $sel = ($oid == $org_id) ? ' selected' : '';
+        echo '<option value="' . $oid . '"' . $sel . '>' . s($olabel) . '</option>';
+    }
+    echo '</select>';
+    echo '<button type="submit" class="btn btn-primary">Показать</button>';
+    echo '</form>';
 }
-echo '</select>';
-echo '<button type="submit" class="btn btn-primary">Показать</button>';
-echo '</form>';
 
 if (!$org_id) {
     echo $OUTPUT->footer();

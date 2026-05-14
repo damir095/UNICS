@@ -1,8 +1,17 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_not_student();
+
+$sys_ctx       = context_system::instance();
+$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
+$is_teacher    = has_capability('local/unics:viewstudents', $sys_ctx);
+
+if (!$is_admin_user && !$is_teacher) {
+    require_capability('local/unics:viewstudents', $sys_ctx);
+}
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/umk_status.php'));

@@ -65,12 +65,17 @@ if ($is_admin) {
     echo '<h2 class="unics-section-title">Быстрые действия</h2>';
     echo '<div class="unics-action-grid mb-4 d-flex flex-wrap gap-2">';
     $actions = [
-        ['/local/unics/pages/users.php',         'btn-primary',          'Пользователи'],
-        ['/local/unics/pages/generate_umk.php',  'btn-success',          'Генерация УМК'],
-        ['/local/unics/pages/org_report.php',     'btn-outline-info',     'Отчёт по организации'],
-        ['/local/unics/pages/import_users.php',   'btn-outline-secondary','Импорт CSV'],
-        ['/local/unics/pages/organizations.php',  'btn-outline-secondary','Организации'],
-        ['/local/unics/pages/umk_status.php',     'btn-outline-secondary','История УМК'],
+        ['/local/unics/pages/users.php',            'btn-primary',          'Пользователи'],
+        ['/local/unics/pages/my_students.php',      'btn-outline-primary',  'Все учащиеся'],
+        ['/local/unics/pages/assign.php',           'btn-outline-primary',  'Привязки'],
+        ['/local/unics/pages/course_templates.php', 'btn-primary',          'Шаблоны курсов'],
+        ['/local/unics/pages/generate_umk.php',     'btn-success',          'Генерация УМК'],
+        ['/local/unics/pages/enrol_students.php',   'btn-outline-secondary','Запись учащихся на курс'],
+        ['/local/unics/pages/enrol_teachers.php',   'btn-outline-secondary','Запись педагогов на курс'],
+        ['/local/unics/pages/umk_status.php',       'btn-outline-secondary','История УМК'],
+        ['/local/unics/pages/org_report.php',       'btn-outline-info',     'Отчёт по организации'],
+        ['/local/unics/pages/organizations.php',    'btn-outline-secondary','Организации'],
+        ['/local/unics/pages/import_users.php',     'btn-outline-secondary','Импорт CSV'],
     ];
     foreach ($actions as [$url, $cls, $label]) {
         echo html_writer::link(
@@ -162,6 +167,14 @@ if ($is_admin) {
         'Сгенерировать УМК', ['class' => 'btn btn-success']);
     echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
         'Все учащиеся', ['class' => 'btn btn-outline-primary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/assign.php'),
+        'Привязки', ['class' => 'btn btn-outline-primary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/enrol_students.php'),
+        'Запись учащихся на курс', ['class' => 'btn btn-outline-secondary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/enrol_teachers.php'),
+        'Запись педагогов на курс', ['class' => 'btn btn-outline-secondary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/org_report.php'),
+        'Отчёт по организации', ['class' => 'btn btn-outline-info']);
     echo '</div>';
 
 } elseif ($is_teacher) {
