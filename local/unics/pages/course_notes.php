@@ -54,7 +54,7 @@ $PAGE->set_url(new moodle_url('/local/unics/pages/course_notes.php', [
     'student_id' => $student_id,
     'courseid'   => $courseid,
 ]));
-$PAGE->set_title('Заметки педагога — ' . $course->fullname);
+$PAGE->set_title('Заметки педагога - ' . $course->fullname);
 $PAGE->set_heading('Заметки педагога в курсе');
 $PAGE->set_pagelayout('standard');
 

@@ -6,11 +6,11 @@ defined('MOODLE_INTERNAL') || die();
 class points_manager {
 
     // Типы причин начисления/списания
-    const REASON_UMK_READY = 1;  // +20 — УМК готов
-    const REASON_BADGE     = 2;  // +50 — получен значок
-    const REASON_LEVEL_UP  = 3;  // +100 — уровень повышен
-    const REASON_QUIZ_PASS = 4;  // +10 — тест сдан
-    const REASON_PURCHASE  = 5;  // -N  — покупка в магазине
+    const REASON_UMK_READY = 1;  // +20 - УМК готов
+    const REASON_BADGE     = 2;  // +50 - получен значок
+    const REASON_LEVEL_UP  = 3;  // +100 - уровень повышен
+    const REASON_QUIZ_PASS = 4;  // +10 - тест сдан
+    const REASON_PURCHASE  = 5;  // -N  - покупка в магазине
 
     // Размер начислений
     const POINTS_UMK_READY = 20;

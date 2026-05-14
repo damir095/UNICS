@@ -185,7 +185,7 @@ echo '</div>';
 $fio = trim("{$mdl_user->lastname} {$mdl_user->firstname} " . ($mdl_user->middlename ?? ''));
 $class_str = $student->class_number
     ? $student->class_number . ($student->class_letter ? " «{$student->class_letter}»" : '') . ' класс'
-    : '—';
+    : '-';
 
 $avg_badge_class = $avg_score >= 85 ? 'success' : ($avg_score >= 50 ? 'warning' : 'danger');
 
@@ -195,13 +195,17 @@ echo '<div class="card-body">';
 echo '<div class="row">';
 echo '<div class="col-md-3"><b>Класс:</b> ' . s($class_str) . '</div>';
 if (!$is_own_view) {
-    echo '<div class="col-md-3"><b>Категория:</b> ' . s($categories[$student->category] ?? '—') . '</div>';
-    echo '<div class="col-md-3"><b>Уровень:</b> ' . s($levels[$student->difficulty_level] ?? '—') . '</div>';
+    $cat_label = \local_unics\student_helper::format_categories($student) ?: '-';
+    $ovz_label = \local_unics\student_helper::format_ovz_types($student);
+    echo '<div class="col-md-3"><b>Категория:</b> ' . s($cat_label)
+       . ($ovz_label ? ' <span class="text-muted small">(' . s($ovz_label) . ')</span>' : '')
+       . '</div>';
+    echo '<div class="col-md-3"><b>Уровень:</b> ' . s($levels[$student->difficulty_level] ?? '-') . '</div>';
 }
 echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-' . $avg_badge_class . '">' . $avg_score . '%</span></div>';
 echo '</div>';
 echo '<div class="row mt-2">';
-echo '<div class="col-md-6"><b>Организация:</b> ' . s($org->name ?? '—') . '</div>';
+echo '<div class="col-md-6"><b>Организация:</b> ' . s($org->name ?? '-') . '</div>';
 echo '<div class="col-md-6"><b>Email:</b> ' . s($mdl_user->email) . '</div>';
 echo '</div>';
 echo '</div></div>';
@@ -244,10 +248,10 @@ if (empty($quiz_grades)) {
 
         echo '<tr>';
         echo '<td>' . s($g->course_name) . '</td>';
-        echo '<td>' . s($g->quiz_name ?? '—') . '</td>';
+        echo '<td>' . s($g->quiz_name ?? '-') . '</td>';
         echo '<td>' . round($g->finalgrade, 1) . ' / ' . round($g->grademax, 1) . '</td>';
         echo '<td><span class="badge badge-' . $bc . '">' . $pct . '%</span></td>';
-        echo '<td>' . ($g->timemodified ? userdate($g->timemodified, '%d.%m.%Y') : '—') . '</td>';
+        echo '<td>' . ($g->timemodified ? userdate($g->timemodified, '%d.%m.%Y') : '-') . '</td>';
         echo '<td>';
         if ($gcmid && ($is_admin || $is_teacher)) {
             $note_lbl = $note_count > 0 ? '💬 ' . $note_count : '+ заметка';
@@ -295,7 +299,7 @@ if (empty($enrolled_courses)) {
         $ts = $c->timestart ?: $c->timecreated;
         echo '<tr>';
         echo '<td>' . s($c->fullname) . '</td>';
-        echo '<td>' . ($ts ? userdate($ts, '%d.%m.%Y') : '—') . '</td>';
+        echo '<td>' . ($ts ? userdate($ts, '%d.%m.%Y') : '-') . '</td>';
         echo '<td>';
         if ($is_admin || $is_teacher) {
             echo html_writer::link(
@@ -313,8 +317,8 @@ if (empty($enrolled_courses)) {
     echo '</tbody></table>';
 }
 
-// История УМК — служебная информация педагогики (статусы очереди генерации).
-// Не показываем ни ученику (своя), ни родителю — путает «УМК с ошибкой» с оценкой ребёнка.
+// История УМК - служебная информация педагогики (статусы очереди генерации).
+// Не показываем ни ученику (своя), ни родителю - путает «УМК с ошибкой» с оценкой ребёнка.
 if ($is_admin || $is_teacher) {
     echo '<h2 class="unics-section-title mt-4">История генерации УМК (' . count($umk_list) . ')</h2>';
     if (empty($umk_list)) {
@@ -328,13 +332,13 @@ if ($is_admin || $is_teacher) {
         foreach ($umk_list as $u) {
             $sl  = $umk_statuses[$u->status] ?? '?';
             $sc  = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'][$u->status] ?? 'secondary';
-            $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '—';
-            $lvl = $level_labels[$u->difficulty_level] ?? '—';
+            $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '-';
+            $lvl = $level_labels[$u->difficulty_level] ?? '-';
             echo '<tr>';
             echo '<td>' . s($u->title) . '</td>';
             echo '<td>' . s($u->topic) . '</td>';
             echo '<td>' . s($lvl) . '</td>';
-            echo '<td>' . s($u->course_name ?? '—') . '</td>';
+            echo '<td>' . s($u->course_name ?? '-') . '</td>';
             echo '<td><span class="badge badge-' . $sc . '">' . $sl . '</span></td>';
             echo '<td>' . $dt . '</td>';
             echo '</tr>';
@@ -345,7 +349,7 @@ if ($is_admin || $is_teacher) {
 
 // Комментарии педагога (последние 3)
 if ($is_admin || $is_teacher) {
-    // Только общие заметки (cmid IS NULL) — активностные видны inline над
+    // Только общие заметки (cmid IS NULL) - активностные видны inline над
     $last_comments = $DB->get_records_sql(
         "SELECT c.body, c.created_at, u.lastname, u.firstname
          FROM {unics_comments} c

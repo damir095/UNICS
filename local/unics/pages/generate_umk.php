@@ -20,7 +20,7 @@ $is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
 
 // teacher_record используется для фильтрации по unics_teacher_student.
 // У методиста запись в unics_teachers тоже есть (там org-привязка),
-// но он НЕ должен фильтроваться через teacher_student — он видит всех учащихся
+// но он НЕ должен фильтроваться через teacher_student - он видит всех учащихся
 // своей организации.
 $teacher_record = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
 if ($is_methodist) {
@@ -33,7 +33,7 @@ if ($is_methodist) {
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/generate_umk.php'));
-$PAGE->set_title('Генерация УМК — УНИКС');
+$PAGE->set_title('Генерация УМК - УНИКС');
 $PAGE->set_heading('Сгенерировать учебный материал (ИИ)');
 $PAGE->set_pagelayout('admin');
 
@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $level_groups[(int)$st->difficulty_level][] = (int)$student_id;
     }
 
-    // В bulk-режиме — собираем темы из секций курса (section > 0, пропускаем «Итоговый контроль»).
+    // В bulk-режиме - собираем темы из секций курса (section > 0, пропускаем «Итоговый контроль»).
     if ($bulk_mode) {
         $section_rows = $DB->get_records_sql(
             "SELECT section, name
@@ -158,12 +158,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
     $msg  = $queued > 0
         ? "Создано {$queued} задач по уровням (" . implode(', ', $summary) . "). Материалы появятся в курсе автоматически в ближайшее время."
-        : 'Не удалось добавить задачи — проверьте права доступа к учащимся.';
+        : 'Не удалось добавить задачи - проверьте права доступа к учащимся.';
     $type = $queued > 0
         ? \core\output\notification::NOTIFY_SUCCESS
         : \core\output\notification::NOTIFY_WARNING;
 
-    // Педагог не имеет доступа к umk_status.php (требует local/unics:manage) — редиректим в «Мои учащиеся».
+    // Педагог не имеет доступа к umk_status.php (требует local/unics:manage) - редиректим в «Мои учащиеся».
     $after_url = $is_admin
         ? new moodle_url('/local/unics/pages/umk_status.php')
         : new moodle_url('/local/unics/pages/my_students.php');
@@ -176,19 +176,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 $filter_org   = optional_param('filter_org',   0, PARAM_INT);
 $filter_class = optional_param('filter_class', 0, PARAM_INT);
 
-// Методист — фильтр организации форсирован на его орг.
+// Методист - фильтр организации форсирован на его орг.
 if ($is_methodist && $methodist_org_id) {
     $filter_org = $methodist_org_id;
 }
 
 // Меню организаций
-$orgs_menu = [0 => '— все организации —'];
+$orgs_menu = [0 => '- все организации -'];
 foreach ($DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name') as $o) {
     $orgs_menu[$o->id] = $o->name;
 }
 
 // Меню классов
-$classes_menu = [0 => '— все классы —'];
+$classes_menu = [0 => '- все классы -'];
 for ($i = 1; $i <= 11; $i++) { $classes_menu[$i] = "{$i} класс"; }
 
 // Курсы
@@ -264,7 +264,7 @@ if (empty($ai_key)) {
 }
 if (empty($salute_key)) {
     echo $OUTPUT->notification(
-        'SaluteSpeech API key не настроен — аудио генерироваться не будет. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
+        'SaluteSpeech API key не настроен - аудио генерироваться не будет. <a href="/admin/settings.php?section=local_unics_ai">Открыть настройки</a>',
         'info'
     );
 }
@@ -360,7 +360,7 @@ echo html_writer::tag('select', $course_opts, [
 ]);
 if ($preselect_course_name) {
     echo html_writer::tag('small',
-        'Курс выбран автоматически — переход из «Шаблоны курсов».',
+        'Курс выбран автоматически - переход из «Шаблоны курсов».',
         ['class' => 'form-text text-success']
     );
 }
@@ -368,10 +368,10 @@ echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-group', 'id' => 'section-field-wrap']);
 echo html_writer::tag('label', 'Раздел <span class="text-danger">*</span>');
-echo html_writer::tag('select', html_writer::tag('option', '— создать новый раздел —', ['value' => '-1']), [
+echo html_writer::tag('select', html_writer::tag('option', '- создать новый раздел -', ['value' => '-1']), [
     'name' => 'target_section', 'id' => 'target_section_select', 'class' => 'form-control',
 ]);
-echo html_writer::tag('small', 'Выберите существующий раздел или оставьте «новый» — раздел будет создан автоматически.',
+echo html_writer::tag('small', 'Выберите существующий раздел или оставьте «новый» - раздел будет создан автоматически.',
     ['class' => 'form-text text-muted']);
 echo html_writer::end_tag('div');
 
@@ -384,7 +384,7 @@ echo html_writer::script("
     var sectionsUrl   = '{$sections_url}';
 
     function loadSections(courseId) {
-        sectionSelect.innerHTML = '<option value=\"-1\">— создать новый раздел —</option>';
+        sectionSelect.innerHTML = '<option value=\"-1\">- создать новый раздел -</option>';
         if (!courseId) return;
         fetch(sectionsUrl + '?course_id=' + courseId)
             .then(function(r) { return r.json(); })
@@ -488,19 +488,19 @@ echo html_writer::tag('label',
 if (empty($students)) {
     $hint = 'Нет учащихся по выбранному фильтру.';
     if ($teacher_record) {
-        // Реальный педагог — список зависит от unics_teacher_student.
+        // Реальный педагог - список зависит от unics_teacher_student.
         $bound_count = $DB->count_records('unics_teacher_student',
             ['teacher_id' => $teacher_record->id]);
         if ($bound_count === 0) {
-            $hint .= ' У вас пока нет привязанных учащихся — обратитесь к методисту/'
+            $hint .= ' У вас пока нет привязанных учащихся - обратитесь к методисту/'
                 . 'администратору, чтобы они выполнили привязку «педагог↔учащийся» '
                 . 'на странице «Привязки».';
         } else {
             $hint .= ' Привязанных учащихся: ' . $bound_count
-                . '. Если они не показаны — снимите фильтр класса/организации.';
+                . '. Если они не показаны - снимите фильтр класса/организации.';
         }
     } elseif ($is_methodist && empty($methodist_org_id)) {
-        $hint .= ' Ваш профиль методиста не привязан к организации — обратитесь к администратору.';
+        $hint .= ' Ваш профиль методиста не привязан к организации - обратитесь к администратору.';
     }
     echo html_writer::tag('p', $hint, ['class' => 'text-muted']);
 } else {
@@ -512,7 +512,7 @@ if (empty($students)) {
     ksort($by_level);
 
     echo html_writer::tag('small',
-        'Для каждого уровня генерируется <strong>один</strong> вариант материала — все ученики уровня получат доступ к нему.',
+        'Для каждого уровня генерируется <strong>один</strong> вариант материала - все ученики уровня получат доступ к нему.',
         ['class' => 'text-muted d-block mb-1']
     );
 
@@ -527,7 +527,7 @@ if (empty($students)) {
         echo html_writer::start_tag('div', ['class' => 'mb-2']);
         echo html_writer::tag('div',
             html_writer::tag('strong', $lvl_label . ' ур.' . $lvl)
-            . html_writer::tag('span', " — {$lvl_count} уч. ", ['class' => 'text-muted'])
+            . html_writer::tag('span', " - {$lvl_count} уч. ", ['class' => 'text-muted'])
             . html_writer::tag('a', 'выбрать всех', [
                 'href'    => '#',
                 'class'   => 'small',
@@ -539,7 +539,7 @@ if (empty($students)) {
         foreach ($group_students as $s) {
             $fio = htmlspecialchars(
                 "{$s->lastname} {$s->firstname}"
-                . ($s->class_number ? " — {$s->class_number} кл." : '')
+                . ($s->class_number ? " - {$s->class_number} кл." : '')
                 . ($s->org_name ? " ({$s->org_name})" : '')
             );
             $checked = ($default_student && $s->student_id == $default_student) ? ['checked' => 'checked'] : [];
@@ -575,7 +575,7 @@ echo html_writer::tag('textarea', '', [
     'name'        => 'extra_prompt',
     'class'       => 'form-control',
     'rows'        => '4',
-    'placeholder' => 'Например: предмет — биология, тема связана с клеточным строением; акцент на схемах и классификациях; избегать сложных латинских терминов без пояснений; добавить пример из повседневной жизни.',
+    'placeholder' => 'Например: предмет - биология, тема связана с клеточным строением; акцент на схемах и классификациях; избегать сложных латинских терминов без пояснений; добавить пример из повседневной жизни.',
 ]);
 echo html_writer::tag('small',
     'Эти указания будут переданы ИИ дополнительно к профилю учащегося. Можно уточнить предмет, особенности темы, что выделить или что опустить.',

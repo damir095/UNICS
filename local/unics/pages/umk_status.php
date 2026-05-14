@@ -15,7 +15,7 @@ if (!$is_admin_user && !$is_teacher) {
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/umk_status.php'));
-$PAGE->set_title('История генерации УМК — УНИКС');
+$PAGE->set_title('История генерации УМК - УНИКС');
 $PAGE->set_heading('История генерации материалов');
 $PAGE->set_pagelayout('admin');
 
@@ -138,7 +138,7 @@ if (empty($records)) {
                 s($r->course_name ?: 'Курс #' . $r->mdl_course_id),
                 ['target' => '_blank']
               )
-            : '—';
+            : '-';
 
         $lvl_label = $level_labels[$r->difficulty_level] ?? ('Ур.' . $r->difficulty_level);
 
@@ -158,7 +158,7 @@ if (empty($records)) {
             (int)$r->student_count,
             $course_link,
             $status,
-            $r->generated_at ? userdate(strtotime($r->generated_at)) : '—',
+            $r->generated_at ? userdate(strtotime($r->generated_at)) : '-',
             $actions,
         ];
     }

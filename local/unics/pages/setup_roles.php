@@ -10,7 +10,7 @@ require_capability('moodle/site:config', context_system::instance());
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/setup_roles.php'));
-$PAGE->set_title('Настройка прав ролей — УНИКС');
+$PAGE->set_title('Настройка прав ролей - УНИКС');
 $PAGE->set_heading('Настройка прав ролей УНИКС');
 $PAGE->set_pagelayout('admin');
 
@@ -18,10 +18,10 @@ $PAGE->set_pagelayout('admin');
 // Матрица прав по ролям
 // Ключи: shortname роли Moodle
 // Значения:
-//   'allow'   => [...] — явно выдать CAP_ALLOW
-//   'prevent' => [...] — явно запретить CAP_PREVENT (можно переопределить выше)
-//   'prohibit'=> [...] — жёсткий запрет CAP_PROHIBIT
-//   'inherit' => [...] — снять явное переопределение (вернуть к архетипу)
+//   'allow'   => [...] - явно выдать CAP_ALLOW
+//   'prevent' => [...] - явно запретить CAP_PREVENT (можно переопределить выше)
+//   'prohibit'=> [...] - жёсткий запрет CAP_PROHIBIT
+//   'inherit' => [...] - снять явное переопределение (вернуть к архетипу)
 // ================================================================
 
 // ----------------------------------------------------------------
@@ -332,14 +332,14 @@ $role_matrix = [
                 'moodle/block:view',
             ]
         ),
-        // accessallgroups снимается — управляется переопределением на уровне курса
+        // accessallgroups снимается - управляется переопределением на уровне курса
         'inherit' => [
             'moodle/site:accessallgroups',
         ],
     ],
 
     // ------------------------------------------------------------
-    // Тьютор (teacher — non-editing)
+    // Тьютор (teacher - non-editing)
     // Сопровождает, наблюдает, общается, но не оценивает и не редактирует
     // ------------------------------------------------------------
     'teacher' => [
@@ -397,7 +397,7 @@ $role_matrix = [
                 'moodle/block:view',
             ]
         ),
-        // Явно запрещаем оценивание — не должен иметь возможности даже случайно
+        // Явно запрещаем оценивание - не должен иметь возможности даже случайно
         'prevent' => array_merge(
             $caps_grading,
             $caps_course_edit,
@@ -584,7 +584,7 @@ $role_matrix = [
             'moodle/site:accessallgroups',
             'moodle/site:viewreports',
         ],
-        // Жёсткий запрет — учащийся никогда не должен видеть панель управления УНИКС
+        // Жёсткий запрет - учащийся никогда не должен видеть панель управления УНИКС
         'prohibit' => [
             'local/unics:manage',
             'local/unics:viewstudents',
@@ -641,7 +641,7 @@ $role_matrix = [
                 'mod/forum:replypost',
             ]
         ),
-        // Жёсткий запрет — родитель не управляет системой УНИКС
+        // Жёсткий запрет - родитель не управляет системой УНИКС
         'prohibit' => [
             'local/unics:manage',
             'local/unics:viewstudents',
@@ -782,7 +782,7 @@ if (!empty($_SESSION['unics_setup_results'])) {
 
     echo '<div class="alert alert-success"><strong>Результат применения:</strong><ul class="mb-0">';
     foreach ($res as $sn => $r) {
-        $icon = $r['status'] === 'ok' ? '✓' : '—';
+        $icon = $r['status'] === 'ok' ? '✓' : '-';
         echo "<li><code>{$sn}</code>: {$icon} {$r['msg']}</li>";
     }
     echo '</ul></div>';
@@ -830,9 +830,9 @@ foreach ($matrix_display as $row) {
 echo '</tbody></table>';
 echo '</div>';
 echo '<div class="card-footer small text-muted">';
-echo '¹ Родитель видит заметки — только на просмотр. ';
+echo '¹ Родитель видит заметки - только на просмотр. ';
 echo '² Педагог может управлять записью в рамках своего курса (enrol/manual). ';
-echo '³ Педагог: inherit (не установлено глобально) — переопределяется PROHIBIT на уровне курса при включении режима «Раздельные группы».';
+echo '³ Педагог: inherit (не установлено глобально) - переопределяется PROHIBIT на уровне курса при включении режима «Раздельные группы».';
 echo '</div>';
 echo '</div>';
 

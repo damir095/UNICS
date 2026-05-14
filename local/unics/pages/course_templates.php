@@ -18,7 +18,7 @@ global $DB;
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/course_templates.php'));
-$PAGE->set_title('Шаблоны курсов — УНИКС');
+$PAGE->set_title('Шаблоны курсов - УНИКС');
 $PAGE->set_heading('Создание курса по шаблону');
 $PAGE->set_pagelayout('admin');
 
@@ -90,12 +90,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 // ----------------------------------------------------------------
 // Данные для формы
 // ----------------------------------------------------------------
-$subject_menu = ['' => '— выберите предмет —'];
+$subject_menu = ['' => '- выберите предмет -'];
 foreach ($subjects as $key => $s) {
     $subject_menu[$key] = $s['name'];
 }
 
-$class_menu = [0 => '— выберите класс —'];
+$class_menu = [0 => '- выберите класс -'];
 for ($i = 1; $i <= 11; $i++) {
     $class_menu[$i] = "{$i} класс";
 }
@@ -104,7 +104,7 @@ for ($i = 1; $i <= 11; $i++) {
 $categories_raw = $DB->get_records_sql(
     "SELECT id, name, depth, path FROM {course_categories} WHERE visible = 1 ORDER BY path"
 );
-$category_menu = [0 => '— корневая категория —'];
+$category_menu = [0 => '- корневая категория -'];
 foreach ($categories_raw as $cat) {
     $indent = str_repeat('&nbsp;&nbsp;', max(0, $cat->depth - 1));
     $category_menu[$cat->id] = $indent . $cat->name;
@@ -140,13 +140,13 @@ if ($created_course) {
     $generate_url = new moodle_url('/local/unics/pages/generate_umk.php',
         ['course_id' => $created_course->id]);
     echo $OUTPUT->notification(
-        'Курс создан: <strong>' . htmlspecialchars($created_course->fullname) . '</strong> — '
+        'Курс создан: <strong>' . htmlspecialchars($created_course->fullname) . '</strong> - '
         . html_writer::link($course_url, 'Открыть курс', ['class' => 'alert-link', 'target' => '_blank']),
         'success'
     );
     echo '<div class="card border-primary mb-4">';
     echo '<div class="card-body">';
-    echo '<h5 class="card-title">Следующий шаг — наполнить курс материалом</h5>';
+    echo '<h5 class="card-title">Следующий шаг - наполнить курс материалом</h5>';
     echo '<p class="card-text mb-2">Структура готова (' .
         (int)$DB->count_records('course_sections', ['course' => $created_course->id]) .
         ' секций). Запустите ИИ-генерацию УМК, и материалы по темам появятся в курсе автоматически.</p>';
@@ -203,7 +203,7 @@ echo html_writer::end_tag('div'); // form-row
 echo html_writer::start_tag('div', ['class' => 'form-group mb-3']);
 echo html_writer::tag('label',
     'Названия тем '
-    . html_writer::tag('span', '(необязательно — по одной в строке)',
+    . html_writer::tag('span', '(необязательно - по одной в строке)',
         ['class' => 'text-muted font-weight-normal'])
 );
 echo html_writer::tag('textarea', '', [
@@ -213,7 +213,7 @@ echo html_writer::tag('textarea', '', [
     'placeholder' => "Дроби\nПроценты\nУравнения\nГеометрические фигуры",
 ]);
 echo html_writer::tag('small',
-    'Если задано — кол-во тем равно количеству строк (макс. 20). Эти названия станут именами секций и пойдут в ИИ как тема урока.',
+    'Если задано - кол-во тем равно количеству строк (макс. 20). Эти названия станут именами секций и пойдут в ИИ как тема урока.',
     ['class' => 'form-text text-muted']
 );
 echo html_writer::end_tag('div');
@@ -222,9 +222,9 @@ echo '<div class="alert alert-info mb-3">'
    . 'В курсе создаётся <strong>один набор секций</strong> для всех уровней. '
    . 'Активности в каждой теме разделены по уровням сложности через условный доступ '
    . '(<code>profile_field_unics_level</code>): '
-   . '<span class="badge badge-info">1 — Базовый</span> '
-   . '<span class="badge badge-primary">2 — Стандартный</span> '
-   . '<span class="badge badge-success">3 — Продвинутый</span>. '
+   . '<span class="badge badge-info">1 - Базовый</span> '
+   . '<span class="badge badge-primary">2 - Стандартный</span> '
+   . '<span class="badge badge-success">3 - Продвинутый</span>. '
    . 'Учащийся видит только материалы своего уровня.'
    . '</div>';
 
@@ -273,7 +273,7 @@ if ($existing_courses) {
         echo '<tr>';
         echo '<td>' . htmlspecialchars($c->fullname) . '</td>';
         echo '<td><code>' . htmlspecialchars($c->shortname) . '</code></td>';
-        echo '<td>' . htmlspecialchars($c->catname ?? '—') . '</td>';
+        echo '<td>' . htmlspecialchars($c->catname ?? '-') . '</td>';
         echo '<td>' . userdate($c->timecreated, '%d.%m.%Y') . '</td>';
         echo '<td>' . html_writer::link($course_url, 'Открыть', ['target' => '_blank', 'class' => 'btn btn-sm btn-outline-primary']) . '</td>';
         echo '</tr>';

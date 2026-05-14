@@ -62,47 +62,71 @@ class ai_generator {
             2 => 'Делай акцент на тексте. Не используй звуковые описания как ключевой элемент объяснения.',
             3 => 'Чёткие пошаговые инструкции. Не требуй от учащегося быстрых действий при выполнении.',
             4 => 'Очень короткие абзацы (2–3 предложения). Повторяй ключевые понятия несколько раз. Пошаговая структура обязательна.',
-            5 => 'Строго предсказуемая структура текста. Только однозначные формулировки — без метафор и иносказаний.',
+            5 => 'Строго предсказуемая структура текста. Только однозначные формулировки - без метафор и иносказаний.',
             6 => 'Доступный язык, короткие предложения, минимум специальных терминов без пояснений.',
         ];
 
         $avg_score     = (float)($profile['avg_score'] ?? 70);
         $base_level    = (int)($profile['difficulty_level'] ?? 2);
         $eff_level     = $this->adapt_level($base_level, $avg_score);
-        $category_id   = (int)($profile['category'] ?? 2);
-        $ovz_type      = (int)($profile['ovz_type'] ?? 0);
         $class_num     = (int)($profile['class_number'] ?? 5);
         $class_letter  = trim((string)($profile['class_letter'] ?? ''));
         $special_needs = trim((string)($profile['special_needs'] ?? ''));
 
-        $category_label = $categories[$category_id] ?? 'стандартный';
+        // Множественные категории / виды ОВЗ. Fallback на одиночные поля для бэк-компата.
+        $category_ids = $profile['categories'] ?? null;
+        if (!is_array($category_ids) || empty($category_ids)) {
+            $category_ids = [(int)($profile['category'] ?? 2)];
+        }
+        $ovz_type_ids = $profile['ovz_types'] ?? null;
+        if (!is_array($ovz_type_ids) || empty($ovz_type_ids)) {
+            $ovz_legacy   = (int)($profile['ovz_type'] ?? 0);
+            $ovz_type_ids = $ovz_legacy > 0 ? [$ovz_legacy] : [];
+        }
+
+        $category_labels_arr = [];
+        foreach ($category_ids as $cid) {
+            if (isset($categories[$cid])) {
+                $category_labels_arr[] = $categories[$cid];
+            }
+        }
+        $category_label = $category_labels_arr ? implode('; ', $category_labels_arr) : 'стандартный';
         $level_label    = $levels[$eff_level] ?? 'стандартный';
         $class_str      = $class_num . ($class_letter !== '' ? " «{$class_letter}»" : '') . ' класс';
 
-        // Объём в зависимости от уровня и категории
+        // Объём - берём минимум среди всех применимых правил (наиболее ограничивающее).
         $word_count = match ($eff_level) {
             1 => '300–400',
             3 => '600–800',
             default => '400–600',
         };
-        if ($category_id === 3) {
-            $word_count = '250–350'; // длительное лечение — короткие модули
+        if (in_array(3, $category_ids, true)) {
+            $word_count = '250–350'; // длительное лечение - короткие модули
         }
 
-        // Блок особых указаний
+        // Блок особых указаний - union по всем категориям и видам ОВЗ.
         $special_parts = [];
 
-        if ($category_id === 1) {
-            if ($ovz_type > 0 && isset($ovz_labels[$ovz_type])) {
-                $special_parts[] = "Тип ОВЗ учащегося: {$ovz_labels[$ovz_type]}.";
-                $special_parts[] = $ovz_instructions[$ovz_type];
+        if (in_array(1, $category_ids, true)) {
+            $valid_ovz_types = array_values(array_filter($ovz_type_ids, fn($t) => isset($ovz_labels[$t])));
+            if (!empty($valid_ovz_types)) {
+                $type_labels = array_map(fn($t) => $ovz_labels[$t], $valid_ovz_types);
+                $special_parts[] = 'Типы ОВЗ учащегося: ' . implode('; ', $type_labels) . '.';
+                foreach ($valid_ovz_types as $t) {
+                    $special_parts[] = $ovz_instructions[$t];
+                }
             } else {
                 $special_parts[] = 'Учащийся имеет ОВЗ. Используй простые короткие предложения, избегай перегруженных абзацев.';
             }
-        } elseif ($category_id === 3) {
+        }
+        if (in_array(3, $category_ids, true)) {
             $special_parts[] = 'Учащийся на длительном лечении. Модуль должен читаться за 10–15 минут. Завершай текст коротким мотивирующим выводом.';
-        } elseif ($category_id === 4) {
+        }
+        if (in_array(4, $category_ids, true)) {
             $special_parts[] = 'Учащийся одарённый. Добавь углублённые факты, нестандартный угол зрения на тему и исследовательский вопрос в конце.';
+        }
+        if (in_array(2, $category_ids, true)) {
+            $special_parts[] = 'Учащийся на семейном обучении. Допускай гибкий темп изучения и явные точки самопроверки.';
         }
 
         if ($special_needs !== '') {
@@ -110,9 +134,9 @@ class ai_generator {
         }
 
         if ($eff_level < $base_level) {
-            $special_parts[] = "Уровень автоматически снижен (средний балл {$avg_score}% < 50%) — материал должен быть проще базового.";
+            $special_parts[] = "Уровень автоматически снижен (средний балл {$avg_score}% < 50%) - материал должен быть проще базового.";
         } elseif ($eff_level > $base_level) {
-            $special_parts[] = "Уровень автоматически повышен (средний балл {$avg_score}% > 85%) — материал должен быть сложнее стандартного.";
+            $special_parts[] = "Уровень автоматически повышен (средний балл {$avg_score}% > 85%) - материал должен быть сложнее стандартного.";
         }
 
         $special_block = '';
@@ -125,7 +149,7 @@ class ai_generator {
             $extra_block = "\nДополнительные указания от педагога:\n" . trim($extra_context) . "\n";
         }
 
-        return "Ты — опытный педагог, создающий учебные материалы для российских школьников.
+        return "Ты - опытный педагог, создающий учебные материалы для российских школьников.
 
 Задача: напиши учебный текст по теме «{$topic}» для ученика {$class_str}.
 
@@ -155,7 +179,7 @@ class ai_generator {
     }
 
     // ----------------------------------------------------------------
-    // GigaChat OAuth 2.0 — получить Bearer-токен
+    // GigaChat OAuth 2.0 - получить Bearer-токен
     // ----------------------------------------------------------------
     private function get_gigachat_token(): string {
         $ch = curl_init('https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
@@ -197,7 +221,7 @@ class ai_generator {
     }
 
     // ----------------------------------------------------------------
-    // GigaChat (Sber) — OAuth 2.0 client_credentials
+    // GigaChat (Sber) - OAuth 2.0 client_credentials
     // api_key здесь = Authorization key из личного кабинета (Base64)
     // ----------------------------------------------------------------
     private function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
@@ -247,7 +271,7 @@ class ai_generator {
     }
 
     // ----------------------------------------------------------------
-    // Генерация аудио — SaluteSpeech Sber, возвращает WAV
+    // Генерация аудио - SaluteSpeech Sber, возвращает WAV
     // ----------------------------------------------------------------
     public function generate_audio(string $text): string {
         $text = $this->strip_for_tts($text);
@@ -288,7 +312,7 @@ class ai_generator {
     }
 
     // ----------------------------------------------------------------
-    // SaluteSpeech (Sber) TTS — возвращает WAV
+    // SaluteSpeech (Sber) TTS - возвращает WAV
     // Использует тот же OAuth-endpoint, что и GigaChat,
     // но со scope=SALUTE_SPEECH_PERS
     // ----------------------------------------------------------------
@@ -385,7 +409,7 @@ class ai_generator {
             ? "\n\nОпирайся на следующий учебный текст:\n---\n" . mb_substr($source_text, 0, 2000) . "\n---"
             : '';
 
-        $prompt = "Ты — педагог, составляющий тестовые задания для российских школьников.
+        $prompt = "Ты - педагог, составляющий тестовые задания для российских школьников.
 
 Составь ровно {$num} вопросов с множественным выбором по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
 
@@ -398,7 +422,7 @@ class ai_generator {
 
 Верни ответ СТРОГО в формате JSON, без пояснений и без markdown-тегов:
 {\"questions\":[{\"text\":\"Текст вопроса?\",\"answers\":[\"Вариант А\",\"Вариант Б\",\"Вариант В\",\"Вариант Г\"],\"correct\":0}]}
-correct — индекс правильного ответа (0, 1, 2 или 3).";
+correct - индекс правильного ответа (0, 1, 2 или 3).";
 
         $raw = $this->generate_text($prompt, 4096);
 
@@ -412,7 +436,7 @@ correct — индекс правильного ответа (0, 1, 2 или 3).
             }, $s) ?? $s;
         };
 
-        // Извлекаем JSON — GigaChat иногда добавляет пояснения вокруг
+        // Извлекаем JSON - GigaChat иногда добавляет пояснения вокруг
         $json_str = '';
         if (preg_match('/\{.*\}/su', $raw, $m)) {
             $json_str = $m[0];
@@ -422,7 +446,7 @@ correct — индекс правильного ответа (0, 1, 2 или 3).
 
         $data = json_decode($json_str, true) ?? json_decode($fix_escapes($json_str), true);
 
-        // Восстановление частичного JSON: если массив обрезан — закрываем его вручную
+        // Восстановление частичного JSON: если массив обрезан - закрываем его вручную
         if (!isset($data['questions']) && $json_str !== '') {
             $recovered = $json_str;
             // Считаем непарные { и [, закрываем их
@@ -437,7 +461,7 @@ correct — индекс правильного ответа (0, 1, 2 или 3).
             $data = json_decode($recovered, true) ?? json_decode($fix_escapes($recovered), true);
         }
 
-        // Последний резерв — поиск отдельных question-объектов в сыром тексте
+        // Последний резерв - поиск отдельных question-объектов в сыром тексте
         $result = [];
         if (isset($data['questions']) && is_array($data['questions'])) {
             foreach ($data['questions'] as $q) {
@@ -472,7 +496,7 @@ correct — индекс правильного ответа (0, 1, 2 или 3).
             ? "\n\nУчебный текст по теме:\n---\n" . mb_substr($source_text, 0, 1500) . "\n---"
             : '';
 
-        $prompt = "Ты — педагог, составляющий практические задания для российских школьников.
+        $prompt = "Ты - педагог, составляющий практические задания для российских школьников.
 
 Составь одно письменное практическое задание по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
 
@@ -482,7 +506,7 @@ correct — индекс правильного ответа (0, 1, 2 или 3).
 - Соответствовать уровню «{$level}»
 - Быть конкретным и однозначно сформулированным
 
-Верни только текст задания. Без заголовков, без вводных слов — только само задание.";
+Верни только текст задания. Без заголовков, без вводных слов - только само задание.";
 
         return $this->generate_text($prompt);
     }
@@ -512,11 +536,11 @@ correct — индекс правильного ответа (0, 1, 2 или 3).
 - НЕ используй символы LaTeX, доллар \$ и обратную косую черту \\
 
 Логика слайдов:
-1. Введение — что такое тема и зачем её изучать
+1. Введение - что такое тема и зачем её изучать
 2. Основное понятие 1
 3. Основное понятие 2
 4. Применение или пример из жизни
-5. Итог — главный вывод и вопрос для размышления";
+5. Итог - главный вывод и вопрос для размышления";
 
         $raw = $this->generate_text($prompt, 3000);
 

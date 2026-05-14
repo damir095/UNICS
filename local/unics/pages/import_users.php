@@ -9,7 +9,7 @@ global $DB, $CFG;
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/import_users.php'));
-$PAGE->set_title('Импорт пользователей из CSV — УНИКС');
+$PAGE->set_title('Импорт пользователей из CSV - УНИКС');
 $PAGE->set_heading('Импорт пользователей из CSV');
 $PAGE->set_pagelayout('admin');
 
@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
-    // Читаем заголовок — поддерживаем запятую и точку с запятой
+    // Читаем заголовок - поддерживаем запятую и точку с запятой
     $raw_header = fgets($handle);
     rewind($handle);
 
@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             $errors[] = "Email «{$data['email']}» уже используется";
         }
 
-        // Для учащихся — category и difficulty_level
+        // Для учащихся - category и difficulty_level
         if ($role === 7) {
             $cat = (int)($data['category'] ?? 0);
             if (!isset($CATEGORIES[$cat])) {
@@ -176,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $status = 'pending';
         $status_msg = empty($errors) ? 'Готов к импорту' : implode('; ', $errors);
 
-        // Если режим импорта и нет ошибок — создаём пользователя
+        // Если режим импорта и нет ошибок - создаём пользователя
         if ($do_import && empty($errors)) {
             try {
                 unics_user_manager::create_user([
@@ -190,8 +190,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                     'organization_id'   => $org_id,
                     'class_number'      => (int)($data['class_number'] ?? 0) ?: null,
                     'class_letter'      => !empty($data['class_letter']) ? trim($data['class_letter']) : null,
-                    'student_category'  => (int)($data['category'] ?? 2),
-                    'ovz_type'          => null,
+                    // CSV из CSV-импорта: поля могут быть "1,3" или "1" - оба валидны.
+                    'student_category'  => (string)($data['category'] ?? '2'),
+                    'ovz_type'          => (string)($data['ovz_type'] ?? ''),
                     'difficulty_level'  => (int)($data['difficulty_level'] ?? 2),
                     'special_needs'     => '',
                     'subjects'          => $data['subjects'] ?? '',
@@ -256,12 +257,12 @@ $col_table->data = [
     ['email',            'Да', 'Email (уникальный)'],
     ['username',         'Да', 'Логин (уникальный, латиница)'],
     ['password',         'Да', 'Пароль (мин. 8 символов)'],
-    ['unics_role',       'Да', '5 — Педагог, 6 — Тьютор, 7 — Учащийся, 8 — Родитель, 3 — Адм. орг., 4 — Методист'],
+    ['unics_role',       'Да', '5 - Педагог, 6 - Тьютор, 7 - Учащийся, 8 - Родитель, 3 - Адм. орг., 4 - Методист'],
     ['organization_id',  'Да', 'ID организации из системы УНИКС'],
     ['class_number',     'Нет', 'Класс обучения 1–11 (только для учащихся)'],
     ['class_letter',     'Нет', 'Буква класса: А, Б, В, Г, Д, Е, Ж (только для учащихся)'],
-    ['category',         'Для учащихся', '1 — ОВЗ, 2 — Семейное, 3 — Лечение, 4 — Одарённый'],
-    ['difficulty_level', 'Для учащихся', '1 — Базовый, 2 — Стандартный, 3 — Продвинутый'],
+    ['category',         'Для учащихся', '1 - ОВЗ, 2 - Семейное, 3 - Лечение, 4 - Одарённый'],
+    ['difficulty_level', 'Для учащихся', '1 - Базовый, 2 - Стандартный, 3 - Продвинутый'],
     ['subjects',         'Нет', 'Предметы через запятую (для педагогов)'],
 ];
 echo html_writer::table($col_table);
@@ -348,7 +349,7 @@ if (empty($results)) {
 
     // Кнопки действий
     if (!$do_import && $count_ready > 0) {
-        // Кнопка "Импортировать" — повторно отправляем тот же файл нельзя,
+        // Кнопка "Импортировать" - повторно отправляем тот же файл нельзя,
         // поэтому предлагаем загрузить снова с флагом do_import=1
         echo html_writer::start_tag('div', ['class' => 'alert alert-info mt-3']);
         echo html_writer::tag('strong', "Готовы к импорту: {$count_ready} пользователей.");

@@ -18,7 +18,7 @@ if (!$is_admin_user && !$is_methodist) {
 
 global $DB, $USER;
 
-// Организация методиста — для последующего org-scoping списков.
+// Организация методиста - для последующего org-scoping списков.
 $methodist_org_id = 0;
 if ($is_methodist) {
     $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
@@ -28,7 +28,7 @@ if ($is_methodist) {
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_students.php'));
-$PAGE->set_title('Запись учащихся на курс — УНИКС');
+$PAGE->set_title('Запись учащихся на курс - УНИКС');
 $PAGE->set_heading('Запись учащихся на курс');
 $PAGE->set_pagelayout('admin');
 
@@ -127,20 +127,20 @@ if ($is_methodist && $methodist_org_id) {
 
 // Курсы
 $courses_raw  = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
-$courses_menu = [0 => '— выберите курс —'];
+$courses_menu = [0 => '- выберите курс -'];
 foreach ($courses_raw as $c) {
     $courses_menu[$c->id] = $c->fullname;
 }
 
 // Районы
 $districts_raw  = $DB->get_records('unics_districts', null, 'name ASC', 'id, name');
-$districts_menu = [0 => '— все районы —'];
+$districts_menu = [0 => '- все районы -'];
 foreach ($districts_raw as $d) {
     $districts_menu[$d->id] = $d->name;
 }
 
 // Организации (зависят от района)
-$orgs_menu = [0 => '— все организации —'];
+$orgs_menu = [0 => '- все организации -'];
 if ($filter_district > 0) {
     foreach ($DB->get_records('unics_organizations',
         ['district_id' => $filter_district, 'is_active' => 1], 'name ASC', 'id, name') as $o) {
@@ -149,11 +149,11 @@ if ($filter_district > 0) {
 }
 
 // Классы
-$classes_menu = [0 => '— все классы —'];
+$classes_menu = [0 => '- все классы -'];
 for ($i = 1; $i <= 11; $i++) { $classes_menu[$i] = "{$i} класс"; }
 
 // Группы выбранного курса
-$groups_menu = [0 => '— без группы —'];
+$groups_menu = [0 => '- без группы -'];
 if ($selected_course > 0) {
     foreach (groups_get_all_groups($selected_course) as $g) {
         $groups_menu[$g->id] = $g->name;
@@ -178,7 +178,7 @@ if ($filter_class > 0) {
 $students = $DB->get_records_sql(
     "SELECT s.id AS student_id, u.id AS mdl_user_id,
             u.lastname, u.firstname, u.middlename,
-            s.class_number, s.category,
+            s.class_number, s.category, s.ovz_type,
             o.name AS org_name
      FROM {unics_students} s
      JOIN {user} u ON u.id = s.mdl_user_id
@@ -244,7 +244,7 @@ echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
 echo html_writer::end_tag('div');
 
 if ($is_methodist) {
-    // Методист: район/организация фиксированы — отдаём как hidden,
+    // Методист: район/организация фиксированы - отдаём как hidden,
     // чтобы фильтр сохранялся при submit, но не показывался селектором.
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'org_id',
         'value' => (int)$filter_org]);
@@ -326,7 +326,7 @@ if ($selected_course > 0) {
 
     echo html_writer::tag('div',
         html_writer::tag('small',
-            'Если указана новая группа — она будет создана и приоритетна над выбором из списка.',
+            'Если указана новая группа - она будет создана и приоритетна над выбором из списка.',
             ['class' => 'text-muted']
         ),
         ['class' => 'col-12 mt-1']
@@ -350,7 +350,7 @@ $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($students as $s) {
     $fio = htmlspecialchars(trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? '')));
-    $cat = $categories[$s->category] ?? '—';
+    $cat = \local_unics\student_helper::format_categories($s) ?: '-';
 
     $is_enrolled  = isset($enrolled_users[$s->student_id]);
     $status_badge = $is_enrolled
@@ -369,14 +369,14 @@ foreach ($students as $s) {
     $groups_cell = $gnames
         ? implode(', ', array_map(fn($g) => html_writer::tag('span', htmlspecialchars($g),
             ['class' => 'badge badge-info mr-1']), $gnames))
-        : html_writer::tag('span', '—', ['class' => 'text-muted']);
+        : html_writer::tag('span', '-', ['class' => 'text-muted']);
 
     $row = new html_table_row([
         $checkbox,
         html_writer::tag('strong', $fio),
-        $s->class_number ? "{$s->class_number} кл." : '—',
+        $s->class_number ? "{$s->class_number} кл." : '-',
         $cat,
-        htmlspecialchars($s->org_name ?? '—'),
+        htmlspecialchars($s->org_name ?? '-'),
         $status_badge,
         $groups_cell,
     ]);
@@ -400,7 +400,7 @@ document.getElementById('check_all').addEventListener('change', function() {
     });
 });
 
-// Если заполнено поле новой группы — сбрасываем select существующей и наоборот
+// Если заполнено поле новой группы - сбрасываем select существующей и наоборот
 var newGroupInput = document.querySelector('input[name=new_group]');
 var groupSelect   = document.querySelector('select[name=group_id]');
 if (newGroupInput && groupSelect) {

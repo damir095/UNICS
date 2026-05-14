@@ -15,7 +15,7 @@ global $DB;
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/demo_courses.php'));
-$PAGE->set_title('Демонстрационные курсы — УНИКС');
+$PAGE->set_title('Демонстрационные курсы - УНИКС');
 $PAGE->set_heading('Создание демонстрационных курсов');
 $PAGE->set_pagelayout('admin');
 
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 $cats_raw    = $DB->get_records_sql(
     "SELECT id, name, depth FROM {course_categories} WHERE visible = 1 ORDER BY depth, name"
 );
-$cat_menu    = [0 => '— корневая категория —'];
+$cat_menu    = [0 => '- корневая категория -'];
 foreach ($cats_raw as $c) {
     $cat_menu[$c->id] = str_repeat('  ', max(0, $c->depth - 1)) . $c->name;
 }
@@ -79,7 +79,7 @@ echo '<div class="card-header"><strong>Параметры</strong></div>';
 echo '<div class="card-body">';
 
 echo '<p>Будут созданы <strong>3 демонстрационных курса</strong> по предмету '
-   . '<strong>Математика, 5 класс</strong> — по одному на каждый уровень сложности.</p>';
+   . '<strong>Математика, 5 класс</strong> - по одному на каждый уровень сложности.</p>';
 
 echo '<div class="row mb-3">';
 $level_info = [
@@ -101,7 +101,7 @@ echo html_writer::select($cat_menu, 'category_id', 0, false, ['class' => 'form-c
 echo '</div>';
 
 echo '<p class="text-muted small">Первые 3–4 темы каждого курса будут заполнены учебным контентом по математике. '
-   . 'Остальные темы содержат инструкции-шаблоны. Тесты создаются пустыми — вопросы добавляет педагог или ИИ-модуль.</p>';
+   . 'Остальные темы содержат инструкции-шаблоны. Тесты создаются пустыми - вопросы добавляет педагог или ИИ-модуль.</p>';
 
 echo html_writer::tag('button', 'Создать демонстрационные курсы',
     ['type' => 'submit', 'class' => 'btn btn-primary',

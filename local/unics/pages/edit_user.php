@@ -17,7 +17,7 @@ if (!$user_id) {
 }
 
 $PAGE->set_url(new moodle_url('/local/unics/pages/edit_user.php', ['id' => $user_id]));
-$PAGE->set_title('Редактировать пользователя — УНИКС');
+$PAGE->set_title('Редактировать пользователя - УНИКС');
 $PAGE->set_heading('Редактирование пользователя');
 
 $profile = unics_user_manager::get_user_profile($user_id);
@@ -54,8 +54,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         'email'            => required_param('email', PARAM_EMAIL),
     ];
     if ($is_student) {
-        $data['student_category'] = required_param('student_category', PARAM_INT);
-        $data['ovz_type']         = optional_param('ovz_type', null, PARAM_INT);
+        // Множественный выбор: checkbox[] из формы.
+        $cats_raw = optional_param_array('student_categories', [], PARAM_INT);
+        $ovz_raw  = optional_param_array('ovz_types', [], PARAM_INT);
+        if (empty($cats_raw)) {
+            throw new moodle_exception('Не выбрана ни одна категория учащегося');
+        }
+        $data['student_category'] = \local_unics\student_helper::to_csv($cats_raw);
+        $data['ovz_type']         = \local_unics\student_helper::to_csv($ovz_raw);
         $data['difficulty_level'] = required_param('difficulty_level', PARAM_INT);
         $data['class_number']     = optional_param('class_number', null, PARAM_INT);
         $data['class_letter']     = optional_param('class_letter', '', PARAM_TEXT);
@@ -106,29 +112,34 @@ echo '</div></div>';
 
 // Поля учащегося
 if ($is_student) {
-    $cat = (int)$profile->student_category;
+    $cats_selected = \local_unics\student_helper::parse_csv($profile->student_category ?? '');
+    $ovz_selected  = \local_unics\student_helper::parse_csv($profile->ovz_type ?? '');
+    $has_ovz_cat = in_array(1, $cats_selected, true);
+
     echo '<div class="card mb-3"><div class="card-header">Профиль учащегося</div><div class="card-body">';
 
-    // Категория
-    echo '<div class="mb-2"><label class="form-label">Категория <span class="text-danger">*</span></label>
-        <select name="student_category" id="student_category" class="form-select" onchange="toggleOvz()">';
+    // Категории - checkboxes (могут быть несколько).
+    echo '<div class="mb-3"><label class="form-label d-block">Категории <span class="text-danger">*</span></label>';
     foreach ($category_options as $v => $l) {
-        $sel = ($cat === $v) ? 'selected' : '';
-        echo "<option value=\"{$v}\" {$sel}>{$l}</option>";
+        $chk = in_array($v, $cats_selected, true) ? 'checked' : '';
+        echo "<div class=\"form-check\">
+            <input class=\"form-check-input\" type=\"checkbox\" name=\"student_categories[]\" value=\"{$v}\" id=\"cat_{$v}\" {$chk} onchange=\"toggleOvz()\">
+            <label class=\"form-check-label\" for=\"cat_{$v}\">{$l}</label>
+        </div>";
     }
-    echo '</select></div>';
+    echo '</div>';
 
-    // Вид ОВЗ
-    $ovz = (int)($profile->ovz_type ?? 0);
-    $hide = ($cat !== 1) ? 'style="display:none"' : '';
-    echo "<div class=\"mb-2\" id=\"ovz_block\" {$hide}><label class=\"form-label\">Вид ОВЗ</label>
-        <select name=\"ovz_type\" class=\"form-select\">
-        <option value=\"\">— не указан —</option>";
+    // Виды ОВЗ - checkboxes (показываются только если в категориях отмечен «ОВЗ» = 1).
+    $hide = !$has_ovz_cat ? 'style="display:none"' : '';
+    echo "<div class=\"mb-3\" id=\"ovz_block\" {$hide}><label class=\"form-label d-block\">Виды ОВЗ</label>";
     foreach ($ovz_options as $v => $l) {
-        $sel = ($ovz === $v) ? 'selected' : '';
-        echo "<option value=\"{$v}\" {$sel}>{$l}</option>";
+        $chk = in_array($v, $ovz_selected, true) ? 'checked' : '';
+        echo "<div class=\"form-check\">
+            <input class=\"form-check-input\" type=\"checkbox\" name=\"ovz_types[]\" value=\"{$v}\" id=\"ovz_{$v}\" {$chk}>
+            <label class=\"form-check-label\" for=\"ovz_{$v}\">{$l}</label>
+        </div>";
     }
-    echo '</select></div>';
+    echo '</div>';
 
     // Уровень сложности
     $lvl = (int)($profile->difficulty_level ?? 2);
@@ -157,8 +168,8 @@ if ($is_student) {
 
     echo '</div></div>';
     echo '<script>function toggleOvz(){
-        var v=document.getElementById("student_category").value;
-        document.getElementById("ovz_block").style.display=(v=="1")?"":"none";
+        var cb=document.getElementById("cat_1");
+        document.getElementById("ovz_block").style.display=(cb && cb.checked)?"":"none";
     }</script>';
 }
 

@@ -17,8 +17,8 @@ $string['username']              = 'Логин';
 $string['password']              = 'Пароль';
 $string['organization']          = 'Организация';
 $string['unics_role']            = 'Роль в УНИКС';
-$string['select_role']           = '— Выберите роль —';
-$string['select_org']            = '— Выберите организацию —';
+$string['select_role']           = '- Выберите роль -';
+$string['select_org']            = '- Выберите организацию -';
 
 // Роли УНИКС
 $string['role_teacher']          = 'Педагог';
@@ -35,10 +35,11 @@ $string['category_family']       = 'Семейное обучение';
 $string['category_treatment']    = 'Длительное лечение';
 $string['category_gifted']       = 'Одарённый ребёнок';
 $string['difficulty_level']      = 'Уровень подготовки';
-$string['level_weak']            = '1 — Слабый';
-$string['level_normal']          = '2 — Обычный';
-$string['level_gifted']          = '3 — Одарённый';
+$string['level_weak']            = '1 - Слабый';
+$string['level_normal']          = '2 - Обычный';
+$string['level_gifted']          = '3 - Одарённый';
 $string['class_number']          = 'Класс';
+$string['class_letter']          = 'Буква класса';
 $string['special_needs']         = 'Особые образовательные потребности';
 $string['ovz_type']              = 'Вид ОВЗ';
 $string['ovz_blind']             = 'Слабовидящий';
@@ -62,11 +63,11 @@ $string['edit']                  = 'Редактировать';
 $string['no_users']              = 'Пользователи не найдены';
 
 // Привязки
-$string['teacher_student']       = 'Педагог — Учащийся';
-$string['parent_student']        = 'Родитель — Учащийся';
-$string['select_teacher']        = '— Выберите педагога —';
-$string['select_student']        = '— Выберите учащегося —';
-$string['select_parent']         = '— Выберите родителя —';
+$string['teacher_student']       = 'Педагог - Учащийся';
+$string['parent_student']        = 'Родитель - Учащийся';
+$string['select_teacher']        = '- Выберите педагога -';
+$string['select_student']        = '- Выберите учащегося -';
+$string['select_parent']         = '- Выберите родителя -';
 $string['assign']                = 'Привязать';
 $string['assigned_pairs']        = 'Существующие привязки';
 $string['remove']                = 'Удалить';

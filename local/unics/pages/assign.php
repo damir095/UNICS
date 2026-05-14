@@ -87,12 +87,12 @@ if ($is_methodist && $methodist_org_id) {
 }
 
 // Списки для фильтров
-$orgs_menu = [0 => '— все организации —'];
+$orgs_menu = [0 => '- все организации -'];
 foreach ($DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name') as $o) {
     $orgs_menu[$o->id] = $o->name;
 }
 
-$classes_menu = [0 => '— все классы —'];
+$classes_menu = [0 => '- все классы -'];
 for ($i = 1; $i <= 11; $i++) {
     $classes_menu[$i] = "{$i} класс";
 }
@@ -124,7 +124,7 @@ $students = $DB->get_records_sql(
 );
 
 // ----------------------------------------------------------------
-// Педагоги и родители. Для методиста — только своей организации.
+// Педагоги и родители. Для методиста - только своей организации.
 // ----------------------------------------------------------------
 $scope_org_id = ($is_methodist && $methodist_org_id) ? $methodist_org_id : 0;
 
@@ -199,7 +199,7 @@ echo html_writer::link($back_url, $back_label,
 // ================================================================
 // Блок: Педагог → Учащийся
 // ================================================================
-echo $OUTPUT->heading('Педагог — Учащийся', 4);
+echo $OUTPUT->heading('Педагог - Учащийся', 4);
 
 // --- Панель фильтров ---
 $filter_url = new moodle_url('/local/unics/pages/assign.php');
@@ -268,7 +268,7 @@ if (empty($students)) {
 
     foreach ($students as $s) {
         $fio = htmlspecialchars("{$s->lastname} {$s->firstname}"
-            . ($s->class_number ? " — {$s->class_number} кл." : '')
+            . ($s->class_number ? " - {$s->class_number} кл." : '')
             . ($s->org_name ? " ({$s->org_name})" : ''));
 
         echo html_writer::start_tag('div', ['class' => 'form-check']);
@@ -308,7 +308,7 @@ if (!empty($ts_pairs)) {
         $table->data[] = [
             "{$pair->t_last} {$pair->t_first}",
             "{$pair->s_last} {$pair->s_first}",
-            $pair->class_number ? "{$pair->class_number} кл." : '—',
+            $pair->class_number ? "{$pair->class_number} кл." : '-',
             html_writer::link($remove_url, 'Убрать', ['class' => 'btn btn-sm btn-outline-danger']),
         ];
     }
@@ -320,7 +320,7 @@ if (!empty($ts_pairs)) {
 // ================================================================
 // Блок: Родитель → Учащийся
 // ================================================================
-echo $OUTPUT->heading('Родитель — Учащийся', 4);
+echo $OUTPUT->heading('Родитель - Учащийся', 4);
 
 $assign_ps_url = new moodle_url('/local/unics/pages/assign.php',
     ['action' => 'assign_ps', 'sesskey' => sesskey()]);

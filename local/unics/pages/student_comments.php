@@ -20,7 +20,7 @@ $student  = $DB->get_record('unics_students', ['id' => $student_id], '*', MUST_E
 $mdl_user = $DB->get_record('user', ['id' => $student->mdl_user_id, 'deleted' => 0], '*', MUST_EXIST);
 
 // Педагог может комментировать только своих учащихся;
-// методист — всех учащихся своей организации.
+// методист - всех учащихся своей организации.
 if (!$is_admin) {
     $is_methodist = local_unics_is_methodist();
     if ($is_methodist) {
@@ -44,7 +44,7 @@ if (!$is_admin) {
     }
 }
 
-// Если указан cmid — проверяем и получаем информацию об активности
+// Если указан cmid - проверяем и получаем информацию об активности
 $cm_info      = null;
 $module_name  = '';
 $module_label = '';
@@ -62,7 +62,7 @@ if ($cmid > 0) {
         $module_label = ($type_labels[$cm_info->modname] ?? ucfirst($cm_info->modname))
                       . ': ' . ($module_name ?: '#' . $cm_info->instance);
     } else {
-        $cmid = 0; // некорректный cmid — сбрасываем
+        $cmid = 0; // некорректный cmid - сбрасываем
     }
 }
 

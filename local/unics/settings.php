@@ -105,10 +105,10 @@ if ($hassiteconfig) {
     $settings->add(new admin_setting_configselect(
         'local_unics/ai_provider',
         'Провайдер ИИ',
-        'GigaChat — Сбербанк, только для РФ, нужен Sber Developer аккаунт.',
+        'GigaChat - Сбербанк, только для РФ, нужен Sber Developer аккаунт.',
         'gigachat',
         [
-            'gigachat' => 'GigaChat Sber — бесплатно для РФ, нужен Sber Developer аккаунт',
+            'gigachat' => 'GigaChat Sber - бесплатно для РФ, нужен Sber Developer аккаунт',
         ]
     ));
 
@@ -122,7 +122,7 @@ if ($hassiteconfig) {
     $settings->add(new admin_setting_configtext(
         'local_unics/ai_model',
         'Модель (необязательно)',
-        'GigaChat, GigaChat-Plus. Оставьте пустым — будет выбрана модель по умолчанию.',
+        'GigaChat, GigaChat-Plus. Оставьте пустым - будет выбрана модель по умолчанию.',
         '', PARAM_TEXT
     ));
 

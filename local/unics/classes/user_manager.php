@@ -35,12 +35,26 @@ class unics_user_manager {
         // 3. Создаём расширение профиля в зависимости от роли
         switch ((int)$data['unics_role']) {
             case 7: // Учащийся
+                // category / ovz_type приходят как CSV-строки "1,3" из формы.
+                // Если пришёл int (старый код / API), нормализуем через helper.
+                $category_csv = is_array($data['student_category'] ?? null)
+                    ? \local_unics\student_helper::to_csv($data['student_category'])
+                    : (string)($data['student_category'] ?? '2');
+                $ovz_csv = is_array($data['ovz_type'] ?? null)
+                    ? \local_unics\student_helper::to_csv($data['ovz_type'])
+                    : (string)($data['ovz_type'] ?? '');
+
+                // Виды ОВЗ имеют смысл только если в категориях отмечен «ОВЗ» (1).
+                $has_ovz_cat = in_array(1, \local_unics\student_helper::parse_csv($category_csv), true);
+                if (!$has_ovz_cat) {
+                    $ovz_csv = '';
+                }
+
                 $DB->insert_record('unics_students', (object)[
                     'mdl_user_id'      => $mdl_user_id,
                     'organization_id'  => $data['organization_id'],
-                    'category'         => $data['student_category'],
-                    'ovz_type'         => ((int)$data['student_category'] === 1 && !empty($data['ovz_type']))
-                                           ? (int)$data['ovz_type'] : null,
+                    'category'         => $category_csv !== '' ? $category_csv : '2',
+                    'ovz_type'         => $ovz_csv !== '' ? $ovz_csv : null,
                     'difficulty_level' => $data['difficulty_level'],
                     'class_number'     => $data['class_number'] ?? null,
                     'class_letter'     => !empty($data['class_letter']) ? $data['class_letter'] : null,
@@ -115,7 +129,7 @@ class unics_user_manager {
 
         if ($org_id > 0) {
             $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
-                           s.id AS student_id, s.category, s.difficulty_level,
+                           s.id AS student_id, s.category, s.ovz_type, s.difficulty_level,
                            s.class_number, s.class_letter
                     FROM {user} u
                     JOIN {unics_students} s ON s.mdl_user_id = u.id
@@ -140,7 +154,7 @@ class unics_user_manager {
     public static function get_teachers(int $org_id): array {
         global $DB;
 
-        // Роли 4 (методист), 5 (педагог), 6 (тьютор) — все имеют запись в unics_teachers
+        // Роли 4 (методист), 5 (педагог), 6 (тьютор) - все имеют запись в unics_teachers
         if ($org_id > 0) {
             $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
                            t.id AS teacher_id, t.subjects, uo.unics_role
@@ -251,9 +265,18 @@ class unics_user_manager {
         // Обновить расширенный профиль учащегося
         $student = $DB->get_record('unics_students', ['mdl_user_id' => $mdl_user_id]);
         if ($student) {
-            $student->category         = $data['student_category'] ?? $student->category;
-            $student->ovz_type         = ((int)($data['student_category'] ?? $student->category) === 1 && !empty($data['ovz_type']))
-                                           ? (int)$data['ovz_type'] : null;
+            if (array_key_exists('student_category', $data)) {
+                $student->category = is_array($data['student_category'])
+                    ? \local_unics\student_helper::to_csv($data['student_category'])
+                    : (string)$data['student_category'];
+            }
+            if (array_key_exists('ovz_type', $data)) {
+                $ovz_csv = is_array($data['ovz_type'])
+                    ? \local_unics\student_helper::to_csv($data['ovz_type'])
+                    : (string)($data['ovz_type'] ?? '');
+                $cats = \local_unics\student_helper::parse_csv($student->category);
+                $student->ovz_type = (in_array(1, $cats, true) && $ovz_csv !== '') ? $ovz_csv : null;
+            }
             $student->difficulty_level = $data['difficulty_level'] ?? $student->difficulty_level;
             $student->class_number     = $data['class_number'] ?? $student->class_number;
             $student->class_letter     = $data['class_letter'] ?? $student->class_letter;
@@ -335,7 +358,7 @@ class unics_user_manager {
     }
 
     /**
-     * Публичный метод — установить/обновить уровень сложности учащегося в профиле Moodle.
+     * Публичный метод - установить/обновить уровень сложности учащегося в профиле Moodle.
      * Вызывается при создании учащегося и при изменении его difficulty_level.
      */
     public static function set_student_level(int $mdl_user_id, int $level): void {

@@ -99,10 +99,10 @@ echo '</div>';
 echo '<div class="card mb-4 bg-light">';
 echo '<div class="card-body py-2">';
 echo '<strong>Как зарабатывать баллы:</strong> ';
-echo '<span class="badge badge-secondary mr-1">+20 — новый УМК</span>';
-echo '<span class="badge badge-secondary mr-1">+10 — тест сдан</span>';
-echo '<span class="badge badge-secondary mr-1">+50 — значок</span>';
-echo '<span class="badge badge-secondary">+100 — повышение уровня</span>';
+echo '<span class="badge badge-secondary mr-1">+20 - новый УМК</span>';
+echo '<span class="badge badge-secondary mr-1">+10 - тест сдан</span>';
+echo '<span class="badge badge-secondary mr-1">+50 - значок</span>';
+echo '<span class="badge badge-secondary">+100 - повышение уровня</span>';
 echo '</div>';
 echo '</div>';
 

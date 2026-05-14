@@ -18,7 +18,7 @@ if (!$is_admin && !$is_teacher) {
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/my_students.php'));
-$PAGE->set_title('Мои учащиеся — УНИКС');
+$PAGE->set_title('Мои учащиеся - УНИКС');
 $PAGE->set_heading('Мои учащиеся');
 $PAGE->set_pagelayout('standard');
 
@@ -29,10 +29,10 @@ $teacher_record = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]
 $is_methodist   = $is_teacher && !$is_admin && local_unics_is_methodist();
 
 if ($is_admin && !$teacher_record) {
-    // Администратор без профиля педагога — все учащиеся системы.
+    // Администратор без профиля педагога - все учащиеся системы.
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                s.class_number, s.category, s.difficulty_level,
+                s.class_number, s.category, s.ovz_type, s.difficulty_level,
                 o.name AS org_name,
                 NULL AS teacher_lastname, NULL AS teacher_firstname
          FROM {unics_students} s
@@ -43,11 +43,11 @@ if ($is_admin && !$teacher_record) {
     );
     $mode = 'admin';
 } elseif ($is_methodist) {
-    // Методист — все учащиеся его организации (организация берётся из unics_teachers).
+    // Методист - все учащиеся его организации (организация берётся из unics_teachers).
     if ($teacher_record && $teacher_record->organization_id) {
         $students = $DB->get_records_sql(
             "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                    s.class_number, s.category, s.difficulty_level,
+                    s.class_number, s.category, s.ovz_type, s.difficulty_level,
                     o.name AS org_name,
                     NULL AS teacher_lastname, NULL AS teacher_firstname
              FROM {unics_students} s
@@ -62,10 +62,10 @@ if ($is_admin && !$teacher_record) {
     }
     $mode = 'methodist';
 } elseif ($teacher_record) {
-    // Педагог — только привязанные учащиеся.
+    // Педагог - только привязанные учащиеся.
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                s.class_number, s.category, s.difficulty_level,
+                s.class_number, s.category, s.ovz_type, s.difficulty_level,
                 o.name AS org_name,
                 ts.id AS ts_id
          FROM {unics_teacher_student} ts
@@ -149,8 +149,8 @@ $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($students as $s) {
     $fio = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
-    $cat = $categories[$s->category] ?? '—';
-    $lvl = $levels[$s->difficulty_level] ?? '—';
+    $cat = \local_unics\student_helper::format_categories($s) ?: '-';
+    $lvl = $levels[$s->difficulty_level] ?? '-';
 
     $actions = html_writer::link(
         new moodle_url('/local/unics/pages/generate_umk.php', ['student_id' => $s->student_id]),
@@ -166,7 +166,7 @@ foreach ($students as $s) {
 
     $table->data[] = [
         html_writer::tag('strong', htmlspecialchars($fio)),
-        $s->class_number ? "{$s->class_number} кл." : '—',
+        $s->class_number ? "{$s->class_number} кл." : '-',
         $cat,
         $lvl,
         htmlspecialchars($s->org_name),

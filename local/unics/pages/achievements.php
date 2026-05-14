@@ -50,7 +50,7 @@ if (!$access) {
 
 $PAGE->set_context($ctx);
 $PAGE->set_url(new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student_id]));
-$PAGE->set_title('Достижения — УНИКС');
+$PAGE->set_title('Достижения - УНИКС');
 $PAGE->set_heading('Достижения учащегося');
 $PAGE->set_pagelayout('standard');
 
@@ -62,7 +62,7 @@ $total_got  = count($awards);
 
 echo $OUTPUT->header();
 
-// Кнопка назад — только для педагога/администратора/родителя, не для самого учащегося
+// Кнопка назад - только для педагога/администратора/родителя, не для самого учащегося
 if ($USER->id !== $student->mdl_user_id) {
     echo html_writer::link(
         new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $student_id]),

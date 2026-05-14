@@ -72,8 +72,8 @@
         <FIELD NAME="id"               TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
         <FIELD NAME="mdl_user_id"      TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="organization_id"  TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="category"         TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="2"  SEQUENCE="false"/>
-        <FIELD NAME="ovz_type"         TYPE="int"  LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="category"         TYPE="char" LENGTH="32" NOTNULL="true"  DEFAULT="2"  SEQUENCE="false" COMMENT="CSV id-ов категорий (1=ОВЗ, 2=семейное, 3=лечение, 4=одарённые), напр. '1,3'"/>
+        <FIELD NAME="ovz_type"         TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="CSV id-ов видов ОВЗ (1=слабовидящие ... 6=иное), напр. '1,4'"/>
         <FIELD NAME="difficulty_level" TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="2"  SEQUENCE="false"/>
         <FIELD NAME="class_number"     TYPE="int"  LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="class_letter"     TYPE="char" LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
@@ -237,7 +237,7 @@
         <FIELD NAME="teacher_mdl_user_id"  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="body"                 TYPE="text"             NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="created_at"           TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="unix timestamp"/>
-        <FIELD NAME="cmid"                 TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="course_modules.id — привязка к конкретной активности"/>
+        <FIELD NAME="cmid"                 TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="course_modules.id - привязка к конкретной активности"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
@@ -256,9 +256,9 @@
         <FIELD NAME="student_ids"         TYPE="text"             NOTNULL="false" SEQUENCE="false" COMMENT="JSON-массив student.id из unics_students"/>
         <FIELD NAME="generate_text"       TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false"/>
         <FIELD NAME="generate_audio"      TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false"/>
-        <FIELD NAME="generate_quiz"       TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false" COMMENT="1 — генерировать тест"/>
-        <FIELD NAME="generate_assignment" TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 — генерировать задание"/>
-        <FIELD NAME="generate_video"      TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 — генерировать видеопрезентацию"/>
+        <FIELD NAME="generate_quiz"       TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false" COMMENT="1 - генерировать тест"/>
+        <FIELD NAME="generate_assignment" TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 - генерировать задание"/>
+        <FIELD NAME="generate_video"      TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 - генерировать видеопрезентацию"/>
         <FIELD NAME="status"              TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="1" SEQUENCE="false"/>
         <FIELD NAME="error_message"       TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="created_at"          TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
@@ -314,7 +314,7 @@
       <FIELDS>
         <FIELD NAME="id"          TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
         <FIELD NAME="student_id"  TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
-        <FIELD NAME="points"      TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false" COMMENT="Положительные — начисление, отрицательные — списание"/>
+        <FIELD NAME="points"      TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false" COMMENT="Положительные - начисление, отрицательные - списание"/>
         <FIELD NAME="reason_type" TYPE="int"  LENGTH="2"   NOTNULL="true"  SEQUENCE="false" COMMENT="1=УМК 2=значок 3=уровень 4=тест 5=покупка"/>
         <FIELD NAME="reason_text" TYPE="char" LENGTH="200" NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="created_at"  TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>

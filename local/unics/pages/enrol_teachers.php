@@ -27,7 +27,7 @@ if ($is_methodist) {
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_teachers.php'));
-$PAGE->set_title('Запись педагогов на курс — УНИКС');
+$PAGE->set_title('Запись педагогов на курс - УНИКС');
 $PAGE->set_heading('Запись педагогов на курс');
 $PAGE->set_pagelayout('admin');
 
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         if ($et_role) {
             assign_capability('moodle/site:accessallgroups', CAP_PROHIBIT, $et_role->id, $ctx_course->id, true);
         }
-        // Для teacher (тьютор) — тоже
+        // Для teacher (тьютор) - тоже
         $t_role = $DB->get_record('role', ['shortname' => 'teacher'], 'id');
         if ($t_role) {
             assign_capability('moodle/site:accessallgroups', CAP_PROHIBIT, $t_role->id, $ctx_course->id, true);
@@ -144,20 +144,20 @@ if ($is_methodist && $methodist_org_id) {
 
 // Курсы
 $courses_raw  = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
-$courses_menu = [0 => '— выберите курс —'];
+$courses_menu = [0 => '- выберите курс -'];
 foreach ($courses_raw as $c) {
     $courses_menu[$c->id] = $c->fullname;
 }
 
 // Организации
 $orgs_raw  = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
-$orgs_menu = [0 => '— все организации —'];
+$orgs_menu = [0 => '- все организации -'];
 foreach ($orgs_raw as $o) {
     $orgs_menu[$o->id] = $o->name;
 }
 
 // Группы выбранного курса
-$groups_menu = [0 => '— без группы —'];
+$groups_menu = [0 => '- без группы -'];
 if ($selected_course > 0) {
     foreach (groups_get_all_groups($selected_course) as $g) {
         $groups_menu[$g->id] = $g->name;
@@ -316,7 +316,7 @@ if ($selected_course > 0) {
 
     echo html_writer::tag('div',
         html_writer::tag('small',
-            'Если указана новая группа — она будет создана и приоритетна над выбором из списка.',
+            'Если указана новая группа - она будет создана и приоритетна над выбором из списка.',
             ['class' => 'text-muted']
         ),
         ['class' => 'col-12 mt-1']
@@ -367,7 +367,7 @@ $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($teachers as $t) {
     $fio  = htmlspecialchars(trim("{$t->lastname} {$t->firstname} " . ($t->middlename ?? '')));
-    $role = $unics_role_labels[$t->unics_role] ?? '—';
+    $role = $unics_role_labels[$t->unics_role] ?? '-';
 
     $is_enrolled  = isset($enrolled_users[$t->teacher_id]);
     $status_badge = $is_enrolled
@@ -385,14 +385,14 @@ foreach ($teachers as $t) {
     $groups_cell = $gnames
         ? implode(', ', array_map(fn($g) => html_writer::tag('span', htmlspecialchars($g),
             ['class' => 'badge badge-info mr-1']), $gnames))
-        : html_writer::tag('span', '—', ['class' => 'text-muted']);
+        : html_writer::tag('span', '-', ['class' => 'text-muted']);
 
     $row = new html_table_row([
         $checkbox,
         html_writer::tag('strong', $fio),
         $role,
-        htmlspecialchars($t->subjects ?? '—'),
-        htmlspecialchars($t->org_name ?? '—'),
+        htmlspecialchars($t->subjects ?? '-'),
+        htmlspecialchars($t->org_name ?? '-'),
         $status_badge,
         $groups_cell,
     ]);

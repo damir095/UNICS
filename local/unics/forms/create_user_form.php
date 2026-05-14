@@ -58,27 +58,35 @@ class unics_create_user_form extends moodleform {
         // --- Поля учащегося (показываются только если роль = 7) ---
         $mform->addElement('header', 'student_data', 'Данные учащегося');
 
-        $categories = [
-            '1' => get_string('category_ovz', 'local_unics'),
-            '2' => get_string('category_family', 'local_unics'),
-            '3' => get_string('category_treatment', 'local_unics'),
-            '4' => get_string('category_gifted', 'local_unics'),
-        ];
-        $mform->addElement('select', 'student_category', get_string('student_category', 'local_unics'), $categories);
+        // Категории учащегося. Лейбл столбца показываем только у первого чекбокса -
+        // последующие выравниваются под ним, что даёт чистую вертикальную колонку.
+        $mform->addElement('advcheckbox', 'cat_1', get_string('student_category', 'local_unics'),
+            get_string('category_ovz',       'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'cat_2', '',
+            get_string('category_family',    'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'cat_3', '',
+            get_string('category_treatment', 'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'cat_4', '',
+            get_string('category_gifted',    'local_unics'), null, [0, 1]);
 
-        // Подкатегория ОВЗ — только если выбрана категория ОВЗ (1)
-        $ovz_types = [
-            ''  => '— выберите вид ОВЗ —',
-            '1' => get_string('ovz_blind', 'local_unics'),
-            '2' => get_string('ovz_deaf', 'local_unics'),
-            '3' => get_string('ovz_motor', 'local_unics'),
-            '4' => get_string('ovz_zpd', 'local_unics'),
-            '5' => get_string('ovz_ras', 'local_unics'),
-            '6' => get_string('ovz_other', 'local_unics'),
-        ];
-        $mform->addElement('select', 'ovz_type', get_string('ovz_type', 'local_unics'), $ovz_types);
-        $mform->hideIf('ovz_type', 'unics_role', 'neq', '7');
-        $mform->hideIf('ovz_type', 'student_category', 'neq', '1');
+        // Виды ОВЗ. Видны только если в категориях отмечен «ОВЗ» (cat_1).
+        $mform->addElement('advcheckbox', 'ovz_1', get_string('ovz_type', 'local_unics'),
+            get_string('ovz_blind', 'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'ovz_2', '',
+            get_string('ovz_deaf',  'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'ovz_3', '',
+            get_string('ovz_motor', 'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'ovz_4', '',
+            get_string('ovz_zpd',   'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'ovz_5', '',
+            get_string('ovz_ras',   'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'ovz_6', '',
+            get_string('ovz_other', 'local_unics'), null, [0, 1]);
+
+        foreach (['ovz_1','ovz_2','ovz_3','ovz_4','ovz_5','ovz_6'] as $el) {
+            $mform->hideIf($el, 'cat_1', 'eq', '0');
+            $mform->hideIf($el, 'unics_role', 'neq', '7');
+        }
 
         $levels = [
             '1' => get_string('level_weak', 'local_unics'),
@@ -91,7 +99,7 @@ class unics_create_user_form extends moodleform {
         $classes = array_combine(range(1, 11), range(1, 11));
         $mform->addElement('select', 'class_number', get_string('class_number', 'local_unics'), $classes);
 
-        $letters = ['' => '— без буквы —', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
+        $letters = ['' => '- без буквы -', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
                     'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
         $mform->addElement('select', 'class_letter', get_string('class_letter', 'local_unics'), $letters);
         $mform->setType('class_letter', PARAM_TEXT);
@@ -103,7 +111,7 @@ class unics_create_user_form extends moodleform {
 
         // Показывать блок учащегося только если выбрана роль 7
         $mform->hideIf('student_data', 'unics_role', 'neq', '7');
-        $mform->hideIf('student_category', 'unics_role', 'neq', '7');
+        $mform->hideIf('student_categories', 'unics_role', 'neq', '7');
         $mform->hideIf('difficulty_level', 'unics_role', 'neq', '7');
         $mform->hideIf('class_number', 'unics_role', 'neq', '7');
         $mform->hideIf('special_needs', 'unics_role', 'neq', '7');
@@ -128,6 +136,35 @@ class unics_create_user_form extends moodleform {
         $this->add_action_buttons(true, get_string('create_user', 'local_unics'));
     }
 
+    /**
+     * Сворачивает плоские advcheckbox'ы в CSV-строки `student_category` и `ovz_type`.
+     */
+    public function get_data() {
+        $data = parent::get_data();
+        if (!$data) {
+            return $data;
+        }
+
+        $cats = [];
+        foreach ([1, 2, 3, 4] as $i) {
+            if (!empty($data->{'cat_' . $i})) {
+                $cats[] = $i;
+            }
+        }
+        $data->student_category = \local_unics\student_helper::to_csv($cats);
+
+        $ovz = [];
+        foreach ([1, 2, 3, 4, 5, 6] as $i) {
+            if (!empty($data->{'ovz_' . $i})) {
+                $ovz[] = $i;
+            }
+        }
+        // Виды ОВЗ имеют смысл только если в категориях отмечен «ОВЗ» (1).
+        $data->ovz_type = in_array(1, $cats, true) ? \local_unics\student_helper::to_csv($ovz) : '';
+
+        return $data;
+    }
+
     public function validation($data, $files) {
         global $DB;
         $errors = parent::validation($data, $files);
@@ -138,6 +175,18 @@ class unics_create_user_form extends moodleform {
 
         if (!empty($data['email']) && $DB->record_exists('user', ['email' => $data['email']])) {
             $errors['email'] = 'Пользователь с таким email уже существует';
+        }
+
+        // Для учащегося - должна быть выбрана хотя бы одна категория.
+        if ((int)($data['unics_role'] ?? 0) === 7) {
+            $any = false;
+            foreach (['cat_1','cat_2','cat_3','cat_4'] as $k) {
+                if (!empty($data[$k])) { $any = true; break; }
+            }
+            if (!$any) {
+                // Ошибка крепится к первому чекбоксу - он несёт лейбл колонки «Категория учащегося».
+                $errors['cat_1'] = 'Выберите хотя бы одну категорию учащегося';
+            }
         }
 
         return $errors;

@@ -79,10 +79,10 @@ if (empty($users)) {
 
     foreach ($users as $user) {
         $fio = trim("{$user->lastname} {$user->firstname} {$user->middlename}");
-        $role_label = $role_labels[$user->unics_role] ?? '—';
+        $role_label = $role_labels[$user->unics_role] ?? '-';
 
         // Класс: только для учащихся (роль 7)
-        $class_cell = '—';
+        $class_cell = '-';
         if ((int)$user->unics_role === 7 && !empty($user->class_number)) {
             $class_cell = $user->class_number . ($user->class_letter ?? '');
         }

@@ -54,12 +54,19 @@ class process_ai_queue extends \core\task\scheduled_task {
                 $umk_level  = (int)$umk->difficulty_level;
                 $avg_score  = $generator->get_avg_score((int)$first_student->mdl_user_id);
 
+                $cats_arr = \local_unics\student_helper::get_categories($first_student);
+                $ovz_arr  = \local_unics\student_helper::get_ovz_types($first_student);
+
                 $profile = [
-                    'category'         => (int)$first_student->category,
+                    // Бэк-компат - первая категория как скаляр.
+                    'category'         => $cats_arr[0] ?? 2,
+                    // Полные массивы - ai_generator решает, как использовать.
+                    'categories'       => $cats_arr,
+                    'ovz_types'        => $ovz_arr,
                     'difficulty_level' => $umk_level,
                     'class_number'     => (int)($first_student->class_number ?? 5),
                     'class_letter'     => $first_student->class_letter ?? '',
-                    'ovz_type'         => (int)($first_student->ovz_type ?? 0),
+                    'ovz_type'         => $ovz_arr[0] ?? 0,
                     'special_needs'    => $first_student->special_needs ?? '',
                     'avg_score'        => $avg_score,
                 ];
@@ -153,7 +160,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                         $assign_cmid = $builder->add_assignment(
                             (int)$umk->mdl_course_id,
                             $section,
-                            $umk->title . ' — задание',
+                            $umk->title . ' - задание',
                             $assign_desc
                         );
                         $builder->restrict_activity_to_group($assign_cmid, $group_id);
@@ -336,7 +343,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                     'processed_at' => date('Y-m-d H:i:s'),
                 ]);
 
-                mtrace("UMK #{$umk->id} «{$umk->title}» — готов. Уровень: {$level_label}, учащихся: {$enrolled_count}, секция: {$section}");
+                mtrace("UMK #{$umk->id} «{$umk->title}» - готов. Уровень: {$level_label}, учащихся: {$enrolled_count}, секция: {$section}");
 
             } catch (\Throwable $e) {
                 $DB->update_record('unics_ai_queue', (object)[
@@ -346,7 +353,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                     'processed_at'  => date('Y-m-d H:i:s'),
                 ]);
                 $DB->set_field('unics_umk', 'status', 4, ['id' => $task->umk_id]);
-                mtrace("UMK #{$task->umk_id} — ошибка: " . $e->getMessage());
+                mtrace("UMK #{$task->umk_id} - ошибка: " . $e->getMessage());
             }
         }
     }

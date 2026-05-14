@@ -12,7 +12,7 @@ class achievement_manager {
 
     /**
      * Проверить и выдать все применимые значки.
-     * При выдаче нового значка — начисляет баллы и отправляет уведомления.
+     * При выдаче нового значка - начисляет баллы и отправляет уведомления.
      * Возвращает список новых badge_type.
      */
     public static function evaluate_student(int $student_id, int $mdl_user_id): array {

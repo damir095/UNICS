@@ -64,7 +64,7 @@ class course_builder {
 
     /**
      * Создать тест с вопросами, сгенерированными ИИ (Moodle 4.x).
-     * $questions — массив из ai_generator::generate_quiz().
+     * $questions - массив из ai_generator::generate_quiz().
      * Возвращает cmid теста.
      */
     public function add_quiz_with_questions(
@@ -75,7 +75,7 @@ class course_builder {
     ): int {
         global $DB;
 
-        $quiz_cmid = $this->add_quiz($course_id, $section_num, $title . ' — тест');
+        $quiz_cmid = $this->add_quiz($course_id, $section_num, $title . ' - тест');
         $quiz_id   = (int)$DB->get_field('course_modules', 'instance', ['id' => $quiz_cmid]);
 
         // В Moodle 4.x quiz требует хотя бы одной секции
@@ -204,7 +204,7 @@ class course_builder {
             ]);
 
             // question_references (Moodle 4.x)
-            // usingcontextid must be the QUIZ MODULE context — qbank_helper.php
+            // usingcontextid must be the QUIZ MODULE context - qbank_helper.php
             // filters by quizcontextid = context_module::instance(cmid)->id.
             if ($has_qref && $qbe_id) {
                 $DB->insert_record('question_references', (object)[
@@ -351,8 +351,8 @@ class course_builder {
 
     /**
      * Создать HTML5-видеопрезентацию из массива слайдов (mod_page).
-     * $slides      — массив из ai_generator::generate_video_script().
-     * $slide_audios — индексированный массив бинарных WAV-строк (по одной на слайд).
+     * $slides      - массив из ai_generator::generate_video_script().
+     * $slide_audios - индексированный массив бинарных WAV-строк (по одной на слайд).
      *                 Пустая строка = нет аудио для этого слайда.
      * Возвращает cmid.
      */
@@ -647,7 +647,7 @@ HTML;
 
     /**
      * Создать или получить Moodle-группу для уровня сложности + тема.
-     * idnumber = umk_lvl{level}_c{course_id}_{hash(topic)} — гарантирует уникальность.
+     * idnumber = umk_lvl{level}_c{course_id}_{hash(topic)} - гарантирует уникальность.
      */
     public function get_or_create_level_group(int $course_id, int $level, string $topic): int {
         global $DB, $CFG;
@@ -664,7 +664,7 @@ HTML;
 
         $data           = new \stdClass();
         $data->courseid = $course_id;
-        $data->name     = mb_substr($topic, 0, 60) . ' — ' . $level_label;
+        $data->name     = mb_substr($topic, 0, 60) . ' - ' . $level_label;
         $data->idnumber = $idnumber;
         return (int)groups_create_group($data);
     }
@@ -684,7 +684,7 @@ HTML;
     /**
      * Ограничить одну активность (course_module) так, чтобы её видел только указанный учащийся.
      * Использует ту же группу-идентификатор, что и restrict_section_to_student_group.
-     * show:false — педагоги с capability ignoreavailabilityrestrictions видят всё.
+     * show:false - педагоги с capability ignoreavailabilityrestrictions видят всё.
      */
     public function restrict_activity_to_student_group(int $cmid, int $course_id, int $mdl_user_id): void {
         global $DB, $CFG;
@@ -716,7 +716,7 @@ HTML;
 
     /**
      * Прикрепить экземпляр модуля к секции курса.
-     * Если секции не существует — создаёт её.
+     * Если секции не существует - создаёт её.
      */
     private function attach_to_section(int $course_id, int $section_num, string $mod_name, int $instance_id): int {
         global $DB;

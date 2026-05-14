@@ -297,5 +297,20 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026050006, 'local', 'unics');
     }
 
+    if ($oldversion < 2026051600) {
+        // Multi-select для category и ovz_type: меняем тип INT → CHAR(32) (CSV).
+        // Существующие значения "1", "2"... остаются валидными CSV из одного элемента.
+        $dbman = $DB->get_manager();
+        $table = new xmldb_table('unics_students');
+
+        $field_cat = new xmldb_field('category', XMLDB_TYPE_CHAR, '32', null, XMLDB_NOTNULL, null, '2', 'organization_id');
+        $dbman->change_field_type($table, $field_cat);
+
+        $field_ovz = new xmldb_field('ovz_type', XMLDB_TYPE_CHAR, '32', null, null, null, null, 'category');
+        $dbman->change_field_type($table, $field_ovz);
+
+        upgrade_plugin_savepoint(true, 2026051600, 'local', 'unics');
+    }
+
     return true;
 }

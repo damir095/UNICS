@@ -30,7 +30,7 @@ class course_template {
 
     /**
      * JSON-строка условного доступа по полю профиля unics_level.
-     * showc[false] — полностью скрывает активность от учащихся другого уровня.
+     * showc[false] - полностью скрывает активность от учащихся другого уровня.
      */
     public static function profile_level_availability(int $level): string {
         return json_encode([
@@ -74,7 +74,7 @@ class course_template {
         if ($num_topics_override !== null && $num_topics_override > 0) {
             $num_topics = max(1, min(20, $num_topics_override));
         }
-        // Если задан список имён тем — он определяет и количество тем.
+        // Если задан список имён тем - он определяет и количество тем.
         if ($topic_names_override !== null && count($topic_names_override) > 0) {
             $num_topics = count($topic_names_override);
         }
@@ -129,7 +129,7 @@ class course_template {
             } elseif ($idx <= $num_topics) {
                 $custom = $topic_names[$idx - 1] ?? null;
                 $section->name    = ($custom !== null && $custom !== '') ? $custom : "Тема {$idx}";
-                $section->summary = '<p><em>Материалы темы разделены по уровням сложности — каждый учащийся видит только свой уровень.</em></p>';
+                $section->summary = '<p><em>Материалы темы разделены по уровням сложности - каждый учащийся видит только свой уровень.</em></p>';
             } else {
                 $section->name    = 'Итоговый контроль';
                 $section->summary = '<p>Итоговый тест по всему курсу.</p>';
@@ -160,7 +160,7 @@ class course_template {
         $field->shortname         = 'unics_level';
         $field->name              = 'Уровень сложности УНИКС';
         $field->datatype          = 'text';
-        $field->description       = '1 — Базовый, 2 — Стандартный, 3 — Продвинутый';
+        $field->description       = '1 - Базовый, 2 - Стандартный, 3 - Продвинутый';
         $field->descriptionformat = FORMAT_HTML;
         $field->categoryid        = $cat->id;
         $field->sortorder         = 1;

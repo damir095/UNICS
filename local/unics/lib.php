@@ -28,9 +28,21 @@ function local_unics_before_http_headers(): void {
     if (!isloggedin() || isguestuser()) {
         return;
     }
+
+    // Toast-уведомления - поллер на всех страницах для залогиненных пользователей.
+    // Подхватывает свежие записи из unics_notifications и показывает их в правом верхнем углу.
+    try {
+        $PAGE->requires->js_call_amd('local_unics/toast_poller', 'init', [[
+            'pollInterval' => 30000,
+            'lookbackSec'  => 90,
+        ]]);
+    } catch (\Throwable $e) {
+        // Нефатально - поллер просто не запустится.
+    }
+
     // Стандартный Moodle-дашборд (`/my/index.php`) и страница «Мои курсы»
     // (`/my/courses.php`) оба имеют pagetype == 'my-index', поэтому различаем по URL.
-    // Учащегося уводим ТОЛЬКО с дашборда, «Мои курсы» оставляем — это его курсы.
+    // Учащегося уводим ТОЛЬКО с дашборда, «Мои курсы» оставляем - это его курсы.
     $path = $PAGE->url ? $PAGE->url->get_path() : '';
     if ($path !== '/my/' && $path !== '/my/index.php') {
         return;
@@ -41,13 +53,13 @@ function local_unics_before_http_headers(): void {
 }
 
 /**
- * Возвращает true, если пользователь — методист.
+ * Возвращает true, если пользователь - методист.
  * Методист = Moodle-роль с shortname='methodist'.
  *
  * Раньше дополнительно требовалось «нет записи в unics_teachers», но
  * user_manager::create_user() для методистов тоже создаёт запись в
  * unics_teachers (там хранится привязка к организации). Поэтому
- * проверяем только Moodle-роль — это единственный надёжный маркер.
+ * проверяем только Moodle-роль - это единственный надёжный маркер.
  *
  * Capability local/unics:viewstudents проверяется отдельно вызывающим кодом.
  *
@@ -88,7 +100,10 @@ function local_unics_get_role_for_user(?int $userid = null): string {
     if ($DB->record_exists('unics_students', ['mdl_user_id' => $userid])) {
         return 'student';
     }
-    if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $userid])) {
+    // Родитель: либо привязан к ребёнку в unics_parent_student,
+    // либо у него unics_role=8 в unics_user_org (даже без активной привязки).
+    if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $userid])
+        || $DB->record_exists('unics_user_org', ['mdl_user_id' => $userid, 'unics_role' => 8])) {
         return 'parent';
     }
     $ctx = context_system::instance();
@@ -97,6 +112,18 @@ function local_unics_get_role_for_user(?int $userid = null): string {
     }
     if (has_capability('local/unics:viewstudents', $ctx, $userid)) {
         return local_unics_is_methodist($userid) ? 'methodist' : 'teacher';
+    }
+    // Fallback по unics_role в unics_user_org - на случай если capability не пробрасываются.
+    $unics_role = $DB->get_field('unics_user_org', 'unics_role', ['mdl_user_id' => $userid]);
+    if ($unics_role !== false) {
+        return match ((int)$unics_role) {
+            3       => 'admin',
+            4       => 'methodist',
+            5, 6    => 'teacher',
+            7       => 'student',
+            8       => 'parent',
+            default => 'guest',
+        };
     }
     return 'guest';
 }
@@ -134,12 +161,12 @@ function local_unics_extend_settings_navigation(settings_navigation $settingsnav
 function local_unics_extend_navigation(global_navigation $nav) {
     global $DB, $USER, $PAGE;
 
-    // Учащийся — проверяем по БД в первую очередь, до любых проверок возможностей.
+    // Учащийся - проверяем по БД в первую очередь, до любых проверок возможностей.
     // Это гарантирует, что неправильно назначенная Moodle-роль не откроет педагогическое меню.
     $student_rec = $DB->get_record('unics_students', ['mdl_user_id' => $USER->id]);
     if ($student_rec) {
         $branch = $nav->add(
-            'УНИКС — Мой портал',
+            'УНИКС - Мой портал',
             new moodle_url('/local/unics/pages/dashboard.php'),
             navigation_node::TYPE_CUSTOM,
             null,
@@ -190,7 +217,7 @@ function local_unics_extend_navigation(global_navigation $nav) {
     // Родитель
     if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $USER->id])) {
         $nav->add(
-            'УНИКС — Мои дети',
+            'УНИКС - Мои дети',
             new moodle_url('/local/unics/pages/dashboard.php'),
             navigation_node::TYPE_CUSTOM,
             null,
@@ -217,10 +244,10 @@ function local_unics_extend_navigation(global_navigation $nav) {
         return;
     }
 
-    // Меню методиста — короткое, без «Мои учащиеся» (нет своих, но видит всех).
+    // Меню методиста - короткое, без «Мои учащиеся» (нет своих, но видит всех).
     if ($is_methodist) {
         $branch = $nav->add(
-            'УНИКС — Портал методиста',
+            'УНИКС - Портал методиста',
             new moodle_url('/local/unics/pages/dashboard.php'),
             navigation_node::TYPE_CUSTOM,
             null,
@@ -289,7 +316,7 @@ function local_unics_extend_navigation(global_navigation $nav) {
     $root_url = new moodle_url('/local/unics/pages/dashboard.php');
 
     $branch = $nav->add(
-        'УНИКС — Портал',
+        'УНИКС - Портал',
         $root_url,
         navigation_node::TYPE_CUSTOM,
         null,
@@ -297,7 +324,7 @@ function local_unics_extend_navigation(global_navigation $nav) {
         new pix_icon('i/cohort', '')
     );
 
-    // Дашборд — для педагогов и администраторов
+    // Дашборд - для педагогов и администраторов
     $branch->add(
         'Портал (дашборд)',
         new moodle_url('/local/unics/pages/dashboard.php'),
@@ -306,7 +333,7 @@ function local_unics_extend_navigation(global_navigation $nav) {
         'local_unics_dashboard'
     );
 
-    // Страница «Мои учащиеся» — для всех (педагог видит только своих)
+    // Страница «Мои учащиеся» - для всех (педагог видит только своих)
     $branch->add(
         'Мои учащиеся',
         new moodle_url('/local/unics/pages/my_students.php'),
@@ -315,7 +342,7 @@ function local_unics_extend_navigation(global_navigation $nav) {
         'local_unics_my_students'
     );
 
-    // Генерация УМК — для педагогов и администраторов
+    // Генерация УМК - для педагогов и администраторов
     $branch->add(
         'Генерация УМК (ИИ)',
         new moodle_url('/local/unics/pages/generate_umk.php'),

@@ -19,7 +19,7 @@ global $DB, $USER;
 
 $org_id = optional_param('org_id', 0, PARAM_INT);
 
-// Методист: всегда видит только свою организацию — фиксируем org_id.
+// Методист: всегда видит только свою организацию - фиксируем org_id.
 if ($is_methodist) {
     $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
     $org_id = ($methodist_rec && $methodist_rec->organization_id)
@@ -44,12 +44,12 @@ echo html_writer::link(
 );
 echo '</div>';
 
-// Селектор организации — только для админа. Методист видит свою орг автоматически.
+// Селектор организации - только для админа. Методист видит свою орг автоматически.
 if (!$is_methodist) {
     echo '<form method="get" class="form-inline mb-4">';
     echo '<label class="mr-2 font-weight-bold">Организация:</label>';
     echo '<select name="org_id" class="form-control mr-2" style="max-width:400px">';
-    echo '<option value="0">— Выберите организацию —</option>';
+    echo '<option value="0">- Выберите организацию -</option>';
     foreach ($orgs as $oid => $olabel) {
         $sel = ($oid == $org_id) ? ' selected' : '';
         echo '<option value="' . $oid . '"' . $sel . '>' . s($olabel) . '</option>';
@@ -76,7 +76,7 @@ echo '<h5 class="mb-3">' . s($org->name) . '</h5>';
 $students = $DB->get_records_sql(
     "SELECT s.id AS student_id, s.mdl_user_id,
             u.lastname, u.firstname, u.middlename,
-            s.class_number, s.class_letter, s.category, s.difficulty_level
+            s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level
      FROM {unics_students} s
      JOIN {user} u ON u.id = s.mdl_user_id
      WHERE s.organization_id = :orgid AND u.deleted = 0
@@ -190,7 +190,7 @@ foreach ($students as $s) {
         $bc        = $avg >= 85 ? 'success' : ($avg >= 50 ? 'warning' : 'danger');
         $avg_cell  = '<span class="badge badge-' . $bc . '">' . $avg . '%</span>';
     } else {
-        $avg_cell = '<span class="text-muted">—</span>';
+        $avg_cell = '<span class="text-muted">-</span>';
     }
 
     $course_count = $course_counts[$uid] ?? 0;
@@ -198,7 +198,7 @@ foreach ($students as $s) {
     $fio          = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
     $class_str    = $s->class_number
         ? $s->class_number . ($s->class_letter ? " «{$s->class_letter}»" : '')
-        : '—';
+        : '-';
 
     $report_link = html_writer::link(
         new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $sid]),
@@ -209,8 +209,8 @@ foreach ($students as $s) {
     echo '<tr>';
     echo '<td>' . s($fio) . '</td>';
     echo '<td>' . s($class_str) . '</td>';
-    echo '<td>' . ($categories[$s->category] ?? '—') . '</td>';
-    echo '<td>' . ($levels[$s->difficulty_level] ?? '—') . '</td>';
+    echo '<td>' . s(\local_unics\student_helper::format_categories($s) ?: '-') . '</td>';
+    echo '<td>' . ($levels[$s->difficulty_level] ?? '-') . '</td>';
     echo '<td>' . $avg_cell . '</td>';
     echo '<td>' . $course_count . '</td>';
     echo '<td>' . $umk_count . '</td>';

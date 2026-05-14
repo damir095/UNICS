@@ -6,14 +6,14 @@ global $USER, $DB;
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/my_children.php'));
-$PAGE->set_title('Мои дети — УНИКС');
+$PAGE->set_title('Мои дети - УНИКС');
 $PAGE->set_heading('Мои дети');
 $PAGE->set_pagelayout('standard');
 
 $children = $DB->get_records_sql(
     "SELECT ps.student_id,
             u.lastname, u.firstname, u.middlename, u.email,
-            s.class_number, s.class_letter, s.category, s.difficulty_level,
+            s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
             o.name AS org_name
      FROM {unics_parent_student} ps
      JOIN {unics_students} s        ON s.id  = ps.student_id
@@ -44,7 +44,7 @@ foreach ($children as $c) {
     $fio = trim("{$c->lastname} {$c->firstname} " . ($c->middlename ?? ''));
     $class_str = $c->class_number
         ? $c->class_number . ($c->class_letter ? " «{$c->class_letter}»" : '') . ' класс'
-        : '—';
+        : '-';
 
     echo '<div class="col-md-4 mb-4">';
     echo '<div class="card h-100 shadow-sm">';
@@ -53,8 +53,8 @@ foreach ($children as $c) {
     echo '</div>';
     echo '<div class="card-body">';
     echo '<p class="mb-1"><b>Класс:</b> ' . s($class_str) . '</p>';
-    echo '<p class="mb-1"><b>Категория:</b> ' . s($categories[$c->category] ?? '—') . '</p>';
-    echo '<p class="mb-1"><b>Уровень:</b> ' . s($levels[$c->difficulty_level] ?? '—') . '</p>';
+    echo '<p class="mb-1"><b>Категория:</b> ' . s(\local_unics\student_helper::format_categories($c) ?: '-') . '</p>';
+    echo '<p class="mb-1"><b>Уровень:</b> ' . s($levels[$c->difficulty_level] ?? '-') . '</p>';
     if ($c->org_name) {
         echo '<p class="mb-1"><b>Организация:</b> ' . s($c->org_name) . '</p>';
     }

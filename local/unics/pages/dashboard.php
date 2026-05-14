@@ -12,8 +12,8 @@ $is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
 
 $PAGE->set_context($ctx);
 $PAGE->set_url(new moodle_url('/local/unics/pages/dashboard.php'));
-$PAGE->set_title('УНИКС — Портал');
-$PAGE->set_heading('УНИКС — Единый портал');
+$PAGE->set_title('УНИКС - Портал');
+$PAGE->set_heading('УНИКС - Единый портал');
 $PAGE->set_pagelayout('standard');
 
 echo $OUTPUT->header();
@@ -69,7 +69,7 @@ if ($is_admin) {
         ['/local/unics/pages/my_students.php',      'btn-outline-primary',  'Все учащиеся'],
         ['/local/unics/pages/assign.php',           'btn-outline-primary',  'Привязки'],
         ['/local/unics/pages/course_templates.php', 'btn-primary',          'Шаблоны курсов'],
-        ['/local/unics/pages/generate_umk.php',     'btn-success',          'Генерация УМК'],
+        ['/local/unics/pages/generate_umk.php',     'btn-primary',          'Генерация УМК'],
         ['/local/unics/pages/enrol_students.php',   'btn-outline-secondary','Запись учащихся на курс'],
         ['/local/unics/pages/enrol_teachers.php',   'btn-outline-secondary','Запись педагогов на курс'],
         ['/local/unics/pages/umk_status.php',       'btn-outline-secondary','История УМК'],
@@ -102,7 +102,7 @@ if ($is_admin) {
             $lvl = $level_labels[$u->difficulty_level] ?? '?';
             $sc  = $status_colors[$u->status] ?? 'secondary';
             $sl  = $status_labels[$u->status] ?? '?';
-            $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '—';
+            $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '-';
             echo '<tr>';
             echo '<td>' . s($u->title) . '</td>';
             echo '<td><span class="unics-lvl unics-lvl-' . (int)$u->difficulty_level . '">' . s($lvl) . '</span></td>';
@@ -126,7 +126,7 @@ if ($is_admin) {
     echo '<div class="sub">Портал методиста УНИКС</div>';
     echo '</div>';
 
-    // Статистика — в рамках организации методиста (если привязан).
+    // Статистика - в рамках организации методиста (если привязан).
     $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
     $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
         ? (int)$methodist_rec->organization_id : 0;
@@ -164,7 +164,7 @@ if ($is_admin) {
     echo html_writer::link(new moodle_url('/local/unics/pages/course_templates.php'),
         'Шаблоны курсов', ['class' => 'btn btn-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/generate_umk.php'),
-        'Сгенерировать УМК', ['class' => 'btn btn-success']);
+        'Сгенерировать УМК', ['class' => 'btn btn-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
         'Все учащиеся', ['class' => 'btn btn-outline-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/assign.php'),
@@ -276,8 +276,8 @@ if ($is_admin) {
     echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
         'Мои учащиеся', ['class' => 'btn btn-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/generate_umk.php'),
-        'Генерация УМК', ['class' => 'btn btn-success']);
-    // «История УМК» (umk_status.php) требует local/unics:manage — педагогу не показываем,
+        'Генерация УМК', ['class' => 'btn btn-primary']);
+    // «История УМК» (umk_status.php) требует local/unics:manage - педагогу не показываем,
     // иначе клик ведёт на accessdenied. Своей истории УМК у педагога пока нет (T-8).
     echo '</div>';
 
@@ -298,7 +298,7 @@ if ($is_admin) {
 
         $class_str = $student->class_number
             ? $student->class_number . ($student->class_letter ? " «{$student->class_letter}»" : '') . ' класс'
-            : '—';
+            : '-';
 
         echo '<div class="unics-welcome mb-4">';
         echo '<h2>Привет, ' . s($USER->firstname) . '!';
@@ -379,7 +379,7 @@ if ($is_admin) {
                 $pct = round(($g->finalgrade / $g->grademax) * 100, 1);
                 $bc  = $pct >= 85 ? 'success' : ($pct >= 50 ? 'warning' : 'danger');
                 echo '<tr>';
-                echo '<td>' . s($g->quiz_name ?? '—') . '</td>';
+                echo '<td>' . s($g->quiz_name ?? '-') . '</td>';
                 echo '<td>' . s($g->course_name) . '</td>';
                 echo '<td>' . round($g->finalgrade, 1) . '/' . round($g->grademax, 1) . '</td>';
                 echo '<td><span class="badge badge-' . $bc . '">' . $pct . '%</span></td>';
@@ -443,7 +443,7 @@ if ($is_admin) {
             $fio = trim("{$ch->lastname} {$ch->firstname} " . ($ch->middlename ?? ''));
             $cls = $ch->class_number
                 ? $ch->class_number . ($ch->class_letter ? " «{$ch->class_letter}»" : '')
-                : '—';
+                : '-';
             $pcts = $grade_map[$ch->mdl_user_id] ?? [];
             $avg  = !empty($pcts) ? round(array_sum($pcts) / count($pcts), 1) : null;
             $bc   = $avg !== null ? ($avg >= 85 ? 'success' : ($avg >= 50 ? 'warning' : 'danger')) : 'secondary';
@@ -457,7 +457,7 @@ if ($is_admin) {
             echo '</div>';
             echo $avg !== null
                 ? '<span class="badge badge-' . $bc . ' ml-2">' . $avg . '%</span>'
-                : '<span class="badge badge-secondary ml-2">—</span>';
+                : '<span class="badge badge-secondary ml-2">-</span>';
             echo '</div>';
             echo '<div class="mt-2">';
             echo html_writer::link(
