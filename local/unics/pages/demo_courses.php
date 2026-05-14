@@ -1,8 +1,15 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_not_student();
+
+$ctx = context_system::instance();
+if (!has_capability('local/unics:manage', $ctx)
+    && !has_capability('local/unics:viewstudents', $ctx)) {
+    require_capability('local/unics:viewstudents', $ctx);
+}
 
 global $DB;
 

@@ -57,12 +57,24 @@ class primary extends \core\navigation\output\primary {
 
         $data = parent::get_user_menu($output);
 
-        // Гость / не залогинен — возвращаем без модификаций.
-        if (empty($data['items'])) {
+        // Не залогинен / unauthenticateduser — items вообще не выставлен parent::get_user_menu().
+        // Только в этом случае пропускаем добавление «Личного кабинета».
+        if (!isset($data['items'])) {
             return $data;
         }
 
         $role = local_unics_get_role_for_user((int)$USER->id);
+
+        // DEBUG LK-1: разовая диагностика, удалить после фикса.
+        if (!empty($CFG->debugdeveloper)) {
+            error_log(sprintf(
+                '[theme_unics LK-1] uid=%d role=%s items_before=%d titleidentifiers=%s',
+                (int)$USER->id,
+                $role,
+                count($data['items']),
+                json_encode(array_map(fn($i) => $i->titleidentifier ?? '?', $data['items']))
+            ));
+        }
 
         if (isset(self::ROLE_WHITELIST[$role])) {
             $allowed = self::ROLE_WHITELIST[$role];
@@ -75,17 +87,36 @@ class primary extends \core\navigation\output\primary {
             $data['items'] = $this->cleanup_dividers($filtered);
         }
 
-        // Первым пунктом — «Личный кабинет» на наш дашборд.
+        // Первым пунктом — «Личный кабинет» на наш дашборд,
+        // отделён divider'ом от служебных пунктов (профиль/выход/…).
+        // Для guest нет смысла — он не залогинен.
         if ($role !== 'guest') {
             $dashboard = (object)[
                 'itemtype'        => 'link',
                 'url'             => new \moodle_url('/local/unics/pages/dashboard.php'),
                 'title'           => get_string('myhome'),
                 'titleidentifier' => 'localunicsdashboard,local_unics',
+                'pixicon'         => 'i/home',
                 'divider'         => false,
                 'link'            => true,
             ];
-            array_unshift($data['items'], $dashboard);
+            $divider = (object)[
+                'itemtype' => 'divider',
+                'divider'  => true,
+                'link'     => false,
+            ];
+            $data['items'] = array_merge([$dashboard, $divider], $data['items']);
+        }
+
+        // DEBUG LK-1.
+        if (!empty($CFG->debugdeveloper)) {
+            error_log(sprintf(
+                '[theme_unics LK-1] uid=%d role=%s items_after=%d first_titleidentifier=%s',
+                (int)$USER->id,
+                $role,
+                count($data['items']),
+                isset($data['items'][0]->titleidentifier) ? $data['items'][0]->titleidentifier : '?'
+            ));
         }
 
         return $data;

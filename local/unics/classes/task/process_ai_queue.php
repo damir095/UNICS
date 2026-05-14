@@ -21,7 +21,7 @@ class process_ai_queue extends \core\task\scheduled_task {
         $builder   = new \local_unics\course_builder();
 
         $tasks = $DB->get_records(
-            'unics_ai_queue', ['status' => 1], 'created_at ASC', '*', 0, 5
+            'unics_ai_queue', ['status' => 1], 'created_at ASC', '*', 0, 15
         );
 
         foreach ($tasks as $task) {

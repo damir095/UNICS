@@ -16,8 +16,39 @@ function local_unics_require_not_student(): void {
 }
 
 /**
+ * Перенаправляет учащегося со стандартного дашборда Moodle (`/my/`)
+ * на наш дашборд `local_unics`. Срабатывает до отправки HTTP-заголовков,
+ * что позволяет redirect() работать без warning'ов о уже отправленных headers.
+ *
+ * Только для учащихся: педагог/методист/админ используют /my/ продуктивно
+ * (там видны их курсы Moodle).
+ */
+function local_unics_before_http_headers(): void {
+    global $DB, $USER, $PAGE;
+    if (!isloggedin() || isguestuser()) {
+        return;
+    }
+    // Стандартный Moodle-дашборд (`/my/index.php`) и страница «Мои курсы»
+    // (`/my/courses.php`) оба имеют pagetype == 'my-index', поэтому различаем по URL.
+    // Учащегося уводим ТОЛЬКО с дашборда, «Мои курсы» оставляем — это его курсы.
+    $path = $PAGE->url ? $PAGE->url->get_path() : '';
+    if ($path !== '/my/' && $path !== '/my/index.php') {
+        return;
+    }
+    if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+        redirect(new moodle_url('/local/unics/pages/dashboard.php'));
+    }
+}
+
+/**
  * Возвращает true, если пользователь — методист.
- * Методист = Moodle-роль с shortname='methodist' и нет записи в unics_teachers.
+ * Методист = Moodle-роль с shortname='methodist'.
+ *
+ * Раньше дополнительно требовалось «нет записи в unics_teachers», но
+ * user_manager::create_user() для методистов тоже создаёт запись в
+ * unics_teachers (там хранится привязка к организации). Поэтому
+ * проверяем только Moodle-роль — это единственный надёжный маркер.
+ *
  * Capability local/unics:viewstudents проверяется отдельно вызывающим кодом.
  *
  * @param int|null $userid id пользователя; null = текущий $USER->id
@@ -29,9 +60,6 @@ function local_unics_is_methodist(?int $userid = null): bool {
         $userid = (int)$USER->id;
     }
     if (!$userid) {
-        return false;
-    }
-    if ($DB->record_exists('unics_teachers', ['mdl_user_id' => $userid])) {
         return false;
     }
     return $DB->record_exists_sql(
@@ -207,11 +235,25 @@ function local_unics_extend_navigation(global_navigation $nav) {
             'local_unics_all_students'
         );
         $branch->add(
+            'Шаблоны курсов',
+            new moodle_url('/local/unics/pages/course_templates.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_course_templates'
+        );
+        $branch->add(
             'Генерация УМК (ИИ)',
             new moodle_url('/local/unics/pages/generate_umk.php'),
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_umk'
+        );
+        $branch->add(
+            'История генерации УМК',
+            new moodle_url('/local/unics/pages/umk_status.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_umk_status_methodist'
         );
         return;
     }

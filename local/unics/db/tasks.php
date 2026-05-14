@@ -5,7 +5,7 @@ $tasks = [
     [
         'classname'  => 'local_unics\task\process_ai_queue',
         'blocking'   => 0,
-        'minute'     => '*/5',
+        'minute'     => '*',
         'hour'       => '*',
         'day'        => '*',
         'month'      => '*',

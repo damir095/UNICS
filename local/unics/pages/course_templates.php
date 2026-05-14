@@ -1,8 +1,15 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_not_student();
+
+$ctx = context_system::instance();
+if (!has_capability('local/unics:manage', $ctx)
+    && !has_capability('local/unics:viewstudents', $ctx)) {
+    require_capability('local/unics:viewstudents', $ctx); // throws с понятным сообщением
+}
 
 global $DB;
 
@@ -25,6 +32,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $subject_key  = required_param('subject',      PARAM_ALPHANUMEXT);
     $class_num    = required_param('class_num',    PARAM_INT);
     $category_id  = optional_param('category_id', 0, PARAM_INT);
+    $num_topics   = optional_param('num_topics',   0, PARAM_INT);
+    $topic_names_raw = optional_param('topic_names', '', PARAM_RAW);
+
+    // Парсим список тем (по строкам, пустые отбрасываем, обрезаем пробелы).
+    $topic_names = null;
+    if (trim($topic_names_raw) !== '') {
+        $lines = preg_split('/\r\n|\r|\n/', $topic_names_raw);
+        $lines = array_values(array_filter(array_map('trim', $lines), fn($l) => $l !== ''));
+        if (count($lines) > 0) {
+            $topic_names = array_slice($lines, 0, 20); // hard cap
+        }
+    }
 
     if (!isset($subjects[$subject_key])) {
         $error_msg = 'Неизвестный предмет.';
@@ -33,7 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     } else {
         try {
             $created_course = \local_unics\course_template::create_from_template(
-                $subject_key, $class_num, $category_id
+                $subject_key, $class_num, $category_id,
+                $num_topics > 0 ? $num_topics : null,
+                $topic_names
             );
         } catch (\Throwable $e) {
             $error_msg = 'Ошибка создания курса: ' . $e->getMessage();
@@ -88,12 +109,23 @@ echo html_writer::link(
 
 // Результат создания
 if ($created_course) {
-    $course_url = new moodle_url('/course/view.php', ['id' => $created_course->id]);
+    $course_url   = new moodle_url('/course/view.php', ['id' => $created_course->id]);
+    $generate_url = new moodle_url('/local/unics/pages/generate_umk.php',
+        ['course_id' => $created_course->id]);
     echo $OUTPUT->notification(
         'Курс создан: <strong>' . htmlspecialchars($created_course->fullname) . '</strong> — '
         . html_writer::link($course_url, 'Открыть курс', ['class' => 'alert-link', 'target' => '_blank']),
         'success'
     );
+    echo '<div class="card border-primary mb-4">';
+    echo '<div class="card-body">';
+    echo '<h5 class="card-title">Следующий шаг — наполнить курс материалом</h5>';
+    echo '<p class="card-text mb-2">Структура готова (' .
+        (int)$DB->count_records('course_sections', ['course' => $created_course->id]) .
+        ' секций). Запустите ИИ-генерацию УМК, и материалы по темам появятся в курсе автоматически.</p>';
+    echo html_writer::link($generate_url, 'Запустить ИИ-генерацию УМК для этого курса',
+        ['class' => 'btn btn-primary']);
+    echo '</div></div>';
 }
 if ($error_msg) {
     echo $OUTPUT->notification($error_msg, 'error');
@@ -120,14 +152,44 @@ echo html_writer::tag('label', 'Класс', ['class' => 'font-weight-bold d-blo
 echo html_writer::select($class_menu, 'class_num', 0, false, ['class' => 'form-control', 'required' => 'required']);
 echo html_writer::end_tag('div');
 
+// Кол-во тем (override)
+echo html_writer::start_tag('div', ['class' => 'col-md-2 mb-3']);
+echo html_writer::tag('label', 'Кол-во тем', ['class' => 'd-block']);
+echo html_writer::empty_tag('input', [
+    'type' => 'number', 'name' => 'num_topics', 'value' => '', 'min' => '1', 'max' => '20',
+    'placeholder' => 'авто', 'class' => 'form-control',
+]);
+echo html_writer::tag('small', 'Пусто = по умолчанию для предмета.',
+    ['class' => 'form-text text-muted']);
+echo html_writer::end_tag('div');
+
 // Категория Moodle
-echo html_writer::start_tag('div', ['class' => 'col-md-4 mb-3']);
-echo html_writer::tag('label', 'Категория курса (Moodle)', ['class' => 'd-block']);
+echo html_writer::start_tag('div', ['class' => 'col-md-3 mb-3']);
+echo html_writer::tag('label', 'Категория (Moodle)', ['class' => 'd-block']);
 echo html_writer::select($category_menu, 'category_id', 0, false,
-    ['class' => 'form-control', 'style' => 'min-width:220px']);
+    ['class' => 'form-control', 'style' => 'min-width:200px']);
 echo html_writer::end_tag('div');
 
 echo html_writer::end_tag('div'); // form-row
+
+// Список тем (опционально)
+echo html_writer::start_tag('div', ['class' => 'form-group mb-3']);
+echo html_writer::tag('label',
+    'Названия тем '
+    . html_writer::tag('span', '(необязательно — по одной в строке)',
+        ['class' => 'text-muted font-weight-normal'])
+);
+echo html_writer::tag('textarea', '', [
+    'name'        => 'topic_names',
+    'class'       => 'form-control',
+    'rows'        => '5',
+    'placeholder' => "Дроби\nПроценты\nУравнения\nГеометрические фигуры",
+]);
+echo html_writer::tag('small',
+    'Если задано — кол-во тем равно количеству строк (макс. 20). Эти названия станут именами секций и пойдут в ИИ как тема урока.',
+    ['class' => 'form-text text-muted']
+);
+echo html_writer::end_tag('div');
 
 echo '<div class="alert alert-info mb-3">'
    . 'В курсе создаётся <strong>один набор секций</strong> для всех уровней. '

@@ -16,9 +16,39 @@
         }
     }
 
+    // Текст роли/метаданных в триггере user-menu (.usertext > .meta)
+    // и сам тогглер дропдауна — на тёмном навбаре должны быть светлыми.
+    .usermenu .dropdown-toggle,
+    .usermenu .userbutton,
+    .usermenu .usertext,
+    .usermenu .usertext .meta {
+        color: #fff !important;
+    }
+
     .dropdown-menu {
         border-radius: var(--unics-radius);
         box-shadow: var(--unics-shadow-md);
+    }
+}
+
+// Выделение пункта «Личный кабинет» в выпадашке user-menu.
+// Пункт добавляется первым через theme_unics\navigation\output\primary,
+// после него идёт divider — поэтому селектор по href самый надёжный
+// (не зависит от порядка/наличия submenu/language-меню).
+#user-action-menu .dropdown-item[href*="/local/unics/pages/dashboard.php"] {
+    font-weight: 600;
+    color: var(--unics-primary-text);
+
+    .icon,
+    [class^="fa-"],
+    [class*=" fa-"] {
+        color: var(--unics-primary);
+    }
+
+    &:hover,
+    &:focus {
+        background-color: rgba(242, 101, 69, 0.08);
+        color: var(--unics-primary-deep);
     }
 }
 

@@ -22,12 +22,14 @@ $PAGE->set_title('Мои учащиеся — УНИКС');
 $PAGE->set_heading('Мои учащиеся');
 $PAGE->set_pagelayout('standard');
 
-// Определяем режим доступа
+// Определяем режим доступа.
+// Методист имеет запись в unics_teachers (там хранится привязка к организации),
+// поэтому проверку методиста делаем ДО ветки педагога.
 $teacher_record = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
-$is_methodist = $is_teacher && !$is_admin && !$teacher_record && local_unics_is_methodist();
+$is_methodist   = $is_teacher && !$is_admin && local_unics_is_methodist();
 
-if (($is_admin && !$teacher_record) || $is_methodist) {
-    // Администратор без профиля педагога ИЛИ методист — показываем всех учащихся
+if ($is_admin && !$teacher_record) {
+    // Администратор без профиля педагога — все учащиеся системы.
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
                 s.class_number, s.category, s.difficulty_level,
@@ -39,9 +41,28 @@ if (($is_admin && !$teacher_record) || $is_methodist) {
          WHERE u.deleted = 0
          ORDER BY u.lastname, u.firstname"
     );
-    $mode = $is_methodist ? 'methodist' : 'admin';
+    $mode = 'admin';
+} elseif ($is_methodist) {
+    // Методист — все учащиеся его организации (организация берётся из unics_teachers).
+    if ($teacher_record && $teacher_record->organization_id) {
+        $students = $DB->get_records_sql(
+            "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
+                    s.class_number, s.category, s.difficulty_level,
+                    o.name AS org_name,
+                    NULL AS teacher_lastname, NULL AS teacher_firstname
+             FROM {unics_students} s
+             JOIN {user} u ON u.id = s.mdl_user_id
+             JOIN {unics_organizations} o ON o.id = s.organization_id
+             WHERE s.organization_id = :org_id AND u.deleted = 0
+             ORDER BY u.lastname, u.firstname",
+            ['org_id' => (int)$teacher_record->organization_id]
+        );
+    } else {
+        $students = [];
+    }
+    $mode = 'methodist';
 } elseif ($teacher_record) {
-    // Педагог — только привязанные учащиеся
+    // Педагог — только привязанные учащиеся.
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
                 s.class_number, s.category, s.difficulty_level,
@@ -79,7 +100,20 @@ if ($mode === 'noprofile') {
 if ($mode === 'admin') {
     echo $OUTPUT->notification('Вы вошли как администратор. Отображаются все учащиеся системы.', 'info');
 } elseif ($mode === 'methodist') {
-    echo $OUTPUT->notification('Вы вошли как методист. Отображаются все учащиеся системы — выберите, кому сгенерировать УМК.', 'info');
+    if (!empty($teacher_record) && !empty($teacher_record->organization_id)) {
+        $org_name = $DB->get_field('unics_organizations', 'name',
+            ['id' => (int)$teacher_record->organization_id]);
+        echo $OUTPUT->notification(
+            'Вы вошли как методист. Отображаются все учащиеся вашей организации'
+            . ($org_name ? ' «' . s($org_name) . '»' : '') . '.',
+            'info'
+        );
+    } else {
+        echo $OUTPUT->notification(
+            'Ваш профиль методиста не привязан к организации. Обратитесь к администратору.',
+            'warning'
+        );
+    }
 }
 
 if ($is_admin) {

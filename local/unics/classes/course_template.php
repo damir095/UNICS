@@ -52,7 +52,9 @@ class course_template {
     public static function create_from_template(
         string $subject_key,
         int    $class_num,
-        int    $category_id = 0
+        int    $category_id = 0,
+        ?int   $num_topics_override = null,
+        ?array $topic_names_override = null
     ): \stdClass {
         global $DB, $CFG;
         require_once($CFG->dirroot . '/course/lib.php');
@@ -68,6 +70,14 @@ class course_template {
 
         $subject    = $subjects[$subject_key];
         $num_topics = $subject['sections'];
+
+        if ($num_topics_override !== null && $num_topics_override > 0) {
+            $num_topics = max(1, min(20, $num_topics_override));
+        }
+        // Если задан список имён тем — он определяет и количество тем.
+        if ($topic_names_override !== null && count($topic_names_override) > 0) {
+            $num_topics = count($topic_names_override);
+        }
 
         $fullname  = "{$subject['name']}. {$class_num} класс";
         $shortname = substr($subject_key, 0, 4) . $class_num . '_' . substr(uniqid(), -5);
@@ -94,8 +104,7 @@ class course_template {
 
         $course = create_course($data);
 
-        self::apply_section_names($course->id, $num_topics);
-        self::add_placeholder_labels($course->id, $num_topics);
+        self::apply_section_names($course->id, $num_topics, $topic_names_override);
 
         rebuild_course_cache($course->id, true);
 
@@ -106,7 +115,7 @@ class course_template {
     // Private helpers
     // ------------------------------------------------------------------
 
-    private static function apply_section_names(int $course_id, int $num_topics): void {
+    private static function apply_section_names(int $course_id, int $num_topics, ?array $topic_names = null): void {
         global $DB;
 
         $sections = $DB->get_records('course_sections', ['course' => $course_id], 'section ASC');
@@ -118,7 +127,8 @@ class course_template {
                 $section->name    = 'Введение в курс';
                 $section->summary = '<p>Ознакомительный раздел: цели курса, требования, порядок работы.</p>';
             } elseif ($idx <= $num_topics) {
-                $section->name    = "Тема {$idx}";
+                $custom = $topic_names[$idx - 1] ?? null;
+                $section->name    = ($custom !== null && $custom !== '') ? $custom : "Тема {$idx}";
                 $section->summary = '<p><em>Материалы темы разделены по уровням сложности — каждый учащийся видит только свой уровень.</em></p>';
             } else {
                 $section->name    = 'Итоговый контроль';
@@ -127,58 +137,6 @@ class course_template {
 
             $section->summaryformat = FORMAT_HTML;
             $DB->update_record('course_sections', $section);
-        }
-    }
-
-    private static function add_placeholder_labels(int $course_id, int $num_topics): void {
-        global $DB;
-
-        $module = $DB->get_record('modules', ['name' => 'label'], 'id');
-        if (!$module) {
-            return;
-        }
-
-        $hints = [
-            1 => 'Добавьте: Страница (теория) + Тест (5–8 вопросов, неограниченные попытки).',
-            2 => 'Добавьте: Страница (теория) + Аудиолекция (MP3) + Тест (8–12 вопросов).',
-            3 => 'Добавьте: Страница (теория) + Аудио + Тест (10–15 вопросов) + Задание (проект).',
-        ];
-        $colors = [1 => 'info', 2 => 'primary', 3 => 'success'];
-        $labels = self::get_level_labels();
-
-        for ($i = 1; $i <= $num_topics; $i++) {
-            $section = $DB->get_record('course_sections', ['course' => $course_id, 'section' => $i]);
-            if (!$section) {
-                continue;
-            }
-
-            foreach ([1, 2, 3] as $level) {
-                $lbl               = new \stdClass();
-                $lbl->course       = $course_id;
-                $lbl->name         = "Тема {$i} [{$labels[$level]}] — инструкция педагогу";
-                $lbl->intro        = '<div class="alert alert-' . $colors[$level] . '">'
-                    . '<strong>УНИКС [' . $labels[$level] . ']:</strong> ' . $hints[$level]
-                    . ' Или запустите <a href="/local/unics/pages/generate_umk.php">ИИ-генерацию УМК</a>.'
-                    . '</div>';
-                $lbl->introformat  = FORMAT_HTML;
-                $lbl->timemodified = time();
-                $lbl->id = $DB->insert_record('label', $lbl);
-
-                $cm               = new \stdClass();
-                $cm->course       = $course_id;
-                $cm->module       = $module->id;
-                $cm->instance     = $lbl->id;
-                $cm->section      = $section->id;
-                $cm->visible      = 1;
-                $cm->added        = time();
-                $cm->availability = self::profile_level_availability($level);
-                $cm->id = $DB->insert_record('course_modules', $cm);
-
-                $seq              = array_filter(explode(',', $section->sequence ?? ''));
-                $seq[]            = $cm->id;
-                $section->sequence = implode(',', $seq); // обновляем локально для следующей итерации
-                $DB->set_field('course_sections', 'sequence', $section->sequence, ['id' => $section->id]);
-            }
         }
     }
 

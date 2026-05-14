@@ -121,7 +121,19 @@ if ($is_admin) {
     echo '<div class="sub">Портал методиста УНИКС</div>';
     echo '</div>';
 
-    $total_students = $DB->count_records('unics_students');
+    // Статистика — в рамках организации методиста (если привязан).
+    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
+    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
+        ? (int)$methodist_rec->organization_id : 0;
+
+    if ($methodist_org_id) {
+        $total_students = $DB->count_records('unics_students',
+            ['organization_id' => $methodist_org_id]);
+        $students_label = 'Учащихся в организации';
+    } else {
+        $total_students = $DB->count_records('unics_students');
+        $students_label = 'Учащихся в системе';
+    }
     $umk_active     = $DB->count_records_sql(
         "SELECT COUNT(*) FROM {unics_ai_queue} WHERE status IN (1, 2)"
     );
@@ -130,7 +142,7 @@ if ($is_admin) {
     echo '<div class="row mb-4">';
     echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
     echo '<div class="stat-value">' . $total_students . '</div>';
-    echo '<div class="stat-label mt-1">Учащихся в системе</div>';
+    echo '<div class="stat-label mt-1">' . s($students_label) . '</div>';
     echo '</div></div>';
     echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
     echo '<div class="stat-value">' . $umk_active . '</div>';
@@ -144,6 +156,8 @@ if ($is_admin) {
 
     echo '<h2 class="unics-section-title">Быстрые действия</h2>';
     echo '<div class="unics-action-grid mb-4 d-flex flex-wrap gap-2">';
+    echo html_writer::link(new moodle_url('/local/unics/pages/course_templates.php'),
+        'Шаблоны курсов', ['class' => 'btn btn-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/generate_umk.php'),
         'Сгенерировать УМК', ['class' => 'btn btn-success']);
     echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
