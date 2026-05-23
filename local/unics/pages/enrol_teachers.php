@@ -5,25 +5,17 @@ require_once($CFG->dirroot . '/group/lib.php');
 
 require_login();
 local_unics_require_not_student();
-
-$sys_ctx       = context_system::instance();
-$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
-$is_methodist  = !$is_admin_user
-    && has_capability('local/unics:viewstudents', $sys_ctx)
-    && local_unics_is_methodist();
-
-if (!$is_admin_user && !$is_methodist) {
-    require_capability('local/unics:manage', $sys_ctx);
-}
+local_unics_require_manage_or_manageorg();
 
 global $DB, $USER;
 
-$methodist_org_id = 0;
-if ($is_methodist) {
-    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
-    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
-        ? (int)$methodist_rec->organization_id : 0;
-}
+$sys_ctx          = context_system::instance();
+$is_admin_user    = has_capability('local/unics:manage', $sys_ctx);
+$is_scoped_role   = !$is_admin_user;
+$my_scope         = $is_admin_user
+    ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
+    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+$methodist_org_id = $my_scope['organization_id'] ?? 0;
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_teachers.php'));
@@ -52,6 +44,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
+    // Scope-check: каждый педагог должен входить в скоуп текущего пользователя.
+    if (!$is_admin_user) {
+        foreach ($teacher_ids as $tid) {
+            $t_uid = (int)$DB->get_field('unics_teachers', 'mdl_user_id', ['id' => $tid]);
+            if ($t_uid) { local_unics_require_manage_or_scope_user($t_uid); }
+        }
+    }
+
     // Создаём новую группу если указана
     if ($new_group !== '') {
         $grp           = new stdClass();
@@ -68,10 +68,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $instance = $DB->get_record('enrol', ['courseid' => $course_id, 'enrol' => 'manual', 'status' => 0]);
     }
 
-    // Определяем роль Moodle для записи
-    $role_shortname = ($role_type === 'teacher') ? 'teacher' : 'editingteacher';
-    $role_rec = $DB->get_record('role', ['shortname' => $role_shortname], 'id');
-    $role_id  = $role_rec ? (int)$role_rec->id : 3;
+    // Кэш id курс-ролей Moodle. role_type — выбор администратора по умолчанию для
+    // педагогов, способных редактировать (код 4/5). Педагог без редактирования
+    // (unics_role=6) принудительно записывается non-editing-ролью `teacher`,
+    // что бы ни выбрал админ — соответствует новой ролевой модели 2026-05-23.
+    $default_shortname = ($role_type === 'teacher') ? 'teacher' : 'editingteacher';
+    $role_id_cache = [];
+    $resolve_role_id = function (string $shortname) use ($DB, &$role_id_cache): int {
+        if (!isset($role_id_cache[$shortname])) {
+            $rec = $DB->get_record('role', ['shortname' => $shortname], 'id');
+            $role_id_cache[$shortname] = $rec ? (int)$rec->id : 0;
+        }
+        return $role_id_cache[$shortname];
+    };
 
     $ctx      = \context_course::instance($course_id);
     $enrolled = 0;
@@ -83,8 +92,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
         $mdl_uid = (int)$teacher->mdl_user_id;
 
+        // Курс-роль: код 6 (педагог non-editing) → всегда 'teacher'; иначе выбор админа.
+        $u_role        = (int)$DB->get_field('unics_user_org', 'unics_role', ['mdl_user_id' => $mdl_uid]);
+        $eff_shortname = ($u_role === 6) ? 'teacher' : $default_shortname;
+        $eff_role_id   = $resolve_role_id($eff_shortname) ?: $resolve_role_id('editingteacher');
+
         if (!is_enrolled($ctx, $mdl_uid)) {
-            $enrol->enrol_user($instance, $mdl_uid, $role_id);
+            $enrol->enrol_user($instance, $mdl_uid, $eff_role_id);
             $enrolled++;
         } else {
             $skipped++;
@@ -107,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         if ($et_role) {
             assign_capability('moodle/site:accessallgroups', CAP_PROHIBIT, $et_role->id, $ctx_course->id, true);
         }
-        // Для teacher (тьютор) - тоже
+        // Для teacher (педагог без редактирования) - тоже
         $t_role = $DB->get_record('role', ['shortname' => 'teacher'], 'id');
         if ($t_role) {
             assign_capability('moodle/site:accessallgroups', CAP_PROHIBIT, $t_role->id, $ctx_course->id, true);
@@ -138,8 +152,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 $selected_course = optional_param('course_id', 0, PARAM_INT);
 $filter_org      = optional_param('org_id',    0, PARAM_INT);
 
-if ($is_methodist && $methodist_org_id) {
+if (!$is_admin_user && $methodist_org_id) {
     $filter_org = $methodist_org_id;
+} else if (!$is_admin_user && $filter_org > 0
+    && !\local_unics\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
+    $filter_org = 0;
 }
 
 // Курсы
@@ -149,8 +166,16 @@ foreach ($courses_raw as $c) {
     $courses_menu[$c->id] = $c->fullname;
 }
 
-// Организации
-$orgs_raw  = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
+// Организации — фильтр по скоупу для не-админа.
+if ($is_admin_user) {
+    $orgs_raw = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
+} else {
+    [$org_where, $org_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $orgs_raw = $DB->get_records_sql(
+        "SELECT o.id, o.name FROM {unics_organizations} o
+           WHERE o.is_active = 1 AND ({$org_where})
+           ORDER BY o.name", $org_params);
+}
 $orgs_menu = [0 => '- все организации -'];
 foreach ($orgs_raw as $o) {
     $orgs_menu[$o->id] = $o->name;
@@ -164,12 +189,17 @@ if ($selected_course > 0) {
     }
 }
 
-// Педагоги с фильтрацией
+// Педагоги с фильтрацией: методист орг. (4), педагог создающий курсы (5),
+// педагог non-editing (6) — все записываются на курс.
 $sql_where  = 'u.deleted = 0 AND uo.unics_role IN (4, 5, 6)';
 $sql_params = [];
 if ($filter_org > 0) {
     $sql_where .= ' AND t.organization_id = :org_id';
     $sql_params['org_id'] = $filter_org;
+} else if (!$is_admin_user) {
+    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o2');
+    $sql_where .= " AND t.organization_id IN (SELECT o2.id FROM {unics_organizations} o2 WHERE {$scope_where})";
+    $sql_params = array_merge($sql_params, $scope_params);
 }
 
 $teachers = $DB->get_records_sql(
@@ -206,7 +236,7 @@ if ($selected_course > 0) {
     }
 }
 
-$unics_role_labels = [4 => 'Методист', 5 => 'Педагог', 6 => 'Тьютор'];
+$unics_role_labels = [4 => 'Методист', 5 => 'Педагог (создаёт курсы)', 6 => 'Педагог'];
 
 // ----------------------------------------------------------------
 // Вывод
@@ -214,10 +244,10 @@ $unics_role_labels = [4 => 'Методист', 5 => 'Педагог', 6 => 'Ть
 echo $OUTPUT->header();
 echo $OUTPUT->heading('Запись педагогов на курс');
 
-$back_url   = $is_methodist
+$back_url   = $is_scoped_role
     ? new moodle_url('/local/unics/pages/dashboard.php')
     : new moodle_url('/local/unics/pages/users.php');
-$back_label = $is_methodist ? 'На дашборд' : 'Назад к пользователям';
+$back_label = $is_scoped_role ? 'На дашборд' : 'Назад к пользователям';
 echo html_writer::link($back_url, $back_label,
     ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']);
 echo html_writer::link(
@@ -239,7 +269,7 @@ echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
     ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()']);
 echo html_writer::end_tag('div');
 
-if ($is_methodist) {
+if (!$is_admin_user && $methodist_org_id) {
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'org_id',
         'value' => (int)$filter_org]);
 } else {

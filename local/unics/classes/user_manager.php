@@ -25,15 +25,29 @@ class unics_user_manager {
 
         $mdl_user_id = user_create_user($user, true, false);
 
-        // 2. Привязываем к организации и роли УНИКС
+        // 2. Привязываем к скоупу (регион/район/организация) и роли УНИКС.
+        // organization_id уже nullable (с 0.6.29); region_id/district_id — слоты под
+        // регионального админа и методиста района (этап 1 #11). При создании передаются
+        // те поля, которые соответствуют роли:
+        //   роль 1 (region_admin)        — region_id ИЛИ district_id;
+        //   роль 4 (methodist), 4 в district scope — district_id;
+        //   роль 4 в org scope, остальные — organization_id.
         $DB->insert_record('unics_user_org', (object)[
             'mdl_user_id'     => $mdl_user_id,
-            'organization_id' => $data['organization_id'],
+            'region_id'       => !empty($data['region_id'])       ? (int)$data['region_id']       : null,
+            'district_id'     => !empty($data['district_id'])     ? (int)$data['district_id']     : null,
+            'organization_id' => !empty($data['organization_id']) ? (int)$data['organization_id'] : null,
             'unics_role'      => $data['unics_role'],
         ]);
 
         // 3. Создаём расширение профиля в зависимости от роли
         switch ((int)$data['unics_role']) {
+            case 1: // Региональный администратор (скоуп: регион)
+            case 2: // Районный администратор (скоуп: район)
+                    // Управленческие роли без расширения профиля; весь скоуп —
+                    // в unics_user_org (region_id / district_id).
+                break;
+
             case 7: // Учащийся
                 // category / ovz_type приходят как CSV-строки "1,3" из формы.
                 // Если пришёл int (старый код / API), нормализуем через helper.
@@ -62,12 +76,14 @@ class unics_user_manager {
                 ]);
                 break;
 
-            case 5: // Педагог
-            case 6: // Тьютор
-            case 4: // Методист
+            case 4: // Методист организации (скоуп: организация)
+            case 9: // Районный методист (скоуп: район — organization_id будет null)
+            case 5: // Педагог, создающий курсы (editingteacher)
+            case 6: // Педагог, non-editing (teacher)
                 $DB->insert_record('unics_teachers', (object)[
                     'mdl_user_id'     => $mdl_user_id,
-                    'organization_id' => $data['organization_id'],
+                    // Районный методист (9) скоупится районом — organization_id пуст.
+                    'organization_id' => !empty($data['organization_id']) ? (int)$data['organization_id'] : null,
                     'subjects'        => $data['subjects'] ?? null,
                     'qualification'   => $data['qualification'] ?? null,
                 ]);
@@ -92,7 +108,8 @@ class unics_user_manager {
     /**
      * Получить список пользователей организации с фильтрами
      */
-    public static function get_users(int $org_id = 0, int $unics_role = 0): array {
+    public static function get_users(int $org_id = 0, int $unics_role = 0,
+                                     string $extra_where = '', array $extra_params = []): array {
         global $DB;
 
         $where  = '1=1';
@@ -106,15 +123,25 @@ class unics_user_manager {
             $where   .= ' AND uo.unics_role = :unics_role';
             $params['unics_role'] = $unics_role;
         }
+        // Доп. фильтр по скоупу (для районного/регионального админа/методиста на users.php).
+        if ($extra_where !== '') {
+            $where  .= ' AND (' . $extra_where . ')';
+            $params += $extra_params;
+        }
 
+        // LEFT JOIN на организацию: управленческие роли (региональн./районный админ,
+        // районный методист) не привязаны к организации — у них заполнен region_id/district_id.
+        // org_name берём из первой непустой сущности скоупа.
         $sql = "SELECT u.id, u.firstname, u.lastname, u.middlename,
                        u.email, u.username, uo.unics_role, uo.organization_id,
-                       o.name AS org_name,
+                       COALESCE(o.name, d.name, rg.name) AS org_name,
                        s.class_number, s.class_letter
                 FROM {user} u
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
-                JOIN {unics_organizations} o ON o.id = uo.organization_id
-                LEFT JOIN {unics_students} s ON s.mdl_user_id = u.id
+                LEFT JOIN {unics_organizations} o ON o.id = uo.organization_id
+                LEFT JOIN {unics_districts}     d ON d.id = uo.district_id
+                LEFT JOIN {unics_regions}      rg ON rg.id = uo.region_id
+                LEFT JOIN {unics_students}      s ON s.mdl_user_id = u.id
                 WHERE $where AND u.deleted = 0
                 ORDER BY u.lastname, u.firstname";
 
@@ -154,7 +181,8 @@ class unics_user_manager {
     public static function get_teachers(int $org_id): array {
         global $DB;
 
-        // Роли 4 (методист), 5 (педагог), 6 (тьютор) - все имеют запись в unics_teachers
+        // Роли 4 (методист орг.), 5 (педагог, создающий курсы), 6 (педагог non-editing)
+        // — все имеют запись в unics_teachers и могут быть назначены/записаны на курс.
         if ($org_id > 0) {
             $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
                            t.id AS teacher_id, t.subjects, uo.unics_role
@@ -341,12 +369,15 @@ class unics_user_manager {
         global $DB;
 
         $map = [
-            3 => 'org_admin',
-            4 => 'methodist',
-            5 => 'editingteacher',  // Педагог
-            6 => 'teacher',         // Тьютор
-            7 => 'student',         // Учащийся
-            8 => 'parent',
+            1 => 'region_admin',        // Региональный администратор (скоуп: регион)
+            2 => 'district_admin',      // Районный администратор (скоуп: район)
+            3 => 'org_admin',           // Адм. организации — legacy, из селекта убран, маппинг сохранён
+            4 => 'methodist',           // Методист организации (скоуп: организация)
+            5 => 'editingteacher',      // Педагог, создающий курсы (скоуп: организация)
+            6 => 'teacher',             // Педагог, non-editing (скоуп: организация)
+            7 => 'student',             // Учащийся
+            8 => 'parent',              // Родитель
+            9 => 'district_methodist',  // Районный методист (скоуп: район)
         ];
 
         if (!isset($map[$unics_role])) {

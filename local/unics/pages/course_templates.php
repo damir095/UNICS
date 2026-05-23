@@ -5,6 +5,13 @@ require_once(__DIR__ . '/../lib.php');
 require_login();
 local_unics_require_not_student();
 
+// Педагог без права редактирования (роль 6) курсы не создаёт — страница read-only-недоступна.
+if (local_unics_is_nonediting_teacher()) {
+    redirect(new moodle_url('/local/unics/pages/dashboard.php'),
+        'Создание курсов доступно только педагогам, создающим курсы.', null,
+        \core\output\notification::NOTIFY_WARNING);
+}
+
 $ctx = context_system::instance();
 if (!has_capability('local/unics:manage', $ctx)
     && !has_capability('local/unics:viewstudents', $ctx)) {

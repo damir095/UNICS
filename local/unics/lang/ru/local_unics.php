@@ -20,13 +20,16 @@ $string['unics_role']            = 'Роль в УНИКС';
 $string['select_role']           = '- Выберите роль -';
 $string['select_org']            = '- Выберите организацию -';
 
-// Роли УНИКС
-$string['role_teacher']          = 'Педагог';
-$string['role_tutor']            = 'Тьютор';
-$string['role_student']          = 'Учащийся';
-$string['role_parent']           = 'Родитель';
-$string['role_org_admin']        = 'Администратор организации';
-$string['role_methodist']        = 'Методист';
+// Роли УНИКС (переработка ролевой модели 2026-05-23)
+$string['role_teacher']            = 'Педагог';                  // код 6, non-editing
+$string['role_editingteacher']     = 'Педагог, создающий курсы'; // код 5
+$string['role_student']            = 'Учащийся';
+$string['role_parent']             = 'Родитель';
+$string['role_org_admin']          = 'Администратор организации'; // legacy, из селекта убран
+$string['role_methodist']          = 'Методист организации';      // код 4
+$string['role_district_methodist'] = 'Районный методист';         // код 9
+$string['role_region_admin']       = 'Региональный администратор';// код 1
+$string['role_district_admin']     = 'Районный администратор';    // код 2
 
 // Поля учащегося
 $string['student_category']      = 'Категория учащегося';

@@ -5,25 +5,18 @@ require_once(__DIR__ . '/../classes/user_manager.php');
 
 require_login();
 local_unics_require_not_student();
-
-$sys_ctx       = context_system::instance();
-$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
-$is_methodist  = !$is_admin_user
-    && has_capability('local/unics:viewstudents', $sys_ctx)
-    && local_unics_is_methodist();
-
-if (!$is_admin_user && !$is_methodist) {
-    require_capability('local/unics:manage', $sys_ctx);
-}
+local_unics_require_manage_or_manageorg();
 
 global $USER, $DB;
 
-$methodist_org_id = 0;
-if ($is_methodist) {
-    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
-    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
-        ? (int)$methodist_rec->organization_id : 0;
-}
+$sys_ctx       = context_system::instance();
+$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
+$my_scope      = $is_admin_user
+    ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
+    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+// Кнопка «На дашборд» вместо «К пользователям» — для всех, кому недоступна полная панель.
+$is_scoped_role  = !$is_admin_user;
+$methodist_org_id = $my_scope['organization_id'] ?? 0;
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/assign.php'));
@@ -41,6 +34,16 @@ if ($action === 'assign_ts' && confirm_sesskey()) {
     $student_ids = optional_param_array('student_ids', [], PARAM_INT);
     $student_ids = array_filter($student_ids);
 
+    // Scope-check для не-админов: педагог и каждый учащийся должны входить в скоуп.
+    if (!$is_admin_user) {
+        $t_uid = (int)$DB->get_field('unics_teachers', 'mdl_user_id', ['id' => $teacher_id]);
+        if ($t_uid) { local_unics_require_manage_or_scope_user($t_uid); }
+        foreach ($student_ids as $sid) {
+            $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $sid]);
+            if ($s_uid) { local_unics_require_manage_or_scope_user($s_uid); }
+        }
+    }
+
     $added = 0; $skipped = 0;
     foreach ($student_ids as $sid) {
         unics_user_manager::assign_teacher_student($teacher_id, $sid, $USER->id) ? $added++ : $skipped++;
@@ -54,23 +57,45 @@ if ($action === 'assign_ts' && confirm_sesskey()) {
 }
 
 if ($action === 'remove_ts' && confirm_sesskey()) {
-    unics_user_manager::remove_teacher_student(required_param('id', PARAM_INT));
+    $ts_id = required_param('id', PARAM_INT);
+    if (!$is_admin_user) {
+        // Проверяем, что student из этой пары входит в скоуп.
+        $s_uid = $DB->get_field_sql(
+            "SELECT s.mdl_user_id FROM {unics_teacher_student} ts
+               JOIN {unics_students} s ON s.id = ts.student_id
+              WHERE ts.id = :id", ['id' => $ts_id]);
+        if ($s_uid) { local_unics_require_manage_or_scope_user((int)$s_uid); }
+    }
+    unics_user_manager::remove_teacher_student($ts_id);
     redirect(new moodle_url('/local/unics/pages/assign.php'),
         get_string('removed_ok', 'local_unics'), null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
 if ($action === 'assign_ps' && confirm_sesskey()) {
-    $result = unics_user_manager::assign_parent_student(
-        required_param('parent_id', PARAM_INT),
-        required_param('student_id', PARAM_INT)
-    );
+    $parent_id  = required_param('parent_id', PARAM_INT);
+    $student_id = required_param('student_id', PARAM_INT);
+    if (!$is_admin_user) {
+        // Родитель: parent_id — это mdl_user_id (см. unics_parent_student.parent_mdl_user_id).
+        local_unics_require_manage_or_scope_user($parent_id);
+        $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+        if ($s_uid) { local_unics_require_manage_or_scope_user($s_uid); }
+    }
+    $result = unics_user_manager::assign_parent_student($parent_id, $student_id);
     $msg  = $result ? get_string('assigned_ok', 'local_unics') : get_string('assign_error', 'local_unics');
     $type = $result ? \core\output\notification::NOTIFY_SUCCESS : \core\output\notification::NOTIFY_WARNING;
     redirect(new moodle_url('/local/unics/pages/assign.php'), $msg, null, $type);
 }
 
 if ($action === 'remove_ps' && confirm_sesskey()) {
-    unics_user_manager::remove_parent_student(required_param('id', PARAM_INT));
+    $ps_id = required_param('id', PARAM_INT);
+    if (!$is_admin_user) {
+        $s_uid = $DB->get_field_sql(
+            "SELECT s.mdl_user_id FROM {unics_parent_student} ps
+               JOIN {unics_students} s ON s.id = ps.student_id
+              WHERE ps.id = :id", ['id' => $ps_id]);
+        if ($s_uid) { local_unics_require_manage_or_scope_user((int)$s_uid); }
+    }
+    unics_user_manager::remove_parent_student($ps_id);
     redirect(new moodle_url('/local/unics/pages/assign.php'),
         get_string('removed_ok', 'local_unics'), null, \core\output\notification::NOTIFY_SUCCESS);
 }
@@ -81,16 +106,27 @@ if ($action === 'remove_ps' && confirm_sesskey()) {
 $filter_org   = optional_param('filter_org',   0, PARAM_INT);
 $filter_class = optional_param('filter_class', 0, PARAM_INT);
 
-// Методист видит только свою организацию.
-if ($is_methodist && $methodist_org_id) {
+// Если у пользователя скоуп = одна организация, форсим фильтр на неё.
+if (!$is_admin_user && $methodist_org_id) {
     $filter_org = $methodist_org_id;
+} else if (!$is_admin_user && $filter_org > 0
+    && !\local_unics\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
+    // Не-админ выбрал орг вне скоупа — сбрасываем фильтр.
+    $filter_org = 0;
 }
 
-// Списки для фильтров
+// Списки для фильтров — для не-админа только орг своего скоупа.
 $orgs_menu = [0 => '- все организации -'];
-foreach ($DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name') as $o) {
-    $orgs_menu[$o->id] = $o->name;
+if ($is_admin_user) {
+    $orgs_rows = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
+} else {
+    [$org_where, $org_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $orgs_rows = $DB->get_records_sql(
+        "SELECT o.id, o.name FROM {unics_organizations} o
+           WHERE o.is_active = 1 AND ({$org_where})
+           ORDER BY o.name", $org_params);
 }
+foreach ($orgs_rows as $o) { $orgs_menu[$o->id] = $o->name; }
 
 $classes_menu = [0 => '- все классы -'];
 for ($i = 1; $i <= 11; $i++) {
@@ -106,6 +142,11 @@ $params = [];
 if ($filter_org > 0) {
     $where .= ' AND s.organization_id = :org_id';
     $params['org_id'] = $filter_org;
+} else if (!$is_admin_user) {
+    // Не-админ без явного фильтра — ограничиваем своим скоупом.
+    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o2');
+    $where .= " AND s.organization_id IN (SELECT o2.id FROM {unics_organizations} o2 WHERE {$scope_where})";
+    $params = array_merge($params, $scope_params);
 }
 if ($filter_class > 0) {
     $where .= ' AND s.class_number = :class_num';
@@ -124,17 +165,42 @@ $students = $DB->get_records_sql(
 );
 
 // ----------------------------------------------------------------
-// Педагоги и родители. Для методиста - только своей организации.
+// Педагоги и родители. Для не-админов — только в пределах скоупа.
 // ----------------------------------------------------------------
-$scope_org_id = ($is_methodist && $methodist_org_id) ? $methodist_org_id : 0;
+if ($is_admin_user) {
+    $teachers    = unics_user_manager::get_teachers(0);
+    $parents_raw = unics_user_manager::get_users(0, 8);
+} else if ($methodist_org_id) {
+    $teachers    = unics_user_manager::get_teachers($methodist_org_id);
+    $parents_raw = unics_user_manager::get_users($methodist_org_id, 8);
+} else {
+    // Скоуп = район или регион: фильтр по нескольким орг через org_filter_sql.
+    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $teachers = $DB->get_records_sql(
+        "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
+                t.id AS teacher_id, t.subjects, uo.unics_role
+           FROM {user} u
+           JOIN {unics_teachers} t       ON t.mdl_user_id = u.id
+           JOIN {unics_user_org} uo      ON uo.mdl_user_id = u.id
+           JOIN {unics_organizations} o  ON o.id = t.organization_id
+          WHERE u.deleted = 0 AND uo.unics_role IN (4, 5, 6) AND ({$scope_where})
+          ORDER BY u.lastname, u.firstname",
+        $scope_params);
+    $parents_raw = $DB->get_records_sql(
+        "SELECT u.id, u.firstname, u.lastname
+           FROM {user} u
+           JOIN {unics_user_org} uo      ON uo.mdl_user_id = u.id
+           JOIN {unics_organizations} o  ON o.id = uo.organization_id
+          WHERE u.deleted = 0 AND uo.unics_role = 8 AND ({$scope_where})
+          ORDER BY u.lastname, u.firstname",
+        $scope_params);
+}
 
-$teachers     = unics_user_manager::get_teachers($scope_org_id);
 $teachers_menu = ['' => get_string('select_teacher', 'local_unics')];
 foreach ($teachers as $t) {
     $teachers_menu[$t->teacher_id] = "{$t->lastname} {$t->firstname}";
 }
 
-$parents_raw  = unics_user_manager::get_users($scope_org_id, 8);
 $parents_menu = ['' => get_string('select_parent', 'local_unics')];
 foreach ($parents_raw as $p) {
     $parents_menu[$p->id] = "{$p->lastname} {$p->firstname}";
@@ -149,6 +215,17 @@ foreach ($students as $s) {
 // ----------------------------------------------------------------
 // Существующие привязки
 // ----------------------------------------------------------------
+// Фильтр существующих привязок по скоупу: для не-админа учащийся пары должен входить в скоуп.
+if ($is_admin_user) {
+    $ts_extra = '';
+    $ps_extra = '';
+    $extra_params = [];
+} else {
+    [$scope_where, $extra_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o_pair');
+    $ts_extra = " AND s.organization_id IN (SELECT o_pair.id FROM {unics_organizations} o_pair WHERE {$scope_where})";
+    $ps_extra = $ts_extra;
+}
+
 $ts_pairs = $DB->get_records_sql(
     "SELECT ts.id, u_t.lastname AS t_last, u_t.firstname AS t_first,
             u_s.lastname AS s_last, u_s.firstname AS s_first,
@@ -158,7 +235,9 @@ $ts_pairs = $DB->get_records_sql(
      JOIN {user} u_t          ON u_t.id = t.mdl_user_id
      JOIN {unics_students} s  ON s.id  = ts.student_id
      JOIN {user} u_s          ON u_s.id = s.mdl_user_id
-     ORDER BY u_t.lastname, u_s.lastname"
+     WHERE 1=1 {$ts_extra}
+     ORDER BY u_t.lastname, u_s.lastname",
+    $extra_params
 );
 
 $ps_pairs = $DB->get_records_sql(
@@ -168,7 +247,9 @@ $ps_pairs = $DB->get_records_sql(
      JOIN {user} u_p           ON u_p.id = ps.parent_mdl_user_id
      JOIN {unics_students} s   ON s.id   = ps.student_id
      JOIN {user} u_s           ON u_s.id = s.mdl_user_id
-     ORDER BY u_p.lastname, u_s.lastname"
+     WHERE 1=1 {$ps_extra}
+     ORDER BY u_p.lastname, u_s.lastname",
+    $extra_params
 );
 
 // ----------------------------------------------------------------
@@ -189,10 +270,10 @@ foreach ($ts_map as $row) {
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('assignments', 'local_unics'));
 
-$back_url   = $is_methodist
+$back_url   = $is_scoped_role
     ? new moodle_url('/local/unics/pages/dashboard.php')
     : new moodle_url('/local/unics/pages/users.php');
-$back_label = $is_methodist ? 'На дашборд' : 'Назад к пользователям';
+$back_label = $is_scoped_role ? 'На дашборд' : 'Назад к пользователям';
 echo html_writer::link($back_url, $back_label,
     ['class' => 'btn btn-outline-secondary btn-sm mb-3']);
 
@@ -207,7 +288,8 @@ echo html_writer::start_tag('form', ['method' => 'get', 'action' => $filter_url,
     'class' => 'form-inline mb-3 p-3 bg-light border rounded']);
 echo html_writer::tag('strong', 'Фильтр учащихся:', ['class' => 'mr-3']);
 
-if ($is_methodist) {
+if (!$is_admin_user && $methodist_org_id) {
+    // Скоуп пользователя — одна орг, фильтр форсирован, селект не показываем.
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_org',
         'value' => (int)$filter_org]);
 } else {

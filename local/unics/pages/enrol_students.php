@@ -5,26 +5,17 @@ require_once($CFG->dirroot . '/group/lib.php');
 
 require_login();
 local_unics_require_not_student();
-
-$sys_ctx       = context_system::instance();
-$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
-$is_methodist  = !$is_admin_user
-    && has_capability('local/unics:viewstudents', $sys_ctx)
-    && local_unics_is_methodist();
-
-if (!$is_admin_user && !$is_methodist) {
-    require_capability('local/unics:manage', $sys_ctx); // throw с понятным сообщением
-}
+local_unics_require_manage_or_manageorg();
 
 global $DB, $USER;
 
-// Организация методиста - для последующего org-scoping списков.
-$methodist_org_id = 0;
-if ($is_methodist) {
-    $methodist_rec = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
-    $methodist_org_id = ($methodist_rec && $methodist_rec->organization_id)
-        ? (int)$methodist_rec->organization_id : 0;
-}
+$sys_ctx          = context_system::instance();
+$is_admin_user    = has_capability('local/unics:manage', $sys_ctx);
+$is_scoped_role   = !$is_admin_user;
+$my_scope         = $is_admin_user
+    ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
+    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+$methodist_org_id = $my_scope['organization_id'] ?? 0;
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_students.php'));
@@ -49,6 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             'Выберите курс и хотя бы одного учащегося.',
             null, \core\output\notification::NOTIFY_WARNING
         );
+    }
+
+    // Scope-check: каждый учащийся должен входить в скоуп текущего пользователя.
+    if (!$is_admin_user) {
+        foreach ($student_ids as $sid) {
+            $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $sid]);
+            if ($s_uid) { local_unics_require_manage_or_scope_user($s_uid); }
+        }
     }
 
     // Создаём новую группу если указана
@@ -119,10 +118,20 @@ $filter_district = optional_param('district_id', 0, PARAM_INT);
 $filter_org      = optional_param('org_id',      0, PARAM_INT);
 $filter_class    = optional_param('class_num',   0, PARAM_INT);
 
-// Методист видит только свою организацию: принудительно фиксируем фильтр.
-if ($is_methodist && $methodist_org_id) {
+// Если у пользователя скоуп = одна орг, форсим фильтр на неё.
+if (!$is_admin_user && $methodist_org_id) {
     $filter_org      = $methodist_org_id;
     $filter_district = 0;
+} else if (!$is_admin_user) {
+    // Не-админ выбрал орг/район вне скоупа — сбрасываем.
+    if ($filter_org > 0
+        && !\local_unics\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
+        $filter_org = 0;
+    }
+    if ($filter_district > 0
+        && !\local_unics\scope_checker::user_can_access_district((int)$USER->id, $filter_district)) {
+        $filter_district = 0;
+    }
 }
 
 // Курсы
@@ -132,19 +141,32 @@ foreach ($courses_raw as $c) {
     $courses_menu[$c->id] = $c->fullname;
 }
 
-// Районы
-$districts_raw  = $DB->get_records('unics_districts', null, 'name ASC', 'id, name');
+// Районы — фильтр по скоупу.
+if ($is_admin_user) {
+    $districts_raw = $DB->get_records('unics_districts', null, 'name ASC', 'id, name');
+} else if ($my_scope['region_id'] !== null) {
+    $districts_raw = $DB->get_records('unics_districts',
+        ['region_id' => $my_scope['region_id']], 'name ASC', 'id, name');
+} else if ($my_scope['district_id'] !== null) {
+    $districts_raw = $DB->get_records('unics_districts',
+        ['id' => $my_scope['district_id']], 'name ASC', 'id, name');
+} else {
+    $districts_raw = [];
+}
 $districts_menu = [0 => '- все районы -'];
 foreach ($districts_raw as $d) {
     $districts_menu[$d->id] = $d->name;
 }
 
-// Организации (зависят от района)
+// Организации (зависят от района) — фильтр по скоупу, если выбран не админ.
 $orgs_menu = [0 => '- все организации -'];
 if ($filter_district > 0) {
-    foreach ($DB->get_records('unics_organizations',
-        ['district_id' => $filter_district, 'is_active' => 1], 'name ASC', 'id, name') as $o) {
-        $orgs_menu[$o->id] = $o->name;
+    $org_filters = ['district_id' => $filter_district, 'is_active' => 1];
+    foreach ($DB->get_records('unics_organizations', $org_filters, 'name ASC', 'id, name') as $o) {
+        if ($is_admin_user
+            || \local_unics\scope_checker::user_can_access_org((int)$USER->id, (int)$o->id)) {
+            $orgs_menu[$o->id] = $o->name;
+        }
     }
 }
 
@@ -169,6 +191,11 @@ if ($filter_org > 0) {
 } elseif ($filter_district > 0) {
     $sql_where .= ' AND o.district_id = :dist_id';
     $sql_params['dist_id'] = $filter_district;
+} else if (!$is_admin_user) {
+    // Не-админ без явного фильтра — ограничиваем своим скоупом.
+    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o2');
+    $sql_where .= " AND s.organization_id IN (SELECT o2.id FROM {unics_organizations} o2 WHERE {$scope_where})";
+    $sql_params = array_merge($sql_params, $scope_params);
 }
 if ($filter_class > 0) {
     $sql_where .= ' AND s.class_number = :class_num';
@@ -217,10 +244,10 @@ $categories = [1 => 'ОВЗ', 2 => 'Семейное', 3 => 'Лечение', 4 
 echo $OUTPUT->header();
 echo $OUTPUT->heading('Запись учащихся на курс');
 
-$back_url   = $is_methodist
+$back_url   = $is_scoped_role
     ? new moodle_url('/local/unics/pages/dashboard.php')
     : new moodle_url('/local/unics/pages/users.php');
-$back_label = $is_methodist ? 'На дашборд' : 'Назад к пользователям';
+$back_label = $is_scoped_role ? 'На дашборд' : 'Назад к пользователям';
 echo html_writer::link($back_url, $back_label,
     ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']);
 echo html_writer::link(
@@ -243,9 +270,8 @@ echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
     ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()']);
 echo html_writer::end_tag('div');
 
-if ($is_methodist) {
-    // Методист: район/организация фиксированы - отдаём как hidden,
-    // чтобы фильтр сохранялся при submit, но не показывался селектором.
+if (!$is_admin_user && $methodist_org_id) {
+    // Скоуп = одна орг, фиксируем через hidden.
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'org_id',
         'value' => (int)$filter_org]);
 } else {

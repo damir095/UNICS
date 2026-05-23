@@ -256,3 +256,126 @@
         }
     }
 }
+
+// ----------------------------------------------------------------
+// Мессенджер УНИКС (pages/messenger.php) — NEW-5
+// Двухпанельный: слева контакты под роль, справа переписка Moodle.
+// ----------------------------------------------------------------
+.unics-messenger {
+    display: flex;
+    gap: var(--unics-space-3);
+    align-items: flex-start;
+
+    @media (max-width: 768px) {
+        flex-direction: column;
+    }
+
+    &__contacts {
+        flex: 0 0 320px;
+        max-width: 320px;
+        max-height: 70vh;
+        overflow-y: auto;
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius);
+        background: var(--unics-surface);
+
+        @media (max-width: 768px) {
+            flex: 1 1 auto;
+            max-width: 100%;
+            width: 100%;
+        }
+    }
+
+    &__chat {
+        flex: 1 1 auto;
+        min-width: 0;
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius);
+        overflow: hidden;
+        background: var(--unics-surface);
+    }
+
+    &__chat-frame {
+        width: 100%;
+        height: 70vh;
+        border: 0;
+        display: block;
+    }
+
+    &__placeholder {
+        height: 70vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: var(--unics-space-4);
+        color: var(--unics-muted, #6c757d);
+    }
+
+    &__group-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--unics-primary-text);
+        padding: var(--unics-space-2) var(--unics-space-3);
+        background: var(--unics-bg, #f7f4f2);
+        border-bottom: 1px solid var(--unics-border);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+}
+
+.unics-contact {
+    display: flex;
+    align-items: center;
+    gap: var(--unics-space-2);
+    padding: var(--unics-space-2) var(--unics-space-3);
+    border-bottom: 1px solid var(--unics-border);
+    color: inherit;
+    text-decoration: none;
+    transition: background 0.12s ease;
+
+    &:hover,
+    &:focus {
+        background: var(--unics-bg, #f7f4f2);
+        text-decoration: none;
+    }
+
+    &--active {
+        background: var(--unics-primary);
+        color: #fff;
+
+        &:hover,
+        &:focus {
+            background: var(--unics-primary-deep);
+            color: #fff;
+        }
+    }
+
+    &__avatar {
+        flex: 0 0 40px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--unics-primary);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    &--active &__avatar {
+        background: #fff;
+        color: var(--unics-primary-deep);
+    }
+
+    &__name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}

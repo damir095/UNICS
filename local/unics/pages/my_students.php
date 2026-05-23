@@ -22,14 +22,40 @@ $PAGE->set_title('Мои учащиеся - УНИКС');
 $PAGE->set_heading('Мои учащиеся');
 $PAGE->set_pagelayout('standard');
 
+// Фильтры (применяются в режимах admin/scoped).
+$filter_org   = optional_param('f_org',   0, PARAM_INT);
+$filter_class = optional_param('f_class', 0, PARAM_INT);
+$filter_level = optional_param('f_level', 0, PARAM_INT);
+
 // Определяем режим доступа.
-// Методист имеет запись в unics_teachers (там хранится привязка к организации),
-// поэтому проверку методиста делаем ДО ветки педагога.
+// manageorg-роли (методист орг./района, региональн./районный админ) видят учащихся
+// своего скоупа (регион/район/орг через unics_user_org). Проверку manageorg делаем
+// ДО ветки педагога — у методиста тоже есть запись в unics_teachers.
 $teacher_record = $DB->get_record('unics_teachers', ['mdl_user_id' => $USER->id]);
-$is_methodist   = $is_teacher && !$is_admin && local_unics_is_methodist();
+$is_manageorg   = has_capability('local/unics:manageorg', context_system::instance());
 
 if ($is_admin && !$teacher_record) {
-    // Администратор без профиля педагога - все учащиеся системы.
+    $scope_where = '1=1';
+    $scope_params = [];
+    $mode = 'admin';
+} elseif (!$is_admin && $is_manageorg) {
+    // Скоуп берётся из unics_user_org: одна орг, весь район или весь регион.
+    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $mode = 'scoped';
+} elseif ($teacher_record) {
+    $mode = 'teacher';
+} else {
+    $mode = 'noprofile';
+}
+
+$students = [];
+if ($mode === 'admin' || $mode === 'scoped') {
+    $where  = $scope_where;
+    $params = $scope_params;
+    if ($filter_org > 0)   { $where .= ' AND s.organization_id = :forg';   $params['forg']   = $filter_org; }
+    if ($filter_class > 0) { $where .= ' AND s.class_number = :fclass';     $params['fclass'] = $filter_class; }
+    if ($filter_level > 0) { $where .= ' AND s.difficulty_level = :flvl';   $params['flvl']   = $filter_level; }
+
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
                 s.class_number, s.category, s.ovz_type, s.difficulty_level,
@@ -38,30 +64,11 @@ if ($is_admin && !$teacher_record) {
          FROM {unics_students} s
          JOIN {user} u ON u.id = s.mdl_user_id
          JOIN {unics_organizations} o ON o.id = s.organization_id
-         WHERE u.deleted = 0
-         ORDER BY u.lastname, u.firstname"
+         WHERE ({$where}) AND u.deleted = 0
+         ORDER BY u.lastname, u.firstname",
+        $params
     );
-    $mode = 'admin';
-} elseif ($is_methodist) {
-    // Методист - все учащиеся его организации (организация берётся из unics_teachers).
-    if ($teacher_record && $teacher_record->organization_id) {
-        $students = $DB->get_records_sql(
-            "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                    s.class_number, s.category, s.ovz_type, s.difficulty_level,
-                    o.name AS org_name,
-                    NULL AS teacher_lastname, NULL AS teacher_firstname
-             FROM {unics_students} s
-             JOIN {user} u ON u.id = s.mdl_user_id
-             JOIN {unics_organizations} o ON o.id = s.organization_id
-             WHERE s.organization_id = :org_id AND u.deleted = 0
-             ORDER BY u.lastname, u.firstname",
-            ['org_id' => (int)$teacher_record->organization_id]
-        );
-    } else {
-        $students = [];
-    }
-    $mode = 'methodist';
-} elseif ($teacher_record) {
+} elseif ($mode === 'teacher') {
     // Педагог - только привязанные учащиеся.
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
@@ -76,10 +83,6 @@ if ($is_admin && !$teacher_record) {
          ORDER BY u.lastname, u.firstname",
         ['teacher_id' => $teacher_record->id]
     );
-    $mode = 'teacher';
-} else {
-    $students = [];
-    $mode = 'noprofile';
 }
 
 $categories = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => 'Длительное лечение', 4 => 'Одарённый'];
@@ -99,34 +102,55 @@ if ($mode === 'noprofile') {
 
 if ($mode === 'admin') {
     echo $OUTPUT->notification('Вы вошли как администратор. Отображаются все учащиеся системы.', 'info');
-} elseif ($mode === 'methodist') {
-    if (!empty($teacher_record) && !empty($teacher_record->organization_id)) {
-        $org_name = $DB->get_field('unics_organizations', 'name',
-            ['id' => (int)$teacher_record->organization_id]);
-        echo $OUTPUT->notification(
-            'Вы вошли как методист. Отображаются все учащиеся вашей организации'
-            . ($org_name ? ' «' . s($org_name) . '»' : '') . '.',
-            'info'
-        );
-    } else {
-        echo $OUTPUT->notification(
-            'Ваш профиль методиста не привязан к организации. Обратитесь к администратору.',
-            'warning'
-        );
+} elseif ($mode === 'scoped') {
+    $scope = \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    $scope_name = '';
+    if ($scope['organization_id']) {
+        $scope_name = 'организация «' . (string)$DB->get_field('unics_organizations', 'name', ['id' => $scope['organization_id']]) . '»';
+    } else if ($scope['district_id']) {
+        $scope_name = 'район ' . (string)$DB->get_field('unics_districts', 'name', ['id' => $scope['district_id']]);
+    } else if ($scope['region_id']) {
+        $scope_name = 'регион ' . (string)$DB->get_field('unics_regions', 'name', ['id' => $scope['region_id']]);
     }
+    echo $OUTPUT->notification(
+        $scope_name ? ('Показаны учащиеся: ' . s($scope_name) . '.') : 'Показаны ваши учащиеся.',
+        'info'
+    );
 }
 
-if ($is_admin) {
+// --- Фильтры (организация / класс / уровень) для admin и scoped ---
+if ($mode === 'admin' || $mode === 'scoped') {
+    if ($is_admin) {
+        $orgs_rows = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
+    } else {
+        [$ofw, $ofp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+        $orgs_rows = $DB->get_records_sql(
+            "SELECT o.id, o.name FROM {unics_organizations} o
+              WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp);
+    }
+    $orgs_menu = [0 => 'Все организации'];
+    foreach ($orgs_rows as $o) { $orgs_menu[$o->id] = $o->name; }
+
+    $class_menu = [0 => 'Все классы'];
+    for ($i = 1; $i <= 11; $i++) { $class_menu[$i] = $i . ' класс'; }
+
+    $level_menu = [0 => 'Все уровни'] + $levels;
+
+    echo html_writer::start_tag('form',
+        ['method' => 'get', 'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
+    echo html_writer::select($orgs_menu,  'f_org',   $filter_org,   false, ['class' => 'form-control']);
+    echo html_writer::select($class_menu, 'f_class', $filter_class, false, ['class' => 'form-control']);
+    echo html_writer::select($level_menu, 'f_level', $filter_level, false, ['class' => 'form-control']);
+    echo html_writer::tag('button', 'Фильтр', ['type' => 'submit', 'class' => 'btn btn-outline-secondary']);
+    echo html_writer::end_tag('form');
+}
+
+if ($is_admin || $mode === 'scoped') {
     echo html_writer::tag('div',
         html_writer::link(
             new moodle_url('/local/unics/pages/assign.php'),
             'Назначения педагог-учащийся',
             ['class' => 'btn btn-outline-secondary btn-sm me-2']
-        ) .
-        html_writer::link(
-            new moodle_url('/local/unics/pages/generate_umk.php'),
-            'Генерация УМК (ИИ)',
-            ['class' => 'btn btn-outline-primary btn-sm']
         ),
         ['class' => 'mb-3']
     );
@@ -138,6 +162,8 @@ if (empty($students)) {
             'У вас нет назначенных учащихся. Обратитесь к администратору для назначения.',
             'warning'
         );
+    } else {
+        echo $OUTPUT->notification('Учащихся по выбранным условиям не найдено.', 'info');
     }
     echo $OUTPUT->footer();
     exit;

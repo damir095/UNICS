@@ -65,17 +65,6 @@ class primary extends \core\navigation\output\primary {
 
         $role = local_unics_get_role_for_user((int)$USER->id);
 
-        // DEBUG LK-1: разовая диагностика, удалить после фикса.
-        if (!empty($CFG->debugdeveloper)) {
-            error_log(sprintf(
-                '[theme_unics LK-1] uid=%d role=%s items_before=%d titleidentifiers=%s',
-                (int)$USER->id,
-                $role,
-                count($data['items']),
-                json_encode(array_map(fn($i) => $i->titleidentifier ?? '?', $data['items']))
-            ));
-        }
-
         if (isset(self::ROLE_WHITELIST[$role])) {
             $allowed = self::ROLE_WHITELIST[$role];
             $filtered = [];
@@ -106,17 +95,6 @@ class primary extends \core\navigation\output\primary {
                 'link'     => false,
             ];
             $data['items'] = array_merge([$dashboard, $divider], $data['items']);
-        }
-
-        // DEBUG LK-1.
-        if (!empty($CFG->debugdeveloper)) {
-            error_log(sprintf(
-                '[theme_unics LK-1] uid=%d role=%s items_after=%d first_titleidentifier=%s',
-                (int)$USER->id,
-                $role,
-                count($data['items']),
-                isset($data['items'][0]->titleidentifier) ? $data['items'][0]->titleidentifier : '?'
-            ));
         }
 
         return $data;

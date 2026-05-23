@@ -83,3 +83,13 @@
         opacity: 1;
     }
 }
+
+// NEW-5: убираем стандартную иконку сообщений из навбара — общение идёт
+// через нашу страницу «Сообщения» (/local/unics/pages/messenger.php) со
+// списком контактов под роль. Колокольчик уведомлений ОСТАЁТСЯ.
+// Скрываем CSS-ом (наименее инвазивно, легко откатить); при необходимости
+// позже заменить на renderer/hook-override navbar_plugin_output.
+// Маркер — атрибут data-region, не класс (см. message_popover.mustache:38).
+[data-region="popover-region-messages"] {
+    display: none !important;
+}

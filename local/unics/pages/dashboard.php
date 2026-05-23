@@ -8,7 +8,9 @@ global $USER, $DB;
 $ctx        = context_system::instance();
 $is_admin   = has_capability('local/unics:manage',       $ctx);
 $is_teacher = has_capability('local/unics:viewstudents', $ctx);
-$is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
+// Региональный / районный администратор — manageorg без системного manage.
+$is_scoped_admin = !$is_admin && local_unics_is_scoped_admin();
+$is_methodist = !$is_admin && !$is_scoped_admin && local_unics_is_methodist();
 
 $PAGE->set_context($ctx);
 $PAGE->set_url(new moodle_url('/local/unics/pages/dashboard.php'));
@@ -17,6 +19,15 @@ $PAGE->set_heading('УНИКС - Единый портал');
 $PAGE->set_pagelayout('standard');
 
 echo $OUTPUT->header();
+
+// Доступно всем ролям: вход в наш мессенджер (контакты под роль).
+echo '<div class="d-flex justify-content-end mt-3 mb-3">';
+echo html_writer::link(
+    new moodle_url('/local/unics/pages/messenger.php'),
+    'Сообщения',
+    ['class' => 'btn btn-outline-primary btn-sm']
+);
+echo '</div>';
 
 // ----------------------------------------------------------------
 // АДМИНИСТРАТОР
@@ -115,7 +126,60 @@ if ($is_admin) {
     }
 
 // ----------------------------------------------------------------
-// ПЕДАГОГ
+// РЕГИОНАЛЬНЫЙ / РАЙОННЫЙ АДМИНИСТРАТОР (manageorg, скоуп)
+// ----------------------------------------------------------------
+} elseif ($is_scoped_admin) {
+
+    [$sw, $sp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $total_students = (int)$DB->count_records_sql(
+        "SELECT COUNT(s.id) FROM {unics_students} s
+            JOIN {unics_organizations} o ON o.id = s.organization_id
+          WHERE {$sw}", $sp);
+    $total_orgs = (int)$DB->count_records_sql(
+        "SELECT COUNT(o.id) FROM {unics_organizations} o WHERE o.is_active = 1 AND ({$sw})", $sp);
+
+    $scope = \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    $scope_name = '';
+    if ($scope['district_id']) {
+        $scope_name = (string)$DB->get_field('unics_districts', 'name', ['id' => $scope['district_id']]);
+    } else if ($scope['region_id']) {
+        $scope_name = (string)$DB->get_field('unics_regions', 'name', ['id' => $scope['region_id']]);
+    }
+
+    $fio_admin = trim($USER->lastname . ' ' . $USER->firstname);
+    echo '<div class="unics-welcome mb-4">';
+    echo '<h2>Добро пожаловать, ' . s($fio_admin) . '</h2>';
+    echo '<div class="sub">Панель администратора' . ($scope_name ? ' — ' . s($scope_name) : '') . '</div>';
+    echo '</div>';
+
+    echo '<div class="row mb-4">';
+    foreach ([[$total_students, 'Учащихся'], [$total_orgs, 'Организаций']] as [$val, $lbl]) {
+        echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card p-3 text-center">';
+        echo '<div class="stat-value">' . $val . '</div>';
+        echo '<div class="stat-label mt-1">' . s($lbl) . '</div>';
+        echo '</div></div>';
+    }
+    echo '</div>';
+
+    echo '<h2 class="unics-section-title">Быстрые действия</h2>';
+    echo '<div class="unics-action-grid mb-4 d-flex flex-wrap gap-2">';
+    $actions = [
+        ['/local/unics/pages/users.php',          'btn-primary',           'Пользователи'],
+        ['/local/unics/pages/create_user.php',    'btn-outline-primary',   'Создать пользователя'],
+        ['/local/unics/pages/my_students.php',    'btn-outline-primary',   'Все учащиеся'],
+        ['/local/unics/pages/assign.php',         'btn-outline-primary',   'Привязки'],
+        ['/local/unics/pages/organizations.php',  'btn-outline-secondary', 'Организации'],
+        ['/local/unics/pages/enrol_students.php', 'btn-outline-secondary', 'Запись учащихся на курс'],
+        ['/local/unics/pages/enrol_teachers.php', 'btn-outline-secondary', 'Запись педагогов на курс'],
+        ['/local/unics/pages/org_report.php',     'btn-outline-info',      'Отчёт по организации'],
+    ];
+    foreach ($actions as [$url, $cls, $label]) {
+        echo html_writer::link(new moodle_url($url), $label, ['class' => 'btn ' . $cls]);
+    }
+    echo '</div>';
+
+// ----------------------------------------------------------------
+// ПЕДАГОГ / МЕТОДИСТ
 // ----------------------------------------------------------------
 } elseif ($is_methodist) {
 
@@ -161,6 +225,11 @@ if ($is_admin) {
 
     echo '<h2 class="unics-section-title">Быстрые действия</h2>';
     echo '<div class="unics-action-grid mb-4 d-flex flex-wrap gap-2">';
+    // Методист (организации/района) управляет пользователями своего скоупа (manageorg).
+    echo html_writer::link(new moodle_url('/local/unics/pages/users.php'),
+        'Пользователи', ['class' => 'btn btn-primary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/create_user.php'),
+        'Создать пользователя', ['class' => 'btn btn-outline-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/course_templates.php'),
         'Шаблоны курсов', ['class' => 'btn btn-primary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/generate_umk.php'),

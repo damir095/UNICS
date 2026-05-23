@@ -1,8 +1,9 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/user_manager.php');
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_manage_or_manageorg();
 
 $user_id = optional_param('id', 0, PARAM_INT);
 $action  = optional_param('action', 'edit', PARAM_ALPHA);
@@ -25,14 +26,17 @@ if (!$profile) {
     throw new moodle_exception('Пользователь не найден в системе УНИКС');
 }
 
+// Scope-check: редактируемый пользователь должен входить в скоуп текущего.
+local_unics_require_manage_or_scope_user((int)$user_id);
+
 $unics_role = (int)$profile->unics_role;
 $is_student = ($unics_role === 7);
-$is_teacher = in_array($unics_role, [4, 5, 6]);
+$is_teacher = in_array($unics_role, [4, 5]);
 
 $category_options = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => 'Длительное лечение', 4 => 'Одарённый ребёнок'];
 $ovz_options      = [1 => 'Слабовидящий', 2 => 'Слабослышащий', 3 => 'НОДА', 4 => 'ЗПР', 5 => 'РАС', 6 => 'Иное'];
 $level_options    = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
-$role_labels      = [3 => 'Администратор организации', 4 => 'Методист', 5 => 'Педагог', 6 => 'Тьютор', 7 => 'Учащийся', 8 => 'Родитель'];
+$role_labels      = [3 => 'Администратор организации', 4 => 'Методист', 5 => 'Педагог', 7 => 'Учащийся', 8 => 'Родитель'];
 
 // Обработка деактивации
 if ($action === 'suspend' && confirm_sesskey()) {
@@ -84,7 +88,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 echo $OUTPUT->header();
 
 $return_url = new moodle_url('/local/unics/pages/users.php');
-echo '<p><a href="' . $return_url . '" class="btn btn-sm btn-outline-secondary">Список пользователей</a></p>';
+$moodle_edit_url = new moodle_url('/user/editadvanced.php', [
+    'id'     => $user_id,
+    'course' => SITEID,
+]);
+echo '<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">';
+echo '<a href="' . $return_url . '" class="btn btn-sm btn-outline-secondary">Список пользователей</a>';
+echo '<a href="' . $moodle_edit_url . '" class="btn btn-sm btn-outline-primary">'
+    . 'Редактировать в Moodle (пароль, аватар, email)</a>';
+echo '</div>';
+echo '<p class="text-muted small">Эта форма редактирует данные УНИКС (организация, класс, уровень, '
+    . 'категория). Базовые данные аккаунта (пароль, аватар, email, логин) — через кнопку «Редактировать в Moodle».</p>';
 echo '<h4>' . s($profile->lastname . ' ' . $profile->firstname) . '
     <span class="badge bg-secondary ms-2">' . ($role_labels[$unics_role] ?? 'Роль ' . $unics_role) . '</span>
 </h4>';

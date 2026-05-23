@@ -80,7 +80,7 @@ class course_template {
         }
 
         $fullname  = "{$subject['name']}. {$class_num} класс";
-        $shortname = substr($subject_key, 0, 4) . $class_num . '_' . substr(uniqid(), -5);
+        $shortname = self::make_unique_shortname($fullname);
 
         if (!$category_id) {
             $category_id = (int)($DB->get_field('course_categories', 'id', ['parent' => 0], IGNORE_MISSING) ?: 1);
@@ -114,6 +114,18 @@ class course_template {
     // ------------------------------------------------------------------
     // Private helpers
     // ------------------------------------------------------------------
+
+    private static function make_unique_shortname(string $base): string {
+        global $DB;
+
+        $shortname = $base;
+        $counter   = 1;
+        while ($DB->record_exists('course', ['shortname' => $shortname])) {
+            $counter++;
+            $shortname = $base . " ({$counter})";
+        }
+        return $shortname;
+    }
 
     private static function apply_section_names(int $course_id, int $num_topics, ?array $topic_names = null): void {
         global $DB;

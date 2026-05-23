@@ -9,6 +9,14 @@ global $USER, $DB;
 
 local_unics_require_not_student();
 
+// Педагог без права редактирования (роль 6, non-editing) контент НЕ создаёт —
+// генерация УМК ему недоступна (наши страницы для него read-only).
+if (local_unics_is_nonediting_teacher()) {
+    redirect(new moodle_url('/local/unics/pages/dashboard.php'),
+        'Генерация УМК доступна только педагогам, создающим курсы.', null,
+        \core\output\notification::NOTIFY_WARNING);
+}
+
 $is_admin   = has_capability('local/unics:manage', context_system::instance());
 $is_teacher = has_capability('local/unics:viewstudents', context_system::instance());
 
@@ -220,6 +228,15 @@ if ($filter_class > 0) {
     $params['class_num'] = $filter_class;
 }
 
+// Скоуп: не-системный-админ без teacher-привязки (районный/региональн. методист или
+// scoped-админ) видит только учащихся своего скоупа (регион/район/орг). Без этого
+// фильтра районный методист увидел бы всех учащихся системы — утечка скоупа.
+if (!$is_admin && !$teacher_record) {
+    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $where .= " AND ({$scope_where})";
+    $params += $scope_params;
+}
+
 if ($teacher_record) {
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename,
@@ -382,11 +399,12 @@ echo html_writer::script("
     var courseSelect  = document.getElementById('course_id_select');
     var sectionSelect = document.getElementById('target_section_select');
     var sectionsUrl   = '{$sections_url}';
+    var sesskey       = '" . sesskey() . "';
 
     function loadSections(courseId) {
         sectionSelect.innerHTML = '<option value=\"-1\">- создать новый раздел -</option>';
         if (!courseId) return;
-        fetch(sectionsUrl + '?course_id=' + courseId)
+        fetch(sectionsUrl + '?course_id=' + courseId + '&sesskey=' + sesskey)
             .then(function(r) { return r.json(); })
             .then(function(sections) {
                 sections.forEach(function(s) {
@@ -499,8 +517,13 @@ if (empty($students)) {
             $hint .= ' Привязанных учащихся: ' . $bound_count
                 . '. Если они не показаны - снимите фильтр класса/организации.';
         }
-    } elseif ($is_methodist && empty($methodist_org_id)) {
-        $hint .= ' Ваш профиль методиста не привязан к организации - обратитесь к администратору.';
+    } elseif (!$is_admin) {
+        $scope = \local_unics\scope_checker::get_user_scope((int)$USER->id);
+        if (!$scope['organization_id'] && !$scope['district_id'] && !$scope['region_id']) {
+            $hint .= ' Ваш профиль не привязан к организации, району или региону - обратитесь к администратору.';
+        } else {
+            $hint .= ' Среди ваших учащихся нет подходящих по выбранному фильтру.';
+        }
     }
     echo html_writer::tag('p', $hint, ['class' => 'text-muted']);
 } else {

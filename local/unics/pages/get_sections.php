@@ -8,6 +8,14 @@ if (!has_capability('local/unics:viewstudents', context_system::instance())) {
     exit;
 }
 
+// Защита от подделки запроса: токен сессии. Вызывающий JS (generate_umk.php)
+// передаёт sesskey в URL.
+if (!confirm_sesskey()) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Invalid sesskey']);
+    exit;
+}
+
 $course_id = required_param('course_id', PARAM_INT);
 
 $rows = $DB->get_records_sql(

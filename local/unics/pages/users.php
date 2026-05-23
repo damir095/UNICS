@@ -1,11 +1,18 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/user_manager.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+// Полный доступ — у системного админа (manage); районный/региональн. админ и методист
+// (manageorg) видят и управляют пользователями в рамках своего скоупа.
+local_unics_require_manage_or_manageorg();
 
-$PAGE->set_context(context_system::instance());
+global $USER, $DB;
+$ctx           = context_system::instance();
+$is_full_admin = has_capability('local/unics:manage', $ctx);
+
+$PAGE->set_context($ctx);
 $PAGE->set_url(new moodle_url('/local/unics/pages/users.php'));
 $PAGE->set_title(get_string('users', 'local_unics'));
 $PAGE->set_heading(get_string('pluginname', 'local_unics'));
@@ -15,16 +22,32 @@ $PAGE->set_pagelayout('admin');
 $filter_role = optional_param('role', 0, PARAM_INT);
 $filter_org  = optional_param('org', 0, PARAM_INT);
 
-$users = unics_user_manager::get_users($filter_org, $filter_role);
-$orgs  = unics_user_manager::get_organizations_menu();
+if ($is_full_admin) {
+    $users = unics_user_manager::get_users($filter_org, $filter_role);
+    $orgs  = unics_user_manager::get_organizations_menu();
+} else {
+    // Скоуп-фильтр: только пользователи района/региона/организации смотрящего.
+    [$scope_where, $scope_params] =
+        \local_unics\scope_checker::user_list_filter_sql((int)$USER->id, 'uo', 'o');
+    $users = unics_user_manager::get_users($filter_org, $filter_role, $scope_where, $scope_params);
+
+    // Выпадающий список организаций — тоже по скоупу.
+    [$ofw, $ofp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $orgs_rows = $DB->get_records_sql(
+        "SELECT o.id, o.name FROM {unics_organizations} o
+          WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp);
+    $orgs = [];
+    foreach ($orgs_rows as $o) { $orgs[$o->id] = $o->name; }
+}
 
 $role_labels = [
     1 => 'Региональный администратор',
-    2 => 'Муниципальный администратор',
-    3 => 'Администратор организации',
-    4 => 'Методист',
-    5 => 'Педагог',
-    6 => 'Тьютор',
+    2 => 'Районный администратор',
+    9 => 'Районный методист',
+    3 => 'Администратор организации',       // legacy
+    4 => 'Методист организации',
+    5 => 'Педагог, создающий курсы',
+    6 => 'Педагог',                          // non-editing
     7 => 'Учащийся',
     8 => 'Родитель',
 ];
@@ -74,7 +97,7 @@ if (empty($users)) {
     echo $OUTPUT->notification(get_string('no_users', 'local_unics'), 'info');
 } else {
     $table = new html_table();
-    $table->head = ['ФИО', 'Email', 'Логин', 'Роль', 'Организация', 'Класс', get_string('actions', 'local_unics')];
+    $table->head = ['ФИО', 'Email', 'Логин', 'Роль', 'Организация / территория', 'Класс', get_string('actions', 'local_unics')];
     $table->attributes['class'] = 'table table-striped';
 
     foreach ($users as $user) {
@@ -88,6 +111,13 @@ if (empty($users)) {
         }
 
         $edit_url = new moodle_url('/local/unics/pages/edit_user.php', ['id' => $user->id]);
+        $moodle_edit_url = new moodle_url('/user/editadvanced.php', ['id' => $user->id, 'course' => SITEID]);
+        $actions_cell = html_writer::link($edit_url, get_string('edit', 'local_unics'),
+                ['class' => 'btn btn-sm btn-outline-primary'])
+            . ' '
+            . html_writer::link($moodle_edit_url, 'Moodle',
+                ['class' => 'btn btn-sm btn-outline-secondary',
+                 'title' => 'Редактировать аккаунт в Moodle (пароль, аватар, email)']);
 
         $table->data[] = [
             $fio,
@@ -96,7 +126,7 @@ if (empty($users)) {
             $role_label,
             $user->org_name,
             $class_cell,
-            html_writer::link($edit_url, get_string('edit', 'local_unics'), ['class' => 'btn btn-sm btn-outline-primary']),
+            $actions_cell,
         ];
     }
 

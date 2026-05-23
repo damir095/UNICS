@@ -50,20 +50,24 @@
       </KEYS>
     </TABLE>
 
-    <TABLE NAME="unics_user_org" COMMENT="Привязка пользователей Moodle к организациям и ролям УНИКС">
+    <TABLE NAME="unics_user_org" COMMENT="Привязка пользователей Moodle к скоупу (регион / район / организация) и ролям УНИКС">
       <FIELDS>
-        <FIELD NAME="id"              TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="mdl_user_id"     TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="organization_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="unics_role"      TYPE="int" LENGTH="2"  NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="id"              TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"     TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="region_id"       TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Скоуп = регион. Используется для region_admin (region scope)"/>
+        <FIELD NAME="district_id"     TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Скоуп = район. Используется для region_admin (district scope) и methodist (district scope)"/>
+        <FIELD NAME="organization_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Скоуп = организация. Используется для methodist (org scope), org_admin, и обычной привязки учителей/учеников/родителей"/>
+        <FIELD NAME="unics_role"      TYPE="int" LENGTH="2"  NOTNULL="true"  SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
-        <KEY NAME="mdl_user_id"     TYPE="foreign" FIELDS="mdl_user_id"     REFTABLE="user"               REFFIELDS="id"/>
+        <KEY NAME="mdl_user_id"     TYPE="foreign" FIELDS="mdl_user_id"     REFTABLE="user"                REFFIELDS="id"/>
+        <KEY NAME="region_id"       TYPE="foreign" FIELDS="region_id"       REFTABLE="unics_regions"       REFFIELDS="id"/>
+        <KEY NAME="district_id"     TYPE="foreign" FIELDS="district_id"     REFTABLE="unics_districts"     REFFIELDS="id"/>
         <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="uq_user_org" UNIQUE="true" FIELDS="mdl_user_id, organization_id"/>
+        <INDEX NAME="idx_user_org_user" UNIQUE="false" FIELDS="mdl_user_id"/>
       </INDEXES>
     </TABLE>
 

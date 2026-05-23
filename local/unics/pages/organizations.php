@@ -1,9 +1,17 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/organization_manager.php');
 
 require_login();
-require_capability('local/unics:manage', context_system::instance());
+local_unics_require_manage_or_manageorg();
+
+global $USER;
+$sys_ctx       = context_system::instance();
+$is_admin_user = has_capability('local/unics:manage', $sys_ctx);
+$my_scope      = $is_admin_user
+    ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
+    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
 
 $PAGE->set_url(new moodle_url('/local/unics/pages/organizations.php'));
 $PAGE->set_title(get_string('org_management', 'local_unics'));
@@ -29,6 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'move_members') {
         $from_org_id = required_param('from_org_id', PARAM_INT);
         $to_org_id   = required_param('to_org_id',   PARAM_INT);
+        local_unics_require_manage_or_scope_org($from_org_id);
+        local_unics_require_manage_or_scope_org($to_org_id);
         $moved = unics_organization_manager::move_members($from_org_id, $to_org_id);
         redirect(
             new moodle_url('/local/unics/pages/organizations.php'),
@@ -41,10 +51,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete') {
         $del_id = required_param('del_id', PARAM_INT);
         if ($type === 'region') {
+            // Удаление региона — только системный админ.
+            require_capability('local/unics:manage', $sys_ctx);
             $result = unics_organization_manager::delete_region($del_id);
         } elseif ($type === 'district') {
+            local_unics_require_manage_or_scope_district($del_id);
             $result = unics_organization_manager::delete_district($del_id);
         } elseif ($type === 'org') {
+            local_unics_require_manage_or_scope_org($del_id);
             $result = unics_organization_manager::delete_organization($del_id);
         } else {
             $result = true;
@@ -71,8 +85,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($type === 'region') {
         $name = required_param('name', PARAM_TEXT);
         if ($edit_id) {
+            local_unics_require_manage_or_scope_region($edit_id);
             unics_organization_manager::update_region($edit_id, $name);
         } else {
+            // Создание нового региона — только системный админ.
+            require_capability('local/unics:manage', $sys_ctx);
             unics_organization_manager::create_region($name);
         }
 
@@ -80,8 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name      = required_param('name',      PARAM_TEXT);
         $region_id = required_param('region_id', PARAM_INT);
         if ($edit_id) {
+            local_unics_require_manage_or_scope_district($edit_id);
             unics_organization_manager::update_district($edit_id, $name);
         } else {
+            // Создание нового района — region должен входить в скоуп.
+            local_unics_require_manage_or_scope_region($region_id);
             unics_organization_manager::create_district($region_id, $name);
         }
 
@@ -95,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email       = optional_param('email',       '', PARAM_EMAIL);
 
         if ($edit_id) {
+            local_unics_require_manage_or_scope_org($edit_id);
             unics_organization_manager::update_organization($edit_id, [
                 'name'       => $name,
                 'short_name' => $short_name,
@@ -104,6 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email'      => $email,
             ]);
         } else {
+            // Создание новой орг — район должен входить в скоуп.
+            local_unics_require_manage_or_scope_district($district_id);
             unics_organization_manager::create_organization(
                 $district_id, $name, $short_name, $org_type, $address, $phone, $email
             );
@@ -127,11 +150,15 @@ $edit_id   = optional_param('edit_id',   0, PARAM_INT);
 $edit_item = null;
 if ($edit_type && $edit_id) {
     global $DB;
+    // Scope-check: пользователь не должен видеть форму редактирования для сущности вне скоупа.
     if ($edit_type === 'region') {
+        local_unics_require_manage_or_scope_region($edit_id);
         $edit_item = $DB->get_record('unics_regions', ['id' => $edit_id]);
     } elseif ($edit_type === 'district') {
+        local_unics_require_manage_or_scope_district($edit_id);
         $edit_item = $DB->get_record('unics_districts', ['id' => $edit_id]);
     } elseif ($edit_type === 'org') {
+        local_unics_require_manage_or_scope_org($edit_id);
         $edit_item = $DB->get_record('unics_organizations', ['id' => $edit_id]);
     }
 }
@@ -198,21 +225,47 @@ if ($edit_item && $edit_type) {
 
 $tree = unics_organization_manager::get_tree();
 
-// ---- Форма добавления региона ----
-echo '<div class="card mb-4">';
-echo '<div class="card-header"><strong>' . get_string('add_region', 'local_unics') . '</strong></div>';
-echo '<div class="card-body">';
-echo '<form method="post" class="form-inline">';
-echo '<input type="hidden" name="action" value="save">';
-echo '<input type="hidden" name="type" value="region">';
-echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
-echo '<div class="form-group mr-2">';
-echo '<label class="mr-1">Название</label>';
-echo '<input type="text" name="name" class="form-control form-control-sm" required style="width:280px">';
-echo '</div>';
-echo '<button type="submit" class="btn btn-primary btn-sm">Создать регион</button>';
-echo '</form>';
-echo '</div></div>';
+// Фильтрация дерева по скоупу: не-админ видит только свою ветвь.
+if (!$is_admin_user) {
+    $tree = array_filter($tree, function ($region) use ($my_scope) {
+        if ($my_scope['region_id'] !== null) {
+            return (int)$region->id === $my_scope['region_id'];
+        }
+        if ($my_scope['district_id'] !== null) {
+            $region->districts = array_filter($region->districts,
+                fn($d) => (int)$d->id === $my_scope['district_id']);
+            return !empty($region->districts);
+        }
+        if ($my_scope['organization_id'] !== null) {
+            foreach ($region->districts as &$d) {
+                $d->organizations = array_filter($d->organizations,
+                    fn($o) => (int)$o->id === $my_scope['organization_id']);
+            }
+            unset($d);
+            $region->districts = array_filter($region->districts, fn($d) => !empty($d->organizations));
+            return !empty($region->districts);
+        }
+        return false;
+    });
+}
+
+// ---- Форма добавления региона (только для системного админа) ----
+if ($is_admin_user) {
+    echo '<div class="card mb-4">';
+    echo '<div class="card-header"><strong>' . get_string('add_region', 'local_unics') . '</strong></div>';
+    echo '<div class="card-body">';
+    echo '<form method="post" class="form-inline">';
+    echo '<input type="hidden" name="action" value="save">';
+    echo '<input type="hidden" name="type" value="region">';
+    echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
+    echo '<div class="form-group mr-2">';
+    echo '<label class="mr-1">Название</label>';
+    echo '<input type="text" name="name" class="form-control form-control-sm" required style="width:280px">';
+    echo '</div>';
+    echo '<button type="submit" class="btn btn-primary btn-sm">Создать регион</button>';
+    echo '</form>';
+    echo '</div></div>';
+}
 
 $all_orgs_grouped = unics_organization_manager::get_organizations_grouped();
 

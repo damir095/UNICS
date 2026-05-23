@@ -312,5 +312,191 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026051600, 'local', 'unics');
     }
 
+    if ($oldversion < 2026052002) {
+        // Этап 1 пункта #11 (роли) [[meeting-2026-05-20-followup]]:
+        // Расширяем unics_user_org для хранения скоупа (регион / район / организация).
+        // Используется новой ролью region_admin и для расширения скоупа методиста с org → district.
+        $table = new xmldb_table('unics_user_org');
+
+        // Сначала снимаем старый UNIQUE (mdl_user_id, organization_id):
+        // organization_id становится nullable, новая модель = одна запись на пользователя.
+        $old_index = new xmldb_index('uq_user_org', XMLDB_INDEX_UNIQUE, ['mdl_user_id', 'organization_id']);
+        if ($dbman->index_exists($table, $old_index)) {
+            $dbman->drop_index($table, $old_index);
+        }
+
+        // organization_id NOT NULL → NULL (методист района / region_admin не имеют org).
+        // MariaDB не даёт менять колонку, на которой висит foreign key — снимаем его,
+        // меняем nullability, затем возвращаем ключ.
+        $field_org = new xmldb_field('organization_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'mdl_user_id');
+        if ($dbman->field_exists($table, $field_org)) {
+            $key_org = new xmldb_key('organization_id', XMLDB_KEY_FOREIGN, ['organization_id'], 'unics_organizations', ['id']);
+            try {
+                $dbman->drop_key($table, $key_org);
+            } catch (\Throwable $e) {
+                // Ключа могло не быть (частично применённый апгрейд) — это не ошибка.
+                debugging('local_unics: drop_key(organization_id) skipped: ' . $e->getMessage(), DEBUG_DEVELOPER);
+            }
+            $dbman->change_field_notnull($table, $field_org);
+            $dbman->add_key($table, $key_org);
+        }
+
+        // Добавляем region_id (для region_admin region-scope).
+        $field_region = new xmldb_field('region_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'mdl_user_id');
+        if (!$dbman->field_exists($table, $field_region)) {
+            $dbman->add_field($table, $field_region);
+        }
+
+        // Добавляем district_id (для region_admin district-scope и методиста district-scope).
+        $field_district = new xmldb_field('district_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'region_id');
+        if (!$dbman->field_exists($table, $field_district)) {
+            $dbman->add_field($table, $field_district);
+        }
+
+        // Новый non-unique index по mdl_user_id для быстрого поиска скоупа пользователя.
+        $new_index = new xmldb_index('idx_user_org_user', XMLDB_INDEX_NOTUNIQUE, ['mdl_user_id']);
+        if (!$dbman->index_exists($table, $new_index)) {
+            $dbman->add_index($table, $new_index);
+        }
+
+        // FK на регион/район (организация уже была).
+        $key_region = new xmldb_key('region_id', XMLDB_KEY_FOREIGN, ['region_id'], 'unics_regions', ['id']);
+        $dbman->add_key($table, $key_region);
+
+        $key_district = new xmldb_key('district_id', XMLDB_KEY_FOREIGN, ['district_id'], 'unics_districts', ['id']);
+        $dbman->add_key($table, $key_district);
+
+        // Применяем матрицу прав ролей автоматически (Q6 из встречи 2026-05-20):
+        // у методиста появляется новая capability local/unics:manageorg.
+        // Capability local/unics:viewownchild удалена из access.php — Moodle сам её вычистит.
+        require_once(__DIR__ . '/../classes/role_manager.php');
+        try {
+            \local_unics\role_manager::apply_matrix();
+        } catch (\Throwable $e) {
+            // Не валим апгрейд из-за матрицы: админ может применить руками через setup_roles.php.
+            debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052002, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026052003) {
+        // Этап 2 пункта #11 (роли) — удаление тьютора (unics_role=6).
+        // По решению руководителя (встреча 2026-05-20, вариант D): если тьюторов в системе
+        // нет — удаляем роль из кода. Если есть — апгрейд останавливается, требуется ручная
+        // миграция (перевод в педагогов или методистов) перед повторным запуском апгрейда.
+        $tutor_count = $DB->count_records('unics_user_org', ['unics_role' => 6]);
+        if ($tutor_count > 0) {
+            throw new \moodle_exception(
+                'upgradeerror', 'admin', '', null,
+                "local_unics 0.6.30: в системе {$tutor_count} пользовател(ей) с unics_role=6 (тьютор). "
+              . "По решению встречи 2026-05-20 роль тьютора удаляется; перед апгрейдом нужно вручную "
+              . "перевести этих пользователей в педагогов (unics_role=5) или методистов (unics_role=4). "
+              . "SQL для просмотра: SELECT * FROM mdl_unics_user_org WHERE unics_role=6;"
+            );
+        }
+
+        // Тьюторов нет — применяем обновлённую матрицу role_manager (уже без блока 'teacher').
+        require_once(__DIR__ . '/../classes/role_manager.php');
+        try {
+            \local_unics\role_manager::apply_matrix();
+        } catch (\Throwable $e) {
+            debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052003, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026052004) {
+        // Этап 3 пункта #11 — Региональный администратор.
+        // Создаём Moodle-роль region_admin (если ещё не существует) и применяем матрицу.
+        // Скоуп региона/района хранится в unics_user_org.region_id / district_id (см. этап 1).
+        if (!$DB->record_exists('role', ['shortname' => 'region_admin'])) {
+            $roleid = create_role(
+                'Региональный администратор',
+                'region_admin',
+                'Администратор уровня региона или района (скоуп задаётся в unics_user_org). '
+              . 'Управляет методистами, педагогами и учащимися в своём скоупе через capability local/unics:manageorg.',
+                'manager'  // archetype-родитель
+            );
+            // Делаем роль доступной на системном контексте — иначе apply_matrix не сможет
+            // назначить capabilities в CONTEXT_SYSTEM.
+            set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
+        }
+
+        require_once(__DIR__ . '/../classes/role_manager.php');
+        try {
+            \local_unics\role_manager::apply_matrix();
+        } catch (\Throwable $e) {
+            debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052004, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026052300) {
+        // Переработка ролевой модели [[role-model-rework-2026-05-23]].
+        // Две роли админа (региональный/районный) и две роли методиста
+        // (районный/организации). region_admin теперь только регион, methodist —
+        // только организация; скоупы пишутся в unics_user_org. Подробности и
+        // целевая матрица — в плане и в classes/role_manager.php::get_matrix().
+
+        // --- Районный администратор (district_admin) ---
+        // Управленческая роль уровня района: копия region_admin по правам,
+        // скоуп = район (unics_user_org.district_id). Архетип manager.
+        if (!$DB->record_exists('role', ['shortname' => 'district_admin'])) {
+            $roleid = create_role(
+                'Районный администратор',
+                'district_admin',
+                'Администратор уровня района (скоуп задаётся в unics_user_org.district_id). '
+              . 'Управляет методистами, педагогами и учащимися своего района через capability '
+              . 'local/unics:manageorg со scope-проверкой на каждой странице.',
+                'manager'
+            );
+            set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
+        }
+
+        // --- Районный методист (district_methodist) ---
+        // Права идентичны методисту организации (создаёт курсы/УМК + manageorg),
+        // отличается только скоупом = район (unics_user_org.district_id).
+        // Архетип editingteacher — как у роли methodist.
+        if (!$DB->record_exists('role', ['shortname' => 'district_methodist'])) {
+            $roleid = create_role(
+                'Районный методист',
+                'district_methodist',
+                'Методист уровня района (скоуп задаётся в unics_user_org.district_id). '
+              . 'Создаёт курсы/УМК и пользователей своего района через local/unics:manageorg '
+              . 'со scope-проверкой. Права совпадают с методистом организации, разница только в скоупе.',
+                'editingteacher'
+            );
+            set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
+        }
+
+        // --- Стандартный архетип teacher (код 6 = «Педагог», non-editing) ---
+        // Должен существовать (создаётся при установке Moodle). Делаем его назначаемым
+        // на системном контексте — наш user_manager назначает роль в CONTEXT_SYSTEM.
+        $teacher = $DB->get_record('role', ['shortname' => 'teacher'], 'id');
+        if ($teacher) {
+            $levels = get_role_contextlevels($teacher->id);
+            if (!in_array(CONTEXT_SYSTEM, $levels, true)) {
+                $levels[] = CONTEXT_SYSTEM;
+                set_role_contextlevels($teacher->id, $levels);
+            }
+        } else {
+            debugging('local_unics 0.6.34: стандартная роль teacher не найдена — '
+                . 'код 6 (Педагог) не сможет назначаться. Создайте архетип teacher.', DEBUG_DEVELOPER);
+        }
+
+        // Применяем обновлённую матрицу прав (district_admin, district_methodist, teacher).
+        require_once(__DIR__ . '/../classes/role_manager.php');
+        try {
+            \local_unics\role_manager::apply_matrix();
+        } catch (\Throwable $e) {
+            debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052300, 'local', 'unics');
+    }
+
     return true;
 }

@@ -1,6 +1,9 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
+require_once(__DIR__ . '/../classes/grade_scale.php');
+
+use local_unics\grade_scale;
 
 require_login();
 global $USER, $DB;
@@ -142,7 +145,7 @@ $avg_score = 0;
 if (!empty($last5)) {
     $total = 0;
     foreach ($last5 as $g) {
-        $total += ($g->finalgrade / $g->grademax) * 100;
+        $total += grade_scale::from_raw((float)$g->finalgrade, (float)$g->grademax);
     }
     $avg_score = round($total / count($last5), 1);
 }
@@ -172,6 +175,13 @@ echo ' ' . html_writer::link(
     '⭐ Значки достижений',
     ['class' => 'btn btn-outline-warning btn-sm']
 );
+if ($is_admin || $is_teacher) {
+    echo ' ' . html_writer::link(
+        new moodle_url('/local/unics/pages/essay_check.php', ['student_id' => $student_id]),
+        'ИИ-проверка ответов',
+        ['class' => 'btn btn-outline-primary btn-sm']
+    );
+}
 if ($is_admin) {
     echo ' ' . html_writer::link(
         new moodle_url('/local/unics/pages/org_report.php', ['org_id' => $org->id ?? 0]),
@@ -187,7 +197,7 @@ $class_str = $student->class_number
     ? $student->class_number . ($student->class_letter ? " «{$student->class_letter}»" : '') . ' класс'
     : '-';
 
-$avg_badge_class = $avg_score >= 85 ? 'success' : ($avg_score >= 50 ? 'warning' : 'danger');
+$avg_badge_class = grade_scale::badge_class($avg_score);
 
 echo '<div class="card mb-4">';
 echo '<div class="card-header bg-light"><strong>' . s($fio) . '</strong></div>';
@@ -202,7 +212,7 @@ if (!$is_own_view) {
        . '</div>';
     echo '<div class="col-md-3"><b>Уровень:</b> ' . s($levels[$student->difficulty_level] ?? '-') . '</div>';
 }
-echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-' . $avg_badge_class . '">' . $avg_score . '%</span></div>';
+echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-' . $avg_badge_class . '">' . $avg_score . ' ' . grade_scale::label() . '</span></div>';
 echo '</div>';
 echo '<div class="row mt-2">';
 echo '<div class="col-md-6"><b>Организация:</b> ' . s($org->name ?? '-') . '</div>';
@@ -212,15 +222,15 @@ echo '</div></div>';
 
 // --- График прогресса ---
 if (count($grade_history) >= 2) {
-    $chart_pcts   = [];
+    $chart_vals   = [];
     $chart_labels = [];
     foreach ($grade_history as $gh) {
-        $chart_pcts[]   = round($gh->finalgrade / $gh->grademax * 100, 1);
+        $chart_vals[]   = grade_scale::from_raw((float)$gh->finalgrade, (float)$gh->grademax);
         $chart_labels[] = userdate($gh->timemodified, '%d.%m');
     }
     $chart = new \core\chart_line();
     $chart->set_smooth(true);
-    $series = new \core\chart_series('Балл (%)', $chart_pcts);
+    $series = new \core\chart_series('Балл (' . grade_scale::label() . ')', $chart_vals);
     $chart->add_series($series);
     $chart->set_labels($chart_labels);
 
@@ -237,11 +247,11 @@ if (empty($quiz_grades)) {
 } else {
     echo '<table class="table table-sm table-bordered">';
     echo '<thead class="thead-light"><tr>
-        <th>Курс</th><th>Тест</th><th>Баллы</th><th>%</th><th>Дата</th><th></th>
+        <th>Курс</th><th>Тест</th><th>Баллы</th><th>Балл (' . grade_scale::label() . ')</th><th>Дата</th><th></th>
     </tr></thead><tbody>';
     foreach ($quiz_grades as $g) {
-        $pct   = round(($g->finalgrade / $g->grademax) * 100, 1);
-        $bc    = $pct >= 85 ? 'success' : ($pct >= 50 ? 'warning' : 'danger');
+        $score = grade_scale::from_raw((float)$g->finalgrade, (float)$g->grademax);
+        $bc    = grade_scale::badge_class($score);
         $gcmid = (int)($g->cmid ?? 0);
         $notes_for_quiz = $gcmid ? ($note_map[$gcmid] ?? []) : [];
         $note_count = count($notes_for_quiz);
@@ -250,7 +260,7 @@ if (empty($quiz_grades)) {
         echo '<td>' . s($g->course_name) . '</td>';
         echo '<td>' . s($g->quiz_name ?? '-') . '</td>';
         echo '<td>' . round($g->finalgrade, 1) . ' / ' . round($g->grademax, 1) . '</td>';
-        echo '<td><span class="badge badge-' . $bc . '">' . $pct . '%</span></td>';
+        echo '<td><span class="badge badge-' . $bc . '">' . $score . ' ' . grade_scale::label() . '</span></td>';
         echo '<td>' . ($g->timemodified ? userdate($g->timemodified, '%d.%m.%Y') : '-') . '</td>';
         echo '<td>';
         if ($gcmid && ($is_admin || $is_teacher)) {

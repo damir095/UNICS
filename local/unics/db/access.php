@@ -9,18 +9,17 @@ $capabilities = [
             'manager' => CAP_ALLOW,
         ],
     ],
+    'local/unics:manageorg' => [
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes'   => [],
+    ],
     'local/unics:viewstudents' => [
         'captype'      => 'read',
         'contextlevel' => CONTEXT_SYSTEM,
         'archetypes'   => [
             'manager'        => CAP_ALLOW,
             'editingteacher' => CAP_ALLOW,
-            'teacher'        => CAP_ALLOW,
         ],
-    ],
-    'local/unics:viewownchild' => [
-        'captype'      => 'read',
-        'contextlevel' => CONTEXT_SYSTEM,
-        'archetypes'   => [],
     ],
 ];
