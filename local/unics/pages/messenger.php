@@ -146,8 +146,9 @@ if ($to && !isset($allowed_ids[$to])) {
 }
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
-echo '<div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">';
+echo '<div class="mt-3 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">';
 echo '<span class="badge badge-secondary">Ваша роль: '
    . s($role_label[$role] ?? $role) . '</span>';
 echo html_writer::link(new moodle_url('/message/index.php'),

@@ -161,8 +161,9 @@ $umk_statuses = [1 => 'В очереди', 2 => 'Обрабатывается', 
 $is_own_view = ($USER->id == $student->mdl_user_id);
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
-echo '<div class="mb-3">';
+echo '<div class="d-flex flex-wrap gap-2 mt-3 mb-3">';
 if ($is_admin || $is_teacher) {
     echo html_writer::link(
         new moodle_url('/local/unics/pages/my_students.php'),
@@ -170,9 +171,9 @@ if ($is_admin || $is_teacher) {
         ['class' => 'btn btn-outline-secondary btn-sm']
     );
 }
-echo ' ' . html_writer::link(
+echo html_writer::link(
     new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student_id]),
-    '⭐ Значки достижений',
+    'Значки достижений',
     ['class' => 'btn btn-outline-warning btn-sm']
 );
 if ($is_admin || $is_teacher) {
@@ -246,7 +247,7 @@ if (empty($quiz_grades)) {
     echo '<p class="text-muted">Тесты ещё не сданы.</p>';
 } else {
     echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="thead-light"><tr>
+    echo '<thead class="table-light"><tr>
         <th>Курс</th><th>Тест</th><th>Баллы</th><th>Балл (' . grade_scale::label() . ')</th><th>Дата</th><th></th>
     </tr></thead><tbody>';
     foreach ($quiz_grades as $g) {
@@ -304,7 +305,7 @@ if (empty($enrolled_courses)) {
     echo '<p class="text-muted">Не записан ни на один курс.</p>';
 } else {
     echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="thead-light"><tr><th>Курс</th><th>Дата записи</th><th></th></tr></thead><tbody>';
+    echo '<thead class="table-light"><tr><th>Курс</th><th>Дата записи</th><th></th></tr></thead><tbody>';
     foreach ($enrolled_courses as $c) {
         $ts = $c->timestart ?: $c->timecreated;
         echo '<tr>';
@@ -336,7 +337,7 @@ if ($is_admin || $is_teacher) {
     } else {
         $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
         echo '<table class="table table-sm table-bordered">';
-        echo '<thead class="thead-light"><tr>
+        echo '<thead class="table-light"><tr>
             <th>Название</th><th>Тема</th><th>Уровень</th><th>Курс</th><th>Статус</th><th>Дата</th>
         </tr></thead><tbody>';
         foreach ($umk_list as $u) {

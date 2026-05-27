@@ -30,7 +30,7 @@ $org_types = [
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_sesskey();
-    $action  = optional_param('action',  'save',  PARAM_ALPHA);
+    $action  = optional_param('action',  'save',  PARAM_ALPHANUMEXT);
     $type    = required_param('type',    PARAM_ALPHA);
     $edit_id = optional_param('edit_id', 0, PARAM_INT);
 
@@ -167,6 +167,7 @@ if ($edit_type && $edit_id) {
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 echo '<div class="mb-3">';
 echo '<a href="/local/unics/pages/users.php" class="btn btn-outline-secondary btn-sm">Пользователи</a>';
@@ -189,18 +190,18 @@ if ($edit_item && $edit_type) {
 
     } elseif ($edit_type === 'district') {
         echo '<input type="hidden" name="region_id" value="' . $edit_item->region_id . '">';
-        echo '<div class="form-group"><label>Название района</label>';
+        echo '<div class="form-group"><label>Название муниципалитета</label>';
         echo '<input type="text" name="name" class="form-control" value="' . s($edit_item->name) . '" required></div>';
 
     } elseif ($edit_type === 'org') {
         echo '<input type="hidden" name="district_id" value="' . $edit_item->district_id . '">';
-        echo '<div class="form-row">';
+        echo '<div class="row g-2">';
         echo '<div class="col-md-6 form-group"><label>Полное название *</label>';
         echo '<input type="text" name="name" class="form-control" value="' . s($edit_item->name) . '" required></div>';
         echo '<div class="col-md-4 form-group"><label>Краткое название</label>';
         echo '<input type="text" name="short_name" class="form-control" value="' . s($edit_item->short_name) . '"></div>';
         echo '</div>';
-        echo '<div class="form-row">';
+        echo '<div class="row g-2">';
         echo '<div class="col-md-4 form-group"><label>Адрес</label>';
         echo '<input type="text" name="address" class="form-control" value="' . s($edit_item->address) . '"></div>';
         echo '<div class="col-md-3 form-group"><label>Телефон</label>';
@@ -249,29 +250,11 @@ if (!$is_admin_user) {
     });
 }
 
-// ---- Форма добавления региона (только для системного админа) ----
-if ($is_admin_user) {
-    echo '<div class="card mb-4">';
-    echo '<div class="card-header"><strong>' . get_string('add_region', 'local_unics') . '</strong></div>';
-    echo '<div class="card-body">';
-    echo '<form method="post" class="form-inline">';
-    echo '<input type="hidden" name="action" value="save">';
-    echo '<input type="hidden" name="type" value="region">';
-    echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
-    echo '<div class="form-group mr-2">';
-    echo '<label class="mr-1">Название</label>';
-    echo '<input type="text" name="name" class="form-control form-control-sm" required style="width:280px">';
-    echo '</div>';
-    echo '<button type="submit" class="btn btn-primary btn-sm">Создать регион</button>';
-    echo '</form>';
-    echo '</div></div>';
-}
-
 $all_orgs_grouped = unics_organization_manager::get_organizations_grouped();
 
 // ---- Дерево организаций ----
 if (empty($tree)) {
-    echo $OUTPUT->notification('Регионов пока нет. Добавьте первый регион выше.', 'info');
+    echo $OUTPUT->notification('Регионов пока нет. Регион создаётся администратором системы.', 'info');
 } else {
     foreach ($tree as $region) {
         echo '<div class="card mb-4">';
@@ -284,7 +267,7 @@ if (empty($tree)) {
         echo '<div>';
         echo '<a href="?edit_type=region&edit_id=' . $region->id . '" class="btn btn-sm btn-outline-secondary mr-1">Изменить</a>';
         echo '<form method="post" class="d-inline"
-                onsubmit="return confirm(\'Удалить регион ' . s(addslashes($region->name)) . '? Все районы должны быть удалены заранее.\')">';
+                onsubmit="return confirm(\'Удалить регион ' . s(addslashes($region->name)) . '? Все муниципалитеты должны быть удалены заранее.\')">';
         echo '<input type="hidden" name="action"  value="delete">';
         echo '<input type="hidden" name="type"    value="region">';
         echo '<input type="hidden" name="del_id"  value="' . $region->id . '">';
@@ -308,7 +291,7 @@ if (empty($tree)) {
             echo '<div>';
             echo '<a href="?edit_type=district&edit_id=' . $dist->id . '" class="btn btn-sm btn-outline-secondary mr-1">Изменить</a>';
             echo '<form method="post" class="d-inline"
-                    onsubmit="return confirm(\'Удалить район ' . s(addslashes($dist->name)) . '? Организации должны быть удалены заранее.\')">';
+                    onsubmit="return confirm(\'Удалить муниципалитет ' . s(addslashes($dist->name)) . '? Организации должны быть удалены заранее.\')">';
             echo '<input type="hidden" name="action"  value="delete">';
             echo '<input type="hidden" name="type"    value="district">';
             echo '<input type="hidden" name="del_id"  value="' . $dist->id . '">';
@@ -322,7 +305,7 @@ if (empty($tree)) {
             // Организации района
             if (!empty($dist->organizations)) {
                 echo '<table class="table table-sm table-bordered mb-2">';
-                echo '<thead class="thead-light"><tr>
+                echo '<thead class="table-light"><tr>
                     <th>Организация</th><th>Краткое</th><th>Тип</th>
                     <th>Email</th><th>Действия</th>
                 </tr></thead><tbody>';
@@ -344,7 +327,7 @@ if (empty($tree)) {
                     echo '<td>' . $type_name . '</td>';
                     echo '<td>' . s($org->email) . '</td>';
                     $move_btn = '<button type="button" class="btn btn-sm btn-outline-info mr-1"'
-                        . ' data-toggle="modal" data-target="#moveOrgModal"'
+                        . ' data-bs-toggle="modal" data-bs-target="#moveOrgModal"'
                         . ' data-org-id="' . $org->id . '"'
                         . ' data-org-name="' . s($org->name) . '">'
                         . 'Перевести всех</button>';
@@ -358,17 +341,17 @@ if (empty($tree)) {
                 }
                 echo '</tbody></table>';
             } else {
-                echo '<p class="text-muted small">В этом районе пока нет организаций.</p>';
+                echo '<p class="text-muted small">В этом муниципалитете пока нет организаций.</p>';
             }
 
             // Форма добавления организации в район
-            echo '<details><summary class="text-primary" style="cursor:pointer">Добавить организацию в этот район</summary>';
+            echo '<details><summary class="text-primary" style="cursor:pointer">Добавить организацию в этот муниципалитет</summary>';
             echo '<form method="post" class="mt-2">';
             echo '<input type="hidden" name="action"      value="save">';
             echo '<input type="hidden" name="type"        value="org">';
             echo '<input type="hidden" name="district_id" value="' . $dist->id . '">';
             echo '<input type="hidden" name="sesskey"     value="' . sesskey() . '">';
-            echo '<div class="form-row">';
+            echo '<div class="row g-2">';
 
             $fields = [
                 ['name',       'Полное название *', 'text',  true],
@@ -394,24 +377,26 @@ if (empty($tree)) {
             echo '</select></div>';
 
             echo '</div>';
-            echo '<button type="submit" class="btn btn-success btn-sm mt-1">Создать</button>';
+            echo '<button type="submit" class="btn btn-primary btn-sm mt-1">Создать</button>';
             echo '</form></details>';
             echo '</div>'; // border rounded
         }
 
-        // Форма добавления района в регион
-        echo '<details class="mt-2"><summary class="text-primary" style="cursor:pointer">Добавить район в этот регион</summary>';
-        echo '<form method="post" class="mt-2 form-inline">';
-        echo '<input type="hidden" name="action"    value="save">';
-        echo '<input type="hidden" name="type"      value="district">';
-        echo '<input type="hidden" name="region_id" value="' . $region->id . '">';
-        echo '<input type="hidden" name="sesskey"   value="' . sesskey() . '">';
-        echo '<div class="form-group mr-2">';
-        echo '<label class="mr-1">Название</label>';
-        echo '<input type="text" name="name" class="form-control form-control-sm" required style="width:260px">';
-        echo '</div>';
-        echo '<button type="submit" class="btn btn-success btn-sm">Создать район</button>';
-        echo '</form></details>';
+        // Server-side gate lives in the POST handler via _scope_region.
+        if ($is_admin_user || $my_scope['region_id'] !== null) {
+            echo '<details class="mt-2"><summary class="text-primary" style="cursor:pointer">Добавить муниципалитет в этот регион</summary>';
+            echo '<form method="post" class="mt-2 form-inline">';
+            echo '<input type="hidden" name="action"    value="save">';
+            echo '<input type="hidden" name="type"      value="district">';
+            echo '<input type="hidden" name="region_id" value="' . $region->id . '">';
+            echo '<input type="hidden" name="sesskey"   value="' . sesskey() . '">';
+            echo '<div class="form-group mr-2">';
+            echo '<label class="mr-1">Название</label>';
+            echo '<input type="text" name="name" class="form-control form-control-sm" required style="width:260px">';
+            echo '</div>';
+            echo '<button type="submit" class="btn btn-primary btn-sm">Создать муниципалитет</button>';
+            echo '</form></details>';
+        }
 
         echo '</div>'; // card-body
         echo '</div>'; // card
@@ -425,7 +410,7 @@ echo '
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="moveOrgModalLabel">Перевести всех участников</h5>
-        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
       </div>
       <form method="post">
         <input type="hidden" name="action"   value="move_members">
@@ -447,7 +432,7 @@ echo '            </select>
           <p class="text-warning small">Все участники исходной организации будут переведены в выбранную.</p>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Отмена</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
           <button type="submit" class="btn btn-info">Перевести</button>
         </div>
       </form>

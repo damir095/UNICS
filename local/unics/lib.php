@@ -16,6 +16,24 @@ function local_unics_require_not_student(): void {
 }
 
 /**
+ * Единая кнопка «На дашборд» для верхней части любой страницы плагина.
+ * Ставится сразу после $OUTPUT->header() — одинаковый возврат на портал с любой
+ * страницы (дашборд обслуживает все роли). На самом dashboard.php не нужна.
+ *
+ * @return string HTML кнопки.
+ */
+function local_unics_dashboard_button(): string {
+    return html_writer::div(
+        html_writer::link(
+            new moodle_url('/local/unics/pages/dashboard.php'),
+            'На дашборд',
+            ['class' => 'btn btn-outline-secondary btn-sm']
+        ),
+        'unics-dashboard-back mb-3'
+    );
+}
+
+/**
  * Перенаправляет учащегося со стандартного дашборда Moodle (`/my/`)
  * на наш дашборд `local_unics`. Срабатывает до отправки HTTP-заголовков,
  * что позволяет redirect() работать без warning'ов о уже отправленных headers.
@@ -285,7 +303,7 @@ function local_unics_require_manage_or_scope_district(int $district_id): void {
 
     if (!\local_unics\scope_checker::user_can_access_district((int)$USER->id, $district_id)) {
         throw new \moodle_exception('nopermissions', 'error', '',
-            'район вне вашего скоупа');
+            'муниципалитет вне вашего скоупа');
     }
 }
 
@@ -465,6 +483,9 @@ function local_unics_extend_navigation(global_navigation $nav) {
         $branch->add(get_string('organizations', 'local_unics'),
             new moodle_url('/local/unics/pages/organizations.php'),
             navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_orgs');
+        $branch->add('Курсы (архив)',
+            new moodle_url('/local/unics/pages/courses.php'),
+            navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_courses');
         $branch->add('Запись учащихся на курс',
             new moodle_url('/local/unics/pages/enrol_students.php'),
             navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_enrol_students');
@@ -495,6 +516,13 @@ function local_unics_extend_navigation(global_navigation $nav) {
             'local_unics_all_students'
         );
         $branch->add(
+            'Пользователи',
+            new moodle_url('/local/unics/pages/users.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_users'
+        );
+        $branch->add(
             'Привязки',
             new moodle_url('/local/unics/pages/assign.php'),
             navigation_node::TYPE_CUSTOM,
@@ -507,6 +535,13 @@ function local_unics_extend_navigation(global_navigation $nav) {
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_course_templates'
+        );
+        $branch->add(
+            'Курсы (архив)',
+            new moodle_url('/local/unics/pages/courses.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_courses'
         );
         $branch->add(
             'Запись учащихся на курс',
@@ -575,10 +610,17 @@ function local_unics_extend_navigation(global_navigation $nav) {
         'local_unics_my_students'
     );
 
-    // Генерация УМК - для педагогов, создающих курсы, и администраторов.
-    // Педагог без права редактирования (роль 6, non-editing) контент НЕ создаёт —
-    // у него меню read-only (только дашборд + «Мои учащиеся»).
+    // Генерация УМК + Шаблоны курсов — только для педагогов, создающих курсы
+    // (editingteacher, роль 5) и администраторов. Педагог без редактирования
+    // (роль 6) контент НЕ создаёт — у него меню read-only (только дашборд + «Мои учащиеся»).
     if (!local_unics_is_nonediting_teacher()) {
+        $branch->add(
+            'Шаблоны курсов',
+            new moodle_url('/local/unics/pages/course_templates.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_course_templates_teacher'
+        );
         $branch->add(
             'Генерация УМК (ИИ)',
             new moodle_url('/local/unics/pages/generate_umk.php'),
@@ -614,6 +656,14 @@ function local_unics_extend_navigation(global_navigation $nav) {
         );
 
         $branch->add(
+            'Курсы (архив)',
+            new moodle_url('/local/unics/pages/courses.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_courses'
+        );
+
+        $branch->add(
             get_string('assignments', 'local_unics'),
             new moodle_url('/local/unics/pages/assign.php'),
             navigation_node::TYPE_CUSTOM,
@@ -635,6 +685,14 @@ function local_unics_extend_navigation(global_navigation $nav) {
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_enrol_teachers'
+        );
+
+        $branch->add(
+            'Перевод в следующий класс',
+            new moodle_url('/local/unics/pages/promote_students.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_promote'
         );
 
         $branch->add(

@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/user_manager.php');
 
 require_login();
@@ -226,13 +227,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 // Вывод страницы
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Импорт пользователей из CSV');
 
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/users.php'),
-    'Назад к пользователям',
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']
-);
 echo html_writer::link(
     new moodle_url('/local/unics/pages/import_users.php', ['download_template' => 1]),
     'Скачать шаблон CSV',

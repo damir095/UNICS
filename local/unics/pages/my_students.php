@@ -23,9 +23,11 @@ $PAGE->set_heading('Мои учащиеся');
 $PAGE->set_pagelayout('standard');
 
 // Фильтры (применяются в режимах admin/scoped).
-$filter_org   = optional_param('f_org',   0, PARAM_INT);
-$filter_class = optional_param('f_class', 0, PARAM_INT);
-$filter_level = optional_param('f_level', 0, PARAM_INT);
+$filter_org      = optional_param('f_org',    0, PARAM_INT);
+$filter_class    = optional_param('f_class',  0, PARAM_INT);
+$filter_level    = optional_param('f_level',  0, PARAM_INT);
+$filter_district = optional_param('f_dist',   0, PARAM_INT);
+$filter_letter   = optional_param('f_letter', '', PARAM_TEXT); // буква класса (кириллица)
 
 // Определяем режим доступа.
 // manageorg-роли (методист орг./района, региональн./районный админ) видят учащихся
@@ -52,19 +54,21 @@ $students = [];
 if ($mode === 'admin' || $mode === 'scoped') {
     $where  = $scope_where;
     $params = $scope_params;
-    if ($filter_org > 0)   { $where .= ' AND s.organization_id = :forg';   $params['forg']   = $filter_org; }
-    if ($filter_class > 0) { $where .= ' AND s.class_number = :fclass';     $params['fclass'] = $filter_class; }
-    if ($filter_level > 0) { $where .= ' AND s.difficulty_level = :flvl';   $params['flvl']   = $filter_level; }
+    if ($filter_org > 0)      { $where .= ' AND s.organization_id = :forg';   $params['forg']   = $filter_org; }
+    if ($filter_class > 0)    { $where .= ' AND s.class_number = :fclass';     $params['fclass'] = $filter_class; }
+    if ($filter_level > 0)    { $where .= ' AND s.difficulty_level = :flvl';   $params['flvl']   = $filter_level; }
+    if ($filter_district > 0) { $where .= ' AND o.district_id = :fdist';       $params['fdist']  = $filter_district; }
+    if ($filter_letter !== '') { $where .= ' AND s.class_letter = :fletter';   $params['fletter'] = $filter_letter; }
 
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                s.class_number, s.category, s.ovz_type, s.difficulty_level,
+                s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
                 o.name AS org_name,
                 NULL AS teacher_lastname, NULL AS teacher_firstname
          FROM {unics_students} s
          JOIN {user} u ON u.id = s.mdl_user_id
          JOIN {unics_organizations} o ON o.id = s.organization_id
-         WHERE ({$where}) AND u.deleted = 0
+         WHERE ({$where}) AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL
          ORDER BY u.lastname, u.firstname",
         $params
     );
@@ -72,14 +76,14 @@ if ($mode === 'admin' || $mode === 'scoped') {
     // Педагог - только привязанные учащиеся.
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                s.class_number, s.category, s.ovz_type, s.difficulty_level,
+                s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
                 o.name AS org_name,
                 ts.id AS ts_id
          FROM {unics_teacher_student} ts
          JOIN {unics_students} s ON s.id = ts.student_id
          JOIN {user} u ON u.id = s.mdl_user_id
          JOIN {unics_organizations} o ON o.id = s.organization_id
-         WHERE ts.teacher_id = :teacher_id AND u.deleted = 0
+         WHERE ts.teacher_id = :teacher_id AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL
          ORDER BY u.lastname, u.firstname",
         ['teacher_id' => $teacher_record->id]
     );
@@ -89,6 +93,7 @@ $categories = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => 'Д
 $levels      = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Мои учащиеся');
 
 if ($mode === 'noprofile') {
@@ -108,7 +113,7 @@ if ($mode === 'admin') {
     if ($scope['organization_id']) {
         $scope_name = 'организация «' . (string)$DB->get_field('unics_organizations', 'name', ['id' => $scope['organization_id']]) . '»';
     } else if ($scope['district_id']) {
-        $scope_name = 'район ' . (string)$DB->get_field('unics_districts', 'name', ['id' => $scope['district_id']]);
+        $scope_name = 'муниципалитет ' . (string)$DB->get_field('unics_districts', 'name', ['id' => $scope['district_id']]);
     } else if ($scope['region_id']) {
         $scope_name = 'регион ' . (string)$DB->get_field('unics_regions', 'name', ['id' => $scope['region_id']]);
     }
@@ -136,11 +141,23 @@ if ($mode === 'admin' || $mode === 'scoped') {
 
     $level_menu = [0 => 'Все уровни'] + $levels;
 
+    $letters_menu = ['' => 'Все буквы', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
+                     'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
+
+    // Меню районов — по скоупу. Показываем только если доступно больше одного
+    // (у районного/орг-методиста район один и фиксирован скоуп-фильтром).
+    $districts_menu = \local_unics\scope_checker::accessible_districts_menu((int)$USER->id, (bool)$is_admin);
+
     echo html_writer::start_tag('form',
         ['method' => 'get', 'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
-    echo html_writer::select($orgs_menu,  'f_org',   $filter_org,   false, ['class' => 'form-control']);
-    echo html_writer::select($class_menu, 'f_class', $filter_class, false, ['class' => 'form-control']);
-    echo html_writer::select($level_menu, 'f_level', $filter_level, false, ['class' => 'form-control']);
+    if (count($districts_menu) > 1) {
+        echo html_writer::select([0 => 'Все муниципалитеты'] + $districts_menu,
+            'f_dist', $filter_district, false, ['class' => 'form-control']);
+    }
+    echo html_writer::select($orgs_menu,    'f_org',    $filter_org,    false, ['class' => 'form-control']);
+    echo html_writer::select($class_menu,   'f_class',  $filter_class,  false, ['class' => 'form-control']);
+    echo html_writer::select($letters_menu, 'f_letter', $filter_letter, false, ['class' => 'form-control']);
+    echo html_writer::select($level_menu,   'f_level',  $filter_level,  false, ['class' => 'form-control']);
     echo html_writer::tag('button', 'Фильтр', ['type' => 'submit', 'class' => 'btn btn-outline-secondary']);
     echo html_writer::end_tag('form');
 }
@@ -192,7 +209,7 @@ foreach ($students as $s) {
 
     $table->data[] = [
         html_writer::tag('strong', htmlspecialchars($fio)),
-        $s->class_number ? "{$s->class_number} кл." : '-',
+        $s->class_number ? ($s->class_number . ($s->class_letter ?? '') . ' кл.') : '-',
         $cat,
         $lvl,
         htmlspecialchars($s->org_name),

@@ -97,6 +97,7 @@ $records = $DB->get_records_sql(
 );
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 $pending_count = $DB->count_records('unics_umk', ['status' => 1]);
 

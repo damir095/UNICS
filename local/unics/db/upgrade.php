@@ -498,5 +498,89 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026052300, 'local', 'unics');
     }
 
+    if ($oldversion < 2026052402) {
+        // Пункт #7: editingteacher (роль 5) больше не может создавать/удалять курсы —
+        // в матрицу role_manager добавлен явный prevent на course:create/course:delete.
+        // Переприменяем матрицу, чтобы запрет вступил в силу для существующей роли.
+        require_once(__DIR__ . '/../classes/role_manager.php');
+        try {
+            \local_unics\role_manager::apply_matrix();
+        } catch (\Throwable $e) {
+            debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052402, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026052403) {
+        // Пункт #1: массовый перевод в следующий класс. 11-классники помечаются
+        // выпускниками — для этого новое поле unics_students.graduated_at (дата 'YYYY-MM-DD',
+        // NULL = активный). Аккаунт и отчётность сохраняются, из активных списков убираются.
+        $table = new xmldb_table('unics_students');
+        $field = new xmldb_field('graduated_at', XMLDB_TYPE_CHAR, '10', null, null, null, null, 'class_letter');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052403, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026052701) {
+        // Пункт #10: «удалить ученика» методистом = мягкий архив. Новое поле
+        // unics_students.archived_at (дата 'YYYY-MM-DD', NULL = активный). Аккаунт,
+        // оценки и привязки сохраняются; архивный ученик убирается из активных списков.
+        $table = new xmldb_table('unics_students');
+        $field = new xmldb_field('archived_at', XMLDB_TYPE_CHAR, '10', null, null, null, null, 'graduated_at');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052701, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026052900) {
+        // Наблюдения #8 + #13 (2026-05-28):
+        //  #8 — editingteacher (роль 5 = «педагог, создающий курсы») снова получает
+        //       course:create/course:delete. Прежний prevent (upgrade 2026052402)
+        //       снят, матрица переприменяется.
+        //  #13 — отображаемые имена Moodle-ролей приведены к нашим терминам
+        //       (editingteacher → «Педагог (создающий курсы)», teacher → «Педагог»).
+        require_once(__DIR__ . '/../classes/role_manager.php');
+        try {
+            \local_unics\role_manager::apply_matrix();
+            \local_unics\role_manager::apply_role_names();
+        } catch (\Throwable $e) {
+            debugging('local_unics: role refresh failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026052900, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026053000) {
+        // apply_role_names() is idempotent — only changed rows are touched.
+        require_once(__DIR__ . '/../classes/role_manager.php');
+        try {
+            \local_unics\role_manager::apply_role_names();
+        } catch (\Throwable $e) {
+            debugging('local_unics: apply_role_names() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026053000, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026053001) {
+        // Dashboard "active students" counts filter by (organization_id, archived_at).
+        // Without this composite index the methodist + scoped-admin counts table-scan
+        // unics_students on every login.
+        $table = new xmldb_table('unics_students');
+        $index = new xmldb_index('ix_student_org_arch', XMLDB_INDEX_NOTUNIQUE,
+            ['organization_id', 'archived_at']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_plugin_savepoint(true, 2026053001, 'local', 'unics');
+    }
+
     return true;
 }

@@ -69,6 +69,7 @@ $submissions = $DB->get_records_sql(
 $fio = trim("{$mdl_user->lastname} {$mdl_user->firstname} " . ($mdl_user->middlename ?? ''));
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 echo '<div class="mb-3">';
 echo html_writer::link(
@@ -129,7 +130,7 @@ if ($do_subid && confirm_sesskey()) {
 // --- Список отправок ---
 echo '<h2 class="unics-section-title">Текстовые ответы учащегося</h2>';
 echo '<table class="table table-sm table-bordered table-hover">';
-echo '<thead class="thead-light"><tr>
+echo '<thead class="table-light"><tr>
     <th>Задание</th><th>Курс</th><th>Отправлено</th>
     <th>Оценка в журнале</th><th></th>
 </tr></thead><tbody>';

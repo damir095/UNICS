@@ -328,6 +328,10 @@ class role_manager {
                     $caps_add_activities, $caps_reports_view, $caps_forum_participate,
                     $caps_messaging, $caps_notes, $caps_view_participants, $caps_content_tools,
                     [
+                        // Наблюдение #8 (2026-05-28): «педагог, создающий курсы» (unics_role 5)
+                        // создаёт курсы из шаблонов и при необходимости удаляет свои.
+                        // Решение встречи 2026-05-20 (педагог НЕ создаёт курсы) пересмотрено.
+                        'moodle/course:create', 'moodle/course:delete',
                         'local/unics:viewstudents',
                         'moodle/course:enrolconfig', 'moodle/course:enrolreview',
                         'moodle/course:markcomplete', 'moodle/course:renameroles',
@@ -578,5 +582,38 @@ class role_manager {
         $matrix['district_methodist'] = $matrix['methodist'];
 
         return $matrix;
+    }
+
+    /**
+     * Канонические отображаемые имена ролей (mdl_role.name).
+     * Без локализации — пользователь работает на русском, system-роли названы
+     * по нашей терминологии. Наблюдение #13 (2026-05-28).
+     *
+     * @return array shortname => display name
+     */
+    public static function get_role_names(): array {
+        return [
+            'editingteacher'     => 'Педагог (создающий курсы)',
+            'teacher'            => 'Педагог',
+            'methodist'          => 'Методист организации',
+            'district_methodist' => 'Муниципальный методист',
+            'region_admin'       => 'Региональный администратор',
+            'district_admin'     => 'Муниципальный администратор',
+            'student'            => 'Учащийся',
+            'parent'             => 'Родитель',
+        ];
+    }
+
+    /**
+     * Применяет канонические имена ролей. Безопасно вызывать многократно.
+     */
+    public static function apply_role_names(): void {
+        global $DB;
+        foreach (self::get_role_names() as $shortname => $name) {
+            $role = $DB->get_record('role', ['shortname' => $shortname], 'id, name');
+            if ($role && $role->name !== $name) {
+                $DB->set_field('role', 'name', $name, ['id' => $role->id]);
+            }
+        }
     }
 }

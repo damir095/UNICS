@@ -56,6 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $grp->courseid = $course_id;
         $grp->name     = $new_group;
         $group_id = groups_create_group($grp);
+        // #12 (наблюдение 2026-05-28): создатель курса при separate-groups не видит
+        // участников, пока сам не в группе. Авто-добавляем себя в новую группу,
+        // если уже записан на курс.
+        if (is_enrolled(\context_course::instance($course_id), (int)$USER->id)) {
+            groups_add_member($group_id, (int)$USER->id);
+        }
     }
 
     $enrol    = enrol_get_plugin('manual');
@@ -117,6 +123,7 @@ $selected_course = optional_param('course_id',  0, PARAM_INT);
 $filter_district = optional_param('district_id', 0, PARAM_INT);
 $filter_org      = optional_param('org_id',      0, PARAM_INT);
 $filter_class    = optional_param('class_num',   0, PARAM_INT);
+$filter_letter   = optional_param('class_letter', '', PARAM_TEXT); // буква класса (кириллица)
 
 // Если у пользователя скоуп = одна орг, форсим фильтр на неё.
 if (!$is_admin_user && $methodist_org_id) {
@@ -153,7 +160,7 @@ if ($is_admin_user) {
 } else {
     $districts_raw = [];
 }
-$districts_menu = [0 => '- все районы -'];
+$districts_menu = [0 => '- все муниципалитеты -'];
 foreach ($districts_raw as $d) {
     $districts_menu[$d->id] = $d->name;
 }
@@ -174,6 +181,10 @@ if ($filter_district > 0) {
 $classes_menu = [0 => '- все классы -'];
 for ($i = 1; $i <= 11; $i++) { $classes_menu[$i] = "{$i} класс"; }
 
+// Буквы класса (кириллица А–Ж)
+$letters_menu = ['' => '- все буквы -', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
+                 'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
+
 // Группы выбранного курса
 $groups_menu = [0 => '- без группы -'];
 if ($selected_course > 0) {
@@ -183,7 +194,7 @@ if ($selected_course > 0) {
 }
 
 // Учащиеся с фильтрацией
-$sql_where  = 'u.deleted = 0';
+$sql_where  = 'u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL';
 $sql_params = [];
 if ($filter_org > 0) {
     $sql_where .= ' AND s.organization_id = :org_id';
@@ -200,6 +211,10 @@ if ($filter_org > 0) {
 if ($filter_class > 0) {
     $sql_where .= ' AND s.class_number = :class_num';
     $sql_params['class_num'] = $filter_class;
+}
+if ($filter_letter !== '') {
+    $sql_where .= ' AND s.class_letter = :class_let';
+    $sql_params['class_let'] = $filter_letter;
 }
 
 $students = $DB->get_records_sql(
@@ -242,14 +257,9 @@ $categories = [1 => 'ОВЗ', 2 => 'Семейное', 3 => 'Лечение', 4 
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Запись учащихся на курс');
 
-$back_url   = $is_scoped_role
-    ? new moodle_url('/local/unics/pages/dashboard.php')
-    : new moodle_url('/local/unics/pages/users.php');
-$back_label = $is_scoped_role ? 'На дашборд' : 'Назад к пользователям';
-echo html_writer::link($back_url, $back_label,
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']);
 echo html_writer::link(
     new moodle_url('/local/unics/pages/enrol_teachers.php'),
     'Запись педагогов',
@@ -261,7 +271,7 @@ $filter_url = new moodle_url('/local/unics/pages/enrol_students.php');
 echo html_writer::start_tag('form', ['method' => 'get', 'action' => $filter_url,
     'class' => 'p-3 bg-light border rounded mb-4']);
 
-echo html_writer::start_tag('div', ['class' => 'form-row align-items-end']);
+echo html_writer::start_tag('div', ['class' => 'row g-2 align-items-end']);
 
 // Курс
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
@@ -275,9 +285,9 @@ if (!$is_admin_user && $methodist_org_id) {
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'org_id',
         'value' => (int)$filter_org]);
 } else {
-    // Район
+    // Муниципалитет
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
-    echo html_writer::tag('label', 'Район', ['class' => 'd-block mb-1']);
+    echo html_writer::tag('label', 'Муниципалитет', ['class' => 'd-block mb-1']);
     echo html_writer::select($districts_menu, 'district_id', $filter_district, false,
         ['class' => 'form-control', 'style' => 'min-width:170px']);
     echo html_writer::end_tag('div');
@@ -295,6 +305,13 @@ echo html_writer::start_tag('div', ['class' => 'col-auto']);
 echo html_writer::tag('label', 'Класс', ['class' => 'd-block mb-1']);
 echo html_writer::select($classes_menu, 'class_num', $filter_class, false,
     ['class' => 'form-control', 'style' => 'min-width:120px']);
+echo html_writer::end_tag('div');
+
+// Буква класса
+echo html_writer::start_tag('div', ['class' => 'col-auto']);
+echo html_writer::tag('label', 'Буква', ['class' => 'd-block mb-1']);
+echo html_writer::select($letters_menu, 'class_letter', $filter_letter, false,
+    ['class' => 'form-control', 'style' => 'min-width:110px']);
 echo html_writer::end_tag('div');
 
 // Кнопка
@@ -324,7 +341,7 @@ echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'course_id',
 if ($selected_course > 0) {
     echo html_writer::start_tag('div', ['class' => 'card mb-3']);
     echo html_writer::start_tag('div', ['class' => 'card-body py-2']);
-    echo html_writer::start_tag('div', ['class' => 'form-row align-items-end']);
+    echo html_writer::start_tag('div', ['class' => 'row g-2 align-items-end']);
 
     // Существующая группа
     echo html_writer::start_tag('div', ['class' => 'col-auto']);

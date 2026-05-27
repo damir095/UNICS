@@ -81,6 +81,8 @@
         <FIELD NAME="difficulty_level" TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="2"  SEQUENCE="false"/>
         <FIELD NAME="class_number"     TYPE="int"  LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="class_letter"     TYPE="char" LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="graduated_at"     TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Дата выпуска 'YYYY-MM-DD' (заполняется при переводе из 11 класса); NULL = активный учащийся"/>
+        <FIELD NAME="archived_at"      TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Дата мягкого архивирования 'YYYY-MM-DD' (методист «удаляет» ученика = архив; аккаунт/оценки/история сохраняются); NULL = активный"/>
         <FIELD NAME="birth_date"       TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="special_needs"    TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="points"           TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0"  SEQUENCE="false" COMMENT="Накопленные баллы (геймификация)"/>
@@ -91,7 +93,8 @@
         <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="uq_student_user" UNIQUE="true" FIELDS="mdl_user_id"/>
+        <INDEX NAME="uq_student_user"     UNIQUE="true"  FIELDS="mdl_user_id"/>
+        <INDEX NAME="ix_student_org_arch" UNIQUE="false" FIELDS="organization_id, archived_at"/>
       </INDEXES>
     </TABLE>
 

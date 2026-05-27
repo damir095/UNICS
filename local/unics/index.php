@@ -16,7 +16,7 @@ echo '<a href="pages/users.php" class="list-group-item list-group-item-action">
     Пользователи
 </a>';
 echo '<a href="pages/organizations.php" class="list-group-item list-group-item-action">
-    Организации и районы
+    Организации и муниципалитеты
 </a>';
 echo '<a href="pages/assign.php" class="list-group-item list-group-item-action">
     Привязки педагог / родитель → учащийся

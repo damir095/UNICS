@@ -33,8 +33,8 @@ $unics_role = (int)$profile->unics_role;
 $is_student = ($unics_role === 7);
 $is_teacher = in_array($unics_role, [4, 5]);
 
-$category_options = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => 'Длительное лечение', 4 => 'Одарённый ребёнок'];
-$ovz_options      = [1 => 'Слабовидящий', 2 => 'Слабослышащий', 3 => 'НОДА', 4 => 'ЗПР', 5 => 'РАС', 6 => 'Иное'];
+// Категория ОВЗ — метки берём из lang (абстрактные «ОВЗ N категории»); расшифровка
+// только в вики (student-categories.md). Хардкод-названий диагнозов здесь быть не должно.
 $level_options    = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 $role_labels      = [3 => 'Администратор организации', 4 => 'Методист', 5 => 'Педагог', 7 => 'Учащийся', 8 => 'Родитель'];
 
@@ -58,13 +58,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         'email'            => required_param('email', PARAM_EMAIL),
     ];
     if ($is_student) {
-        // Множественный выбор: checkbox[] из формы.
-        $cats_raw = optional_param_array('student_categories', [], PARAM_INT);
-        $ovz_raw  = optional_param_array('ovz_types', [], PARAM_INT);
-        if (empty($cats_raw)) {
-            throw new moodle_exception('Не выбрана ни одна категория учащегося');
+        // Плоский чеклист: ОВЗ 1-6 (ovz_types[]) + «Одарённый» (cat_gifted).
+        // Категория ОВЗ (1) выводится из наличия любого вида ОВЗ; пусто = обычный.
+        $ovz_raw = optional_param_array('ovz_types', [], PARAM_INT);
+        $gifted  = optional_param('cat_gifted', 0, PARAM_INT);
+        $cats = [];
+        if (!empty($ovz_raw)) { $cats[] = 1; }
+        if (!empty($gifted))  { $cats[] = 4; }
+        // Legacy-категории (2=семейное, 3=лечение) из выбора убраны, но молча терять
+        // их при сохранении нельзя — переносим, если были.
+        $existing = \local_unics\student_helper::get_categories($profile);
+        foreach ([2, 3] as $legacy) {
+            if (in_array($legacy, $existing, true)) { $cats[] = $legacy; }
         }
-        $data['student_category'] = \local_unics\student_helper::to_csv($cats_raw);
+        $data['student_category'] = \local_unics\student_helper::to_csv($cats);
         $data['ovz_type']         = \local_unics\student_helper::to_csv($ovz_raw);
         $data['difficulty_level'] = required_param('difficulty_level', PARAM_INT);
         $data['class_number']     = optional_param('class_number', null, PARAM_INT);
@@ -86,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 }
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 $return_url = new moodle_url('/local/unics/pages/users.php');
 $moodle_edit_url = new moodle_url('/user/editadvanced.php', [
@@ -128,31 +136,35 @@ echo '</div></div>';
 if ($is_student) {
     $cats_selected = \local_unics\student_helper::parse_csv($profile->student_category ?? '');
     $ovz_selected  = \local_unics\student_helper::parse_csv($profile->ovz_type ?? '');
-    $has_ovz_cat = in_array(1, $cats_selected, true);
 
     echo '<div class="card mb-3"><div class="card-header">Профиль учащегося</div><div class="card-body">';
 
-    // Категории - checkboxes (могут быть несколько).
-    echo '<div class="mb-3"><label class="form-label d-block">Категории <span class="text-danger">*</span></label>';
-    foreach ($category_options as $v => $l) {
-        $chk = in_array($v, $cats_selected, true) ? 'checked' : '';
-        echo "<div class=\"form-check\">
-            <input class=\"form-check-input\" type=\"checkbox\" name=\"student_categories[]\" value=\"{$v}\" id=\"cat_{$v}\" {$chk} onchange=\"toggleOvz()\">
-            <label class=\"form-check-label\" for=\"cat_{$v}\">{$l}</label>
-        </div>";
-    }
-    echo '</div>';
-
-    // Виды ОВЗ - checkboxes (показываются только если в категориях отмечен «ОВЗ» = 1).
-    $hide = !$has_ovz_cat ? 'style="display:none"' : '';
-    echo "<div class=\"mb-3\" id=\"ovz_block\" {$hide}><label class=\"form-label d-block\">Виды ОВЗ</label>";
-    foreach ($ovz_options as $v => $l) {
+    // Категория учащегося — плоский чеклист: ОВЗ 1-6 + «Одарённый». Можно несколько.
+    echo '<div class="mb-3"><label class="form-label d-block">Категория учащегося</label>';
+    foreach (\local_unics\student_helper::OVZ_TYPES as $v => $key) {
         $chk = in_array($v, $ovz_selected, true) ? 'checked' : '';
+        $l   = s(get_string($key, 'local_unics'));
         echo "<div class=\"form-check\">
             <input class=\"form-check-input\" type=\"checkbox\" name=\"ovz_types[]\" value=\"{$v}\" id=\"ovz_{$v}\" {$chk}>
             <label class=\"form-check-label\" for=\"ovz_{$v}\">{$l}</label>
         </div>";
     }
+    $gchk   = in_array(4, $cats_selected, true) ? 'checked' : '';
+    $glabel = s(get_string('category_gifted', 'local_unics'));
+    echo "<div class=\"form-check\">
+        <input class=\"form-check-input\" type=\"checkbox\" name=\"cat_gifted\" value=\"1\" id=\"cat_gifted\" {$gchk}>
+        <label class=\"form-check-label\" for=\"cat_gifted\">{$glabel}</label>
+    </div>";
+
+    // Legacy-категории (семейное/лечение) — из выбора убраны, но показываем, что сохранятся.
+    $legacy_names = [];
+    if (in_array(2, $cats_selected, true)) { $legacy_names[] = get_string('category_family', 'local_unics'); }
+    if (in_array(3, $cats_selected, true)) { $legacy_names[] = get_string('category_treatment', 'local_unics'); }
+    if ($legacy_names) {
+        echo '<div class="text-muted small mt-1">Сохранится прежняя категория: '
+            . s(implode(', ', $legacy_names)) . '.</div>';
+    }
+    echo '<div class="text-muted small mt-1">Ничего не отмечено = обычный учащийся.</div>';
     echo '</div>';
 
     // Уровень сложности
@@ -181,10 +193,6 @@ if ($is_student) {
         <textarea name=\"special_needs\" rows=\"2\" class=\"form-control\">{$sn}</textarea></div>";
 
     echo '</div></div>';
-    echo '<script>function toggleOvz(){
-        var cb=document.getElementById("cat_1");
-        document.getElementById("ovz_block").style.display=(cb && cb.checked)?"":"none";
-    }</script>';
 }
 
 // Поля педагога/тьютора/методиста

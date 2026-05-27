@@ -7,6 +7,7 @@
  * из db/upgrade.php для авто-применения при апгрейде плагина).
  */
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/role_manager.php');
 
 use local_unics\role_manager;
@@ -28,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
     if ($action === 'apply') {
         $results = role_manager::apply_matrix();
+        role_manager::apply_role_names();
         $_SESSION['unics_setup_results'] = $results;
 
         redirect(
@@ -42,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 // Вывод
 // ================================================================
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Настройка прав ролей УНИКС');
 
 echo html_writer::link(
@@ -74,7 +77,7 @@ echo '<div class="card mb-4">';
 echo '<div class="card-header"><strong>Матрица прав ролей</strong></div>';
 echo '<div class="card-body p-0">';
 echo '<table class="table table-sm table-bordered mb-0">';
-echo '<thead class="thead-light"><tr>
+echo '<thead class="table-light"><tr>
     <th>Группа прав</th>
     <th>Админ¹</th>
     <th>Методист²</th>
@@ -140,9 +143,9 @@ echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
 // Проверяем какие роли существуют
 $role_labels = [
     'region_admin'       => 'Региональный администратор',
-    'district_admin'     => 'Районный администратор',
+    'district_admin'     => 'Муниципальный администратор',
     'methodist'          => 'Методист организации',
-    'district_methodist' => 'Районный методист',
+    'district_methodist' => 'Муниципальный методист',
     'editingteacher'     => 'Педагог, создающий курсы',
     'teacher'            => 'Педагог (non-editing)',
     'student'            => 'Учащийся',

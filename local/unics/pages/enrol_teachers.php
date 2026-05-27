@@ -31,7 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $teacher_ids     = optional_param_array('teacher_ids', [], PARAM_INT);
     $group_id        = optional_param('group_id',       0, PARAM_INT);
     $new_group       = trim(optional_param('new_group', '', PARAM_TEXT));
-    $role_type       = optional_param('role_type', 'editingteacher', PARAM_ALPHA);
     $separate_groups = optional_param('separate_groups', 0, PARAM_INT);
 
     $teacher_ids = array_filter($teacher_ids);
@@ -58,6 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $grp->courseid = $course_id;
         $grp->name     = $new_group;
         $group_id = groups_create_group($grp);
+        // #12 (наблюдение 2026-05-28): создатель курса (часто методист, записан
+        // editingteacher'ом) при separate-groups не видит участников группы, пока
+        // сам в неё не входит. Авто-добавляем себя в только что созданную группу,
+        // если уже записан на курс.
+        if (is_enrolled(\context_course::instance($course_id), (int)$USER->id)) {
+            groups_add_member($group_id, (int)$USER->id);
+        }
     }
 
     $enrol    = enrol_get_plugin('manual');
@@ -68,11 +74,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $instance = $DB->get_record('enrol', ['courseid' => $course_id, 'enrol' => 'manual', 'status' => 0]);
     }
 
-    // Кэш id курс-ролей Moodle. role_type — выбор администратора по умолчанию для
-    // педагогов, способных редактировать (код 4/5). Педагог без редактирования
-    // (unics_role=6) принудительно записывается non-editing-ролью `teacher`,
-    // что бы ни выбрал админ — соответствует новой ролевой модели 2026-05-23.
-    $default_shortname = ($role_type === 'teacher') ? 'teacher' : 'editingteacher';
+    // Курс-роль определяется ИСКЛЮЧИТЕЛЬНО по unics_role педагога:
+    //   unics_role 6 (педагог без редактирования) → 'teacher' (non-editing) на курсе;
+    //   unics_role 4 (методист) и 5 (педагог, создающий курсы) → 'editingteacher'.
+    // Раньше тут был select «роль на курсе», но он дублировал выбор уже сделанный
+    // при создании пользователя — наблюдение #11.2 (2026-05-28).
     $role_id_cache = [];
     $resolve_role_id = function (string $shortname) use ($DB, &$role_id_cache): int {
         if (!isset($role_id_cache[$shortname])) {
@@ -92,9 +98,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
         $mdl_uid = (int)$teacher->mdl_user_id;
 
-        // Курс-роль: код 6 (педагог non-editing) → всегда 'teacher'; иначе выбор админа.
+        // Курс-роль строго по unics_role: 6 → 'teacher', 4/5 → 'editingteacher'.
         $u_role        = (int)$DB->get_field('unics_user_org', 'unics_role', ['mdl_user_id' => $mdl_uid]);
-        $eff_shortname = ($u_role === 6) ? 'teacher' : $default_shortname;
+        $eff_shortname = ($u_role === 6) ? 'teacher' : 'editingteacher';
         $eff_role_id   = $resolve_role_id($eff_shortname) ?: $resolve_role_id('editingteacher');
 
         if (!is_enrolled($ctx, $mdl_uid)) {
@@ -242,14 +248,9 @@ $unics_role_labels = [4 => 'Методист', 5 => 'Педагог (созда�
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Запись педагогов на курс');
 
-$back_url   = $is_scoped_role
-    ? new moodle_url('/local/unics/pages/dashboard.php')
-    : new moodle_url('/local/unics/pages/users.php');
-$back_label = $is_scoped_role ? 'На дашборд' : 'Назад к пользователям';
-echo html_writer::link($back_url, $back_label,
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3 mr-2']);
 echo html_writer::link(
     new moodle_url('/local/unics/pages/enrol_students.php'),
     'Запись учащихся',
@@ -260,7 +261,7 @@ echo html_writer::link(
 $filter_url = new moodle_url('/local/unics/pages/enrol_teachers.php');
 echo html_writer::start_tag('form', ['method' => 'get', 'action' => $filter_url,
     'class' => 'p-3 bg-light border rounded mb-4']);
-echo html_writer::start_tag('div', ['class' => 'form-row align-items-end']);
+echo html_writer::start_tag('div', ['class' => 'row g-2 align-items-end']);
 
 // Курс
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
@@ -308,17 +309,7 @@ echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'course_id',
 if ($selected_course > 0) {
     echo html_writer::start_tag('div', ['class' => 'card mb-3']);
     echo html_writer::start_tag('div', ['class' => 'card-body py-2']);
-    echo html_writer::start_tag('div', ['class' => 'form-row align-items-end']);
-
-    // Роль на курсе
-    echo html_writer::start_tag('div', ['class' => 'col-auto']);
-    echo html_writer::tag('label', 'Роль на курсе:', ['class' => 'font-weight-bold d-block mb-1']);
-    echo html_writer::select(
-        ['editingteacher' => 'Учитель (с правом редактирования)', 'teacher' => 'Учитель (без редактирования)'],
-        'role_type', 'editingteacher', false,
-        ['class' => 'form-control', 'style' => 'min-width:240px']
-    );
-    echo html_writer::end_tag('div');
+    echo html_writer::start_tag('div', ['class' => 'row g-2 align-items-end']);
 
     // Существующая группа
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
@@ -368,8 +359,7 @@ if ($selected_course > 0) {
                 '<strong>Включить режим «Раздельные группы» для курса</strong>' .
                 html_writer::tag('br', '') .
                 html_writer::tag('small',
-                    'Педагоги будут видеть только участников своей группы. ' .
-                    'Устанавливает groupmode=1 и запрещает accessallgroups на уровне курса.',
+                    'Педагоги будут видеть только участников своей группы.',
                     ['class' => 'text-muted font-weight-normal']
                 ),
                 ['for' => 'separate_groups', 'class' => 'mb-0']

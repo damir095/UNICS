@@ -103,8 +103,10 @@ if ($action === 'remove_ps' && confirm_sesskey()) {
 // ----------------------------------------------------------------
 // Фильтры (GET)
 // ----------------------------------------------------------------
-$filter_org   = optional_param('filter_org',   0, PARAM_INT);
-$filter_class = optional_param('filter_class', 0, PARAM_INT);
+$filter_org    = optional_param('filter_org',    0, PARAM_INT);
+$filter_class  = optional_param('filter_class',  0, PARAM_INT);
+// Буква класса — кириллица (А–Ж), поэтому PARAM_TEXT, не PARAM_ALPHA. Паттерн из users.php.
+$filter_letter = optional_param('filter_letter', '', PARAM_TEXT);
 
 // Если у пользователя скоуп = одна организация, форсим фильтр на неё.
 if (!$is_admin_user && $methodist_org_id) {
@@ -133,10 +135,13 @@ for ($i = 1; $i <= 11; $i++) {
     $classes_menu[$i] = "{$i} класс";
 }
 
+$letters_menu = ['' => '- все буквы -', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
+                 'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
+
 // ----------------------------------------------------------------
 // Учащиеся с учётом фильтров
 // ----------------------------------------------------------------
-$where  = 'u.deleted = 0';
+$where  = 'u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL';
 $params = [];
 
 if ($filter_org > 0) {
@@ -152,10 +157,14 @@ if ($filter_class > 0) {
     $where .= ' AND s.class_number = :class_num';
     $params['class_num'] = $filter_class;
 }
+if ($filter_letter !== '') {
+    $where .= ' AND s.class_letter = :class_let';
+    $params['class_let'] = $filter_letter;
+}
 
 $students = $DB->get_records_sql(
     "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename,
-            s.class_number, o.name AS org_name
+            s.class_number, s.class_letter, o.name AS org_name
      FROM {unics_students} s
      JOIN {user} u ON u.id = s.mdl_user_id
      LEFT JOIN {unics_organizations} o ON o.id = s.organization_id
@@ -208,8 +217,8 @@ foreach ($parents_raw as $p) {
 
 $students_menu = ['' => get_string('select_student', 'local_unics')];
 foreach ($students as $s) {
-    $students_menu[$s->student_id] = "{$s->lastname} {$s->firstname}"
-        . ($s->class_number ? " ({$s->class_number} кл.)" : '');
+    $cls = $s->class_number ? " ({$s->class_number}" . ($s->class_letter ?? '') . " кл.)" : '';
+    $students_menu[$s->student_id] = "{$s->lastname} {$s->firstname}" . $cls;
 }
 
 // ----------------------------------------------------------------
@@ -229,7 +238,7 @@ if ($is_admin_user) {
 $ts_pairs = $DB->get_records_sql(
     "SELECT ts.id, u_t.lastname AS t_last, u_t.firstname AS t_first,
             u_s.lastname AS s_last, u_s.firstname AS s_first,
-            s.class_number
+            s.class_number, s.class_letter
      FROM {unics_teacher_student} ts
      JOIN {unics_teachers} t  ON t.id  = ts.teacher_id
      JOIN {user} u_t          ON u_t.id = t.mdl_user_id
@@ -268,14 +277,8 @@ foreach ($ts_map as $row) {
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading(get_string('assignments', 'local_unics'));
-
-$back_url   = $is_scoped_role
-    ? new moodle_url('/local/unics/pages/dashboard.php')
-    : new moodle_url('/local/unics/pages/users.php');
-$back_label = $is_scoped_role ? 'На дашборд' : 'Назад к пользователям';
-echo html_writer::link($back_url, $back_label,
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3']);
 
 // ================================================================
 // Блок: Педагог → Учащийся
@@ -302,6 +305,10 @@ echo html_writer::tag('label', 'Класс:', ['class' => 'mr-1']);
 echo html_writer::select($classes_menu, 'filter_class', $filter_class, false,
     ['class' => 'form-control form-control-sm mr-3']);
 
+echo html_writer::tag('label', 'Буква:', ['class' => 'mr-1']);
+echo html_writer::select($letters_menu, 'filter_letter', $filter_letter, false,
+    ['class' => 'form-control form-control-sm mr-3']);
+
 echo html_writer::tag('button', 'Применить', ['type' => 'submit', 'class' => 'btn btn-sm btn-secondary']);
 echo html_writer::end_tag('form');
 
@@ -312,8 +319,9 @@ $assign_url = new moodle_url('/local/unics/pages/assign.php', [
 ]);
 echo html_writer::start_tag('form', ['method' => 'post', 'action' => $assign_url]);
 // Сохраняем фильтры в hidden чтобы после POST вернуться с теми же фильтрами
-echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_org',   'value' => $filter_org]);
-echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_class', 'value' => $filter_class]);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_org',    'value' => $filter_org]);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_class',  'value' => $filter_class]);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_letter', 'value' => $filter_letter]);
 
 echo html_writer::start_tag('div', ['class' => 'row']);
 
@@ -349,8 +357,11 @@ if (empty($students)) {
     ]);
 
     foreach ($students as $s) {
+        $cls = $s->class_number
+            ? ' - ' . $s->class_number . ($s->class_letter ?? '') . ' кл.'
+            : '';
         $fio = htmlspecialchars("{$s->lastname} {$s->firstname}"
-            . ($s->class_number ? " - {$s->class_number} кл." : '')
+            . $cls
             . ($s->org_name ? " ({$s->org_name})" : ''));
 
         echo html_writer::start_tag('div', ['class' => 'form-check']);
@@ -387,10 +398,13 @@ if (!empty($ts_pairs)) {
         $remove_url = new moodle_url('/local/unics/pages/assign.php', [
             'action' => 'remove_ts', 'id' => $pair->id, 'sesskey' => sesskey(),
         ]);
+        $cls_cell = $pair->class_number
+            ? $pair->class_number . ($pair->class_letter ?? '') . ' кл.'
+            : '-';
         $table->data[] = [
             "{$pair->t_last} {$pair->t_first}",
             "{$pair->s_last} {$pair->s_first}",
-            $pair->class_number ? "{$pair->class_number} кл." : '-',
+            $cls_cell,
             html_writer::link($remove_url, 'Убрать', ['class' => 'btn btn-sm btn-outline-danger']),
         ];
     }

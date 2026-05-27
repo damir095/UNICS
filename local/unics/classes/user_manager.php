@@ -53,7 +53,7 @@ class unics_user_manager {
                 // Если пришёл int (старый код / API), нормализуем через helper.
                 $category_csv = is_array($data['student_category'] ?? null)
                     ? \local_unics\student_helper::to_csv($data['student_category'])
-                    : (string)($data['student_category'] ?? '2');
+                    : (string)($data['student_category'] ?? '');
                 $ovz_csv = is_array($data['ovz_type'] ?? null)
                     ? \local_unics\student_helper::to_csv($data['ovz_type'])
                     : (string)($data['ovz_type'] ?? '');
@@ -67,9 +67,9 @@ class unics_user_manager {
                 $DB->insert_record('unics_students', (object)[
                     'mdl_user_id'      => $mdl_user_id,
                     'organization_id'  => $data['organization_id'],
-                    'category'         => $category_csv !== '' ? $category_csv : '2',
+                    'category'         => $category_csv, // пусто = обычный учащийся
                     'ovz_type'         => $ovz_csv !== '' ? $ovz_csv : null,
-                    'difficulty_level' => $data['difficulty_level'],
+                    'difficulty_level' => $data['difficulty_level'] ?? 2, // при создании всегда «средний»
                     'class_number'     => $data['class_number'] ?? null,
                     'class_letter'     => !empty($data['class_letter']) ? $data['class_letter'] : null,
                     'special_needs'    => $data['special_needs'] ?? null,
@@ -99,10 +99,33 @@ class unics_user_manager {
 
         // 5. Устанавливаем кастомное поле профиля unics_level (для учащихся)
         if ((int)$data['unics_role'] === 7) {
-            self::set_student_level($mdl_user_id, (int)$data['difficulty_level']);
+            self::set_student_level($mdl_user_id, (int)($data['difficulty_level'] ?? 2));
+        }
+
+        // 6. Региональный администратор (роль 1) автоматически получает siteadmin
+        // Moodle (#5, ответ пользователя 2026-05-29: только регионального; для
+        // районного админа — роль 2 — этого не делаем, её существование под вопросом).
+        // При удалении/архиве siteadmin НЕ отзывается автоматически — потребуется
+        // ручная чистка через Site administration → Permissions → Site administrators.
+        if ((int)$data['unics_role'] === 1) {
+            self::add_to_siteadmins($mdl_user_id);
         }
 
         return $mdl_user_id;
+    }
+
+    /**
+     * Добавляет пользователя в `$CFG->siteadmins`. Идемпотентно: повторный вызов
+     * не создаёт дубликата. Используется для unics_role=1 (региональный админ).
+     */
+    private static function add_to_siteadmins(int $mdl_user_id): void {
+        global $CFG;
+        $raw     = (string)($CFG->siteadmins ?? '');
+        $admins  = array_filter(array_map('intval', explode(',', $raw)));
+        if (!in_array($mdl_user_id, $admins, true)) {
+            $admins[] = $mdl_user_id;
+            set_config('siteadmins', implode(',', array_values(array_unique($admins))));
+        }
     }
 
     /**
@@ -135,7 +158,7 @@ class unics_user_manager {
         $sql = "SELECT u.id, u.firstname, u.lastname, u.middlename,
                        u.email, u.username, uo.unics_role, uo.organization_id,
                        COALESCE(o.name, d.name, rg.name) AS org_name,
-                       s.class_number, s.class_letter
+                       s.id AS student_id, s.class_number, s.class_letter, s.archived_at
                 FROM {user} u
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
                 LEFT JOIN {unics_organizations} o ON o.id = uo.organization_id
@@ -146,6 +169,61 @@ class unics_user_manager {
                 ORDER BY u.lastname, u.firstname";
 
         return $DB->get_records_sql($sql, $params);
+    }
+
+    /**
+     * Мягкий архив учащегося («удаление» методистом): archived_at = сегодня.
+     * Аккаунт, оценки и привязки сохраняются; ученик убирается из активных списков.
+     * Пишет в unics_audit_log. Идемпотентно: уже архивный — вернёт false.
+     *
+     * @param int $student_id unics_students.id
+     * @param int $actor_id   mdl_user_id инициатора
+     * @return bool true если статус изменился
+     */
+    public static function archive_student(int $student_id, int $actor_id): bool {
+        global $DB;
+        $student = $DB->get_record('unics_students', ['id' => $student_id], 'id, archived_at', MUST_EXIST);
+        if (!empty($student->archived_at)) {
+            return false; // уже в архиве
+        }
+        $today = date('Y-m-d');
+        $DB->set_field('unics_students', 'archived_at', $today, ['id' => $student_id]);
+        self::log_student_archive($student_id, $actor_id, 'archive', null, $today);
+        return true;
+    }
+
+    /**
+     * Восстановление из мягкого архива: archived_at = NULL.
+     *
+     * @param int $student_id unics_students.id
+     * @param int $actor_id   mdl_user_id инициатора
+     * @return bool true если статус изменился
+     */
+    public static function restore_student(int $student_id, int $actor_id): bool {
+        global $DB;
+        $student = $DB->get_record('unics_students', ['id' => $student_id], 'id, archived_at', MUST_EXIST);
+        if (empty($student->archived_at)) {
+            return false; // и так активный
+        }
+        $DB->set_field('unics_students', 'archived_at', null, ['id' => $student_id]);
+        self::log_student_archive($student_id, $actor_id, 'restore', $student->archived_at, null);
+        return true;
+    }
+
+    /** Запись в unics_audit_log для архива/восстановления учащегося. */
+    private static function log_student_archive(int $student_id, int $actor_id,
+                                               string $action, ?string $old, ?string $new): void {
+        global $DB;
+        $DB->insert_record('unics_audit_log', (object)[
+            'mdl_user_id' => $actor_id,
+            'action'      => $action,
+            'table_name'  => 'unics_students',
+            'record_id'   => $student_id,
+            'old_value'   => json_encode(['archived_at' => $old]),
+            'new_value'   => json_encode(['archived_at' => $new]),
+            'ip_address'  => getremoteaddr(),
+            'changed_at'  => date('Y-m-d H:i:s'),
+        ]);
     }
 
     /**

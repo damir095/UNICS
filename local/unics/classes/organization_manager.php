@@ -145,7 +145,7 @@ class unics_organization_manager {
 
         $count = $DB->count_records('unics_organizations', ['district_id' => $id, 'is_active' => 1]);
         if ($count > 0) {
-            return "Нельзя удалить: в районе есть {$count} активных организаций.";
+            return "Нельзя удалить: в муниципалитете есть {$count} активных организаций.";
         }
 
         $DB->delete_records('unics_organizations', ['district_id' => $id, 'is_active' => 0]);
@@ -161,7 +161,7 @@ class unics_organization_manager {
         foreach ($districts as $dist) {
             $count = $DB->count_records('unics_organizations', ['district_id' => $dist->id, 'is_active' => 1]);
             if ($count > 0) {
-                return "Нельзя удалить: в районе «{$dist->name}» есть активные организации.";
+                return "Нельзя удалить: в муниципалитете «{$dist->name}» есть активные организации.";
             }
         }
 

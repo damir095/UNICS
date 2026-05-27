@@ -145,6 +145,7 @@ if ($cmid > 0) {
 $fio = trim("{$mdl_user->lastname} {$mdl_user->firstname} " . ($mdl_user->middlename ?? ''));
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 echo '<div class="mb-3 d-flex flex-wrap gap-2">';
 echo html_writer::link(

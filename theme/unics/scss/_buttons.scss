@@ -113,3 +113,22 @@
         margin-right: 0;
     }
 }
+
+// Круглые icon-only кнопки ядра (.btn-icon: «?» футера, коммуникация).
+// Глиф «?» (FA `fa-question`) смещался влево: правило `.btn .icon { width: 1.25em }`
+// выше навязывает иконке фикс-бокс, а FA без `fa-fw` не центрирует глиф внутри него
+// (fa-fw = width:1.25em + text-align:center — мы скопировали только width).
+// Снимаем навязанный бокс и центрируем; flex самой .btn-icon правит вертикаль.
+.btn-icon {
+    padding: 0;                          // снять текстовый паддинг .btn (space-5) — он сдвигал глиф
+    width: var(--unics-touch-min);       // высота .btn = 44px (min-height); равняем ширину → круг 44×44, а не вертикальный овал
+    height: var(--unics-touch-min);
+
+    .icon,
+    i {
+        width: 1.25em;        // симметричный бокс (как fa-fw)…
+        text-align: center;   // …и центрируем глиф внутри него — иначе «?» прижат влево
+        line-height: 1;
+        margin: 0;
+    }
+}

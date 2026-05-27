@@ -61,6 +61,7 @@ $total_all  = count($badge_info);
 $total_got  = count($awards);
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 // Кнопка назад - только для педагога/администратора/родителя, не для самого учащегося
 if ($USER->id !== $student->mdl_user_id) {
@@ -73,7 +74,7 @@ if ($USER->id !== $student->mdl_user_id) {
 
 $fio = trim("{$mdl_user->lastname} {$mdl_user->firstname} " . ($mdl_user->middlename ?? ''));
 
-echo '<div class="d-flex align-items-center mb-3">';
+echo '<div class="d-flex align-items-center flex-wrap gap-2 mt-3 mb-3">';
 echo $OUTPUT->heading(s($fio), 4, 'mb-0 mr-3');
 echo html_writer::tag('span',
     "Получено значков: {$total_got} / {$total_all}",
@@ -91,14 +92,17 @@ foreach ($badge_info as $badge_type => $info) {
 
     echo '<div class="col-lg-3 col-sm-6 mb-4">';
     echo '<div class="card h-100 ' . $border_class . ' ' . $bg_class . ' text-center shadow-sm">';
-    echo '<div class="card-body d-flex flex-column align-items-center justify-content-center py-4">';
-    echo '<div style="font-size:3.5rem;' . $opacity . '">' . $info['icon'] . '</div>';
-    echo '<h5 class="card-title mt-2 mb-1">' . htmlspecialchars($info['name']) . '</h5>';
+    echo '<div class="card-body d-flex flex-column align-items-center py-4">';
+    // Фиксированная высота иконки — чтобы заголовки всех карточек начинались на одном уровне
+    // независимо от размера эмодзи.
+    echo '<div style="font-size:3.5rem;line-height:1;height:4.5rem;display:flex;align-items:center;justify-content:center;' . $opacity . '">' . $info['icon'] . '</div>';
+    echo '<h5 class="card-title mt-3 mb-1">' . htmlspecialchars($info['name']) . '</h5>';
     echo '<p class="card-text text-muted small mb-3">' . htmlspecialchars($info['desc']) . '</p>';
+    // mt-auto прижимает бейдж к низу карточки → у всех карточек он на одной линии.
     if ($awarded) {
-        echo '<span class="badge badge-success px-3 py-2">Получен ' . $awarded_date . '</span>';
+        echo '<span class="badge badge-success px-3 py-2 mt-auto">Получен ' . $awarded_date . '</span>';
     } else {
-        echo '<span class="badge badge-secondary px-3 py-2">Ещё не получен</span>';
+        echo '<span class="badge badge-secondary px-3 py-2 mt-auto">Ещё не получен</span>';
     }
     echo '</div></div>';
     echo '</div>';

@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
 global $USER, $DB;
@@ -61,18 +62,19 @@ $shop_items = $DB->get_records('unics_shop_items', ['is_active' => 1], 'sort_ord
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 // Навигация
-echo '<div class="mb-3">';
+echo '<div class="d-flex flex-wrap gap-2 mt-3 mb-3">';
 echo html_writer::link(
     new moodle_url('/local/unics/pages/dashboard.php'),
-    '← Главная',
+    'Главная',
     ['class' => 'btn btn-outline-secondary btn-sm']
 );
 echo html_writer::link(
     new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student->id]),
     'Мои значки',
-    ['class' => 'btn btn-outline-warning btn-sm ml-2']
+    ['class' => 'btn btn-outline-warning btn-sm']
 );
 echo '</div>';
 
@@ -164,7 +166,7 @@ if (!empty($purchases)) {
 if (!empty($history)) {
     echo '<h5 class="mt-4 mb-3">📋 История баллов</h5>';
     echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="thead-light"><tr><th>Дата</th><th>Событие</th><th class="text-right">Баллы</th></tr></thead>';
+    echo '<thead class="table-light"><tr><th>Дата</th><th>Событие</th><th class="text-right">Баллы</th></tr></thead>';
     echo '<tbody>';
     foreach ($history as $h) {
         $sign  = (int)$h->points > 0 ? '+' : '';

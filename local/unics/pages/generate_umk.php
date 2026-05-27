@@ -181,8 +181,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 // ----------------------------------------------------------------
 // Фильтры (GET)
 // ----------------------------------------------------------------
-$filter_org   = optional_param('filter_org',   0, PARAM_INT);
-$filter_class = optional_param('filter_class', 0, PARAM_INT);
+$filter_org    = optional_param('filter_org',    0, PARAM_INT);
+$filter_class  = optional_param('filter_class',  0, PARAM_INT);
+$filter_letter = optional_param('filter_letter', '', PARAM_TEXT); // буква класса (кириллица)
 
 // Методист - фильтр организации форсирован на его орг.
 if ($is_methodist && $methodist_org_id) {
@@ -199,6 +200,10 @@ foreach ($DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC',
 $classes_menu = [0 => '- все классы -'];
 for ($i = 1; $i <= 11; $i++) { $classes_menu[$i] = "{$i} класс"; }
 
+// Меню букв класса (кириллица А–Ж)
+$letters_menu = ['' => '- все буквы -', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
+                 'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
+
 // Курсы
 $courses = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
 
@@ -212,7 +217,7 @@ if ($preselect_course && isset($courses[$preselect_course])) {
 // ----------------------------------------------------------------
 // Учащиеся с учётом фильтров и роли текущего пользователя
 // ----------------------------------------------------------------
-$where  = 'u.deleted = 0';
+$where  = 'u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL';
 $params = [];
 
 if ($teacher_record) {
@@ -226,6 +231,10 @@ if ($filter_org > 0) {
 if ($filter_class > 0) {
     $where .= ' AND s.class_number = :class_num';
     $params['class_num'] = $filter_class;
+}
+if ($filter_letter !== '') {
+    $where .= ' AND s.class_letter = :class_let';
+    $params['class_let'] = $filter_letter;
 }
 
 // Скоуп: не-системный-админ без teacher-привязки (районный/региональн. методист или
@@ -268,6 +277,7 @@ $default_student = optional_param('student_id', 0, PARAM_INT);
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Сгенерировать учебный материал (ИИ)');
 
 $ai_key      = get_config('local_unics', 'ai_api_key');
@@ -309,6 +319,10 @@ if ($is_methodist) {
 
 echo html_writer::tag('label', 'Класс:', ['class' => 'mr-1']);
 echo html_writer::select($classes_menu, 'filter_class', $filter_class, false,
+    ['class' => 'form-control form-control-sm mr-3']);
+
+echo html_writer::tag('label', 'Буква:', ['class' => 'mr-1']);
+echo html_writer::select($letters_menu, 'filter_letter', $filter_letter, false,
     ['class' => 'form-control form-control-sm mr-3']);
 
 echo html_writer::tag('button', 'Применить', ['type' => 'submit', 'class' => 'btn btn-sm btn-secondary']);
@@ -520,7 +534,7 @@ if (empty($students)) {
     } elseif (!$is_admin) {
         $scope = \local_unics\scope_checker::get_user_scope((int)$USER->id);
         if (!$scope['organization_id'] && !$scope['district_id'] && !$scope['region_id']) {
-            $hint .= ' Ваш профиль не привязан к организации, району или региону - обратитесь к администратору.';
+            $hint .= ' Ваш профиль не привязан к организации, муниципалитету или региону - обратитесь к администратору.';
         } else {
             $hint .= ' Среди ваших учащихся нет подходящих по выбранному фильтру.';
         }

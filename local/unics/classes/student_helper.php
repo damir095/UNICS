@@ -96,6 +96,10 @@ class student_helper {
                 $labels[] = get_string(self::CATEGORIES[$id], 'local_unics');
             }
         }
+        // Нет категорий → «обычный» учащийся (без ОВЗ/одарённости).
+        if (empty($labels)) {
+            return get_string('category_normal', 'local_unics');
+        }
         return implode($sep, $labels);
     }
 

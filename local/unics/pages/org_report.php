@@ -54,6 +54,7 @@ if ($is_admin_user) {
 }
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 
 echo '<div class="mb-3">';
 echo html_writer::link(
@@ -304,7 +305,7 @@ if ($cnt_risk > 0) {
 
 // ---- Таблица ----
 echo '<table class="table table-sm table-bordered table-hover">';
-echo '<thead class="thead-light"><tr>
+echo '<thead class="table-light"><tr>
     <th>Учащийся</th><th>Класс</th><th>Категория</th><th>Уровень</th>
     <th>Средний балл (' . grade_scale::label() . ')</th><th>Риск</th><th>Курсов</th><th>УМК</th><th>Отчёт</th>
 </tr></thead><tbody>';

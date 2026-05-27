@@ -27,9 +27,9 @@ $string['role_student']            = 'Учащийся';
 $string['role_parent']             = 'Родитель';
 $string['role_org_admin']          = 'Администратор организации'; // legacy, из селекта убран
 $string['role_methodist']          = 'Методист организации';      // код 4
-$string['role_district_methodist'] = 'Районный методист';         // код 9
-$string['role_region_admin']       = 'Региональный администратор';// код 1
-$string['role_district_admin']     = 'Районный администратор';    // код 2
+$string['role_district_methodist'] = 'Муниципальный методист';     // код 9
+$string['role_region_admin']       = 'Региональный администратор'; // код 1
+$string['role_district_admin']     = 'Муниципальный администратор';// код 2
 
 // Поля учащегося
 $string['student_category']      = 'Категория учащегося';
@@ -37,6 +37,7 @@ $string['category_ovz']          = 'ОВЗ';
 $string['category_family']       = 'Семейное обучение';
 $string['category_treatment']    = 'Длительное лечение';
 $string['category_gifted']       = 'Одарённый ребёнок';
+$string['category_normal']       = 'Обычный';
 $string['difficulty_level']      = 'Уровень подготовки';
 $string['level_weak']            = '1 - Слабый';
 $string['level_normal']          = '2 - Обычный';
@@ -44,13 +45,16 @@ $string['level_gifted']          = '3 - Одарённый';
 $string['class_number']          = 'Класс (номер)';
 $string['class_letter']          = 'Буква класса';
 $string['special_needs']         = 'Особые образовательные потребности';
-$string['ovz_type']              = 'Вид ОВЗ';
-$string['ovz_blind']             = 'Слабовидящий';
-$string['ovz_deaf']              = 'Слабослышащий';
-$string['ovz_motor']             = 'Нарушение двигательного аппарата';
-$string['ovz_zpd']               = 'Задержка психического развития';
-$string['ovz_ras']               = 'РАС (расстройство аутист. спектра)';
-$string['ovz_other']             = 'Иное';
+// Виды ОВЗ показываются абстрактными номерами категорий — расшифровка (какой
+// номер какому диагнозу соответствует) хранится ТОЛЬКО в вики (student-categories.md),
+// в системе её быть не должно (приватность, анти-стигматизация, 152-ФЗ).
+$string['ovz_type']              = 'Категория ОВЗ';
+$string['ovz_blind']             = 'ОВЗ 1 категории';
+$string['ovz_deaf']              = 'ОВЗ 2 категории';
+$string['ovz_motor']             = 'ОВЗ 3 категории';
+$string['ovz_zpd']               = 'ОВЗ 4 категории';
+$string['ovz_ras']               = 'ОВЗ 5 категории';
+$string['ovz_other']             = 'ОВЗ 6 категории';
 
 // Поля педагога
 $string['subjects']              = 'Преподаваемые предметы';
@@ -86,7 +90,7 @@ $string['removed_ok']            = 'Привязка удалена';
 $string['organizations']         = 'Организации';
 $string['org_management']        = 'Управление организациями';
 $string['add_region']            = 'Добавить регион';
-$string['add_district']          = 'Добавить район';
+$string['add_district']          = 'Добавить муниципалитет';
 $string['add_org']               = 'Добавить организацию';
 $string['org_type_school']       = 'Школа';
 $string['org_type_cdo']          = 'Центр дистанционного обучения';

@@ -253,4 +253,42 @@ class scope_checker {
 
         return ['1=0', []];
     }
+
+    /**
+     * Меню районов, доступных пользователю по его скоупу: [id => name].
+     *
+     * Системный админ видит все районы; региональный — районы своего региона;
+     * районный/орг — только свой район (один элемент). Используется для построения
+     * фильтров «Район» на списковых страницах (users.php, my_students.php и т.п.).
+     * Capability-проверку (системный ли это админ) делает вызывающий код — отсюда
+     * флаг $is_full_admin, а не проверка прав внутри (см. контракт класса).
+     *
+     * @param int  $mdl_user_id   смотрящий
+     * @param bool $is_full_admin есть ли у него local/unics:manage
+     * @return array<int,string>
+     */
+    public static function accessible_districts_menu(int $mdl_user_id, bool $is_full_admin): array {
+        global $DB;
+
+        if ($is_full_admin) {
+            $rows = $DB->get_records('unics_districts', null, 'name ASC', 'id, name');
+        } else {
+            $scope = self::get_user_scope($mdl_user_id);
+            if ($scope['region_id'] !== null) {
+                $rows = $DB->get_records('unics_districts',
+                    ['region_id' => $scope['region_id']], 'name ASC', 'id, name');
+            } else if ($scope['district_id'] !== null) {
+                $rows = $DB->get_records('unics_districts',
+                    ['id' => $scope['district_id']], 'name ASC', 'id, name');
+            } else {
+                $rows = [];
+            }
+        }
+
+        $menu = [];
+        foreach ($rows as $d) {
+            $menu[(int)$d->id] = $d->name;
+        }
+        return $menu;
+    }
 }

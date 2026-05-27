@@ -220,15 +220,24 @@
 // -----------------------------------------------------------------------------
 .unics-lvl {
     display: inline-block;
+    max-width: 100%;
     padding: var(--unics-space-1) var(--unics-space-2);
     border-radius: var(--unics-radius-pill);
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.2;
+    white-space: normal;
+    word-break: break-word;
 
     &-1 { background: #E3ECFA; color: #1F4D9B; }   // базовый — спокойный синий
     &-2 { background: #FCE3D9; color: #A93D24; }   // стандартный — наш бренд
     &-3 { background: #E9DEF2; color: #5E2D88; }   // продвинутый — фиолетовый
+}
+
+// Возврат «На дашборд» — отступ сверху для standard-pagelayout
+// (без админ-панели сверху кнопка лежит впритык к навбару).
+.unics-dashboard-back {
+    margin-top: 1rem;
 }
 
 // -----------------------------------------------------------------------------

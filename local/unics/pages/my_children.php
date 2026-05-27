@@ -1,5 +1,6 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../lib.php');
 
 require_login();
 global $USER, $DB;
@@ -25,6 +26,7 @@ $children = $DB->get_records_sql(
 );
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Мои дети');
 
 if (empty($children)) {

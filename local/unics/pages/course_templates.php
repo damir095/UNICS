@@ -5,21 +5,20 @@ require_once(__DIR__ . '/../lib.php');
 require_login();
 local_unics_require_not_student();
 
-// Педагог без права редактирования (роль 6) курсы не создаёт — страница read-only-недоступна.
-if (local_unics_is_nonediting_teacher()) {
+$ctx                = context_system::instance();
+$is_admin_user      = has_capability('local/unics:manage', $ctx);
+$is_methodist       = !$is_admin_user && local_unics_is_methodist();
+// unics_role 5 — «педагог, создающий курсы». Подтверждено наблюдением 2026-05-28:
+// две раздельные роли (5 = editingteacher = создаёт курсы, 6 = teacher = только ведёт)
+// именно для того, чтобы editingteacher имел доступ к шаблонам.
+$is_editingteacher  = !$is_admin_user && !$is_methodist
+    && local_unics_user_has_role((int)$USER->id, ['editingteacher']);
+
+if (!$is_admin_user && !$is_methodist && !$is_editingteacher) {
     redirect(new moodle_url('/local/unics/pages/dashboard.php'),
-        'Создание курсов доступно только педагогам, создающим курсы.', null,
-        \core\output\notification::NOTIFY_WARNING);
+        'Создание курсов доступно только педагогу, создающему курсы, методисту и администратору.',
+        null, \core\output\notification::NOTIFY_WARNING);
 }
-
-$ctx = context_system::instance();
-if (!has_capability('local/unics:manage', $ctx)
-    && !has_capability('local/unics:viewstudents', $ctx)) {
-    require_capability('local/unics:viewstudents', $ctx); // throws с понятным сообщением
-}
-
-$is_admin_user = has_capability('local/unics:manage', $ctx);
-$is_methodist  = !$is_admin_user && local_unics_is_methodist();
 
 global $DB;
 
@@ -131,15 +130,8 @@ $existing_courses = $DB->get_records_sql(
 // Вывод
 // ----------------------------------------------------------------
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Создание курса по шаблону');
-
-echo html_writer::link(
-    $is_methodist
-        ? new moodle_url('/local/unics/pages/dashboard.php')
-        : new moodle_url('/local/unics/pages/users.php'),
-    $is_methodist ? 'На дашборд' : 'Назад к пользователям',
-    ['class' => 'btn btn-outline-secondary btn-sm mb-3']
-);
 
 // Результат создания
 if ($created_course) {
@@ -172,7 +164,7 @@ echo html_writer::start_tag('div', ['class' => 'card mb-4']);
 echo html_writer::tag('div', '<strong>Параметры шаблона</strong>', ['class' => 'card-header']);
 echo html_writer::start_tag('div', ['class' => 'card-body']);
 
-echo html_writer::start_tag('div', ['class' => 'form-row']);
+echo html_writer::start_tag('div', ['class' => 'row g-2']);
 
 // Предмет
 echo html_writer::start_tag('div', ['class' => 'col-md-3 mb-3']);
@@ -225,16 +217,6 @@ echo html_writer::tag('small',
 );
 echo html_writer::end_tag('div');
 
-echo '<div class="alert alert-info mb-3">'
-   . 'В курсе создаётся <strong>один набор секций</strong> для всех уровней. '
-   . 'Активности в каждой теме разделены по уровням сложности через условный доступ '
-   . '(<code>profile_field_unics_level</code>): '
-   . '<span class="badge badge-info">1 - Базовый</span> '
-   . '<span class="badge badge-primary">2 - Стандартный</span> '
-   . '<span class="badge badge-success">3 - Продвинутый</span>. '
-   . 'Учащийся видит только материалы своего уровня.'
-   . '</div>';
-
 echo html_writer::tag('button', 'Создать курс по шаблону',
     ['type' => 'submit', 'class' => 'btn btn-primary']);
 
@@ -242,38 +224,13 @@ echo html_writer::end_tag('div'); // card-body
 echo html_writer::end_tag('div'); // card
 echo html_writer::end_tag('form');
 
-// ---- Предварительный просмотр структуры ----
-echo '<div class="card mb-4">';
-echo '<div class="card-header"><strong>Структура создаваемого курса</strong></div>';
-echo '<div class="card-body">';
-echo '<table class="table table-sm table-bordered">';
-echo '<thead class="thead-light"><tr><th>Секция</th><th>Название</th><th>Уровень 1</th><th>Уровень 2</th><th>Уровень 3</th></tr></thead>';
-echo '<tbody>';
-echo '<tr><td>0</td><td>Введение в курс</td><td colspan="3">Ознакомительный блок (одинаков для всех уровней)</td></tr>';
-echo '<tr><td>1–N</td><td>Тема N</td>'
-   . '<td colspan="3">'
-   . '[Базовый] Инструкция + Тест &nbsp;|&nbsp; '
-   . '[Стандартный] Инструкция + Тест &nbsp;|&nbsp; '
-   . '[Продвинутый] Инструкция + Тест + Задание'
-   . '<br><small class="text-muted">Каждая активность видна только учащимся с соответствующим profile_field_unics_level</small>'
-   . '</td>'
-   . '</tr>';
-echo '<tr><td>Последняя</td><td>Итоговый контроль</td><td colspan="3">Финальный тест по всему курсу</td></tr>';
-echo '</tbody></table>';
-
-echo '<p class="text-muted mb-0"><small>';
-echo 'Количество тем: Базовый = 80% от стандарта предмета; Стандартный = 100%; Продвинутый = 120%. ';
-echo 'После создания курса наполните секции вручную или через модуль ИИ-генерации УМК.';
-echo '</small></p>';
-echo '</div></div>';
-
 // ---- Последние 20 курсов ----
 if ($existing_courses) {
     echo '<div class="card">';
     echo '<div class="card-header"><strong>Недавно созданные курсы</strong></div>';
     echo '<div class="card-body p-0">';
     echo '<table class="table table-sm table-bordered mb-0">';
-    echo '<thead class="thead-light"><tr><th>Курс</th><th>Краткое имя</th><th>Категория</th><th>Создан</th><th></th></tr></thead>';
+    echo '<thead class="table-light"><tr><th>Курс</th><th>Краткое имя</th><th>Категория</th><th>Создан</th><th></th></tr></thead>';
     echo '<tbody>';
     foreach ($existing_courses as $c) {
         $course_url = new moodle_url('/course/view.php', ['id' => $c->id]);

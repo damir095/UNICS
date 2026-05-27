@@ -50,6 +50,7 @@ foreach ($cats_raw as $c) {
 }
 
 echo $OUTPUT->header();
+echo local_unics_dashboard_button();
 echo $OUTPUT->heading('Создание демонстрационных курсов');
 
 echo html_writer::link(

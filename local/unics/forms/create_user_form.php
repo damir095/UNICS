@@ -101,10 +101,13 @@ class unics_create_user_form extends moodleform {
         $mform->addRule('unics_role', null, 'required');
 
         // Организация не нужна управленческим/районным ролям (скоуп регион/район):
-        // регион. админ (1), районный админ (2), районный методист (9).
+        // регион. админ (1), районный админ (2), районный методист (9). Также не нужна
+        // родителю (8) — его скоуп выводится через ребёнка (unics_parent_student),
+        // см. scope_checker::get_user_organization (наблюдение #4, 2026-05-28).
         $mform->hideIf('organization_id', 'unics_role', 'eq', '1');
         $mform->hideIf('organization_id', 'unics_role', 'eq', '2');
         $mform->hideIf('organization_id', 'unics_role', 'eq', '9');
+        $mform->hideIf('organization_id', 'unics_role', 'eq', '8');
 
         // --- Скоуп регионального админа (видим только для роли 1) ---
         // Один из двух полей должен быть заполнен (проверка в validation()).
@@ -138,7 +141,7 @@ class unics_create_user_form extends moodleform {
         // Район — территория районного администратора (2) и районного методиста (9).
         // hideIf OR-комбинируется, поэтому скрываем для всех ролей, кроме 2 и 9.
         $mform->addElement('select', 'district_id',
-            'Район (для районного администратора / методиста)', $districts_menu);
+            'Муниципалитет (для муниципального администратора / методиста)', $districts_menu);
         $mform->setType('district_id', PARAM_INT);
         foreach (['', '1', '4', '5', '6', '7', '8'] as $r) {
             $mform->hideIf('district_id', 'unics_role', 'eq', $r);
@@ -147,19 +150,12 @@ class unics_create_user_form extends moodleform {
         // --- Поля учащегося (показываются только если роль = 7) ---
         $mform->addElement('header', 'student_data', 'Данные учащегося');
 
-        // Категории учащегося. Лейбл столбца показываем только у первого чекбокса -
-        // последующие выравниваются под ним, что даёт чистую вертикальную колонку.
-        $mform->addElement('advcheckbox', 'cat_1', get_string('student_category', 'local_unics'),
-            get_string('category_ovz',       'local_unics'), null, [0, 1]);
-        $mform->addElement('advcheckbox', 'cat_2', '',
-            get_string('category_family',    'local_unics'), null, [0, 1]);
-        $mform->addElement('advcheckbox', 'cat_3', '',
-            get_string('category_treatment', 'local_unics'), null, [0, 1]);
-        $mform->addElement('advcheckbox', 'cat_4', '',
-            get_string('category_gifted',    'local_unics'), null, [0, 1]);
-
-        // Виды ОВЗ. Видны только если в категориях отмечен «ОВЗ» (cat_1).
-        $mform->addElement('advcheckbox', 'ovz_1', get_string('ovz_type', 'local_unics'),
+        // Категория учащегося — единый плоский список (#4, 2026-05-24): 6 пунктов
+        // «ОВЗ N категории» + «Одарённый». Категории «семейное обучение» / «длительное
+        // лечение» из выбора убраны (старые данные сохраняются и отображаются).
+        // Можно отметить несколько. Ничего не отмечено = обычный учащийся.
+        // Лейбл колонки показываем только у первого чекбокса.
+        $mform->addElement('advcheckbox', 'ovz_1', get_string('student_category', 'local_unics'),
             get_string('ovz_blind', 'local_unics'), null, [0, 1]);
         $mform->addElement('advcheckbox', 'ovz_2', '',
             get_string('ovz_deaf',  'local_unics'), null, [0, 1]);
@@ -171,19 +167,16 @@ class unics_create_user_form extends moodleform {
             get_string('ovz_ras',   'local_unics'), null, [0, 1]);
         $mform->addElement('advcheckbox', 'ovz_6', '',
             get_string('ovz_other', 'local_unics'), null, [0, 1]);
+        $mform->addElement('advcheckbox', 'cat_4', '',
+            get_string('category_gifted', 'local_unics'), null, [0, 1]);
+        $mform->addElement('static', 'cat_hint', '',
+            '<span class="text-muted small">Ничего не отмечено = обычный учащийся.</span>');
 
-        foreach (['ovz_1','ovz_2','ovz_3','ovz_4','ovz_5','ovz_6'] as $el) {
-            $mform->hideIf($el, 'cat_1', 'eq', '0');
+        // Уровень подготовки при создании не выбирается — всегда «средний» (2),
+        // дальше его подстраивает адаптивный движок. См. user_manager::create_user.
+        foreach (['ovz_1','ovz_2','ovz_3','ovz_4','ovz_5','ovz_6','cat_4','cat_hint'] as $el) {
             $mform->hideIf($el, 'unics_role', 'neq', '7');
         }
-
-        $levels = [
-            '1' => get_string('level_weak', 'local_unics'),
-            '2' => get_string('level_normal', 'local_unics'),
-            '3' => get_string('level_gifted', 'local_unics'),
-        ];
-        $mform->addElement('select', 'difficulty_level', get_string('difficulty_level', 'local_unics'), $levels);
-        $mform->setDefault('difficulty_level', '2');
 
         $classes = array_combine(range(1, 11), range(1, 11));
         $mform->addElement('select', 'class_number', get_string('class_number', 'local_unics'), $classes);
@@ -200,8 +193,6 @@ class unics_create_user_form extends moodleform {
 
         // Показывать блок учащегося только если выбрана роль 7
         $mform->hideIf('student_data', 'unics_role', 'neq', '7');
-        $mform->hideIf('student_categories', 'unics_role', 'neq', '7');
-        $mform->hideIf('difficulty_level', 'unics_role', 'neq', '7');
         $mform->hideIf('class_number', 'unics_role', 'neq', '7');
         $mform->hideIf('special_needs', 'unics_role', 'neq', '7');
 
@@ -225,22 +216,185 @@ class unics_create_user_form extends moodleform {
             $mform->hideIf($el, 'unics_role', 'eq', '8');
         }
 
-        // --- Привязки (NEW-4): сразу при создании, иначе только через assign.php ---
-
-        // Для учащегося (роль 7) — выбор педагога. Запись в unics_teacher_student.
-        $mform->addElement('header', 'link_data', 'Привязка');
-
-        $role_short = [4 => 'методист', 5 => 'педагог', 6 => 'педагог'];
-        $teacher_menu = ['' => '— не назначать (можно позже через «Назначения») —'];
-        foreach (unics_user_manager::get_teachers(0) as $t) {
-            $r = $role_short[(int)$t->unics_role] ?? 'педагог';
-            $teacher_menu[$t->teacher_id] = trim($t->lastname . ' ' . $t->firstname) . ' (' . $r . ')';
+        // --- Привязки (NEW-4 + #3 от 2026-05-30) ---
+        // При создании педагога (5/6) — multi-чекбоксы учащихся той же орг с фильтрами
+        // класс/буква. При создании учащегося (7) — multi-чекбоксы педагогов и родителей.
+        // У родителя (8) — оставляем single child (по решению #3). Списки ограничены
+        // зоной создателя; JS дополнительно фильтрует по выбранной #id_organization_id.
+        if ($is_full_admin) {
+            $students_pool = $DB->get_records_sql(
+                "SELECT s.id, u.lastname, u.firstname, s.class_number, s.class_letter,
+                        s.organization_id
+                   FROM {unics_students} s
+                   JOIN {user} u ON u.id = s.mdl_user_id
+                  WHERE u.deleted = 0 AND s.archived_at IS NULL AND s.graduated_at IS NULL
+                  ORDER BY u.lastname, u.firstname");
+            $teachers_pool = $DB->get_records_sql(
+                "SELECT t.id, u.lastname, u.firstname, t.organization_id, uo.unics_role
+                   FROM {unics_teachers} t
+                   JOIN {user} u ON u.id = t.mdl_user_id
+                   JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+                  WHERE u.deleted = 0 AND uo.unics_role IN (4, 5, 6)
+                  ORDER BY u.lastname, u.firstname");
+            $parents_pool = $DB->get_records_sql(
+                "SELECT u.id, u.lastname, u.firstname, uo.organization_id
+                   FROM {user} u
+                   JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+                  WHERE u.deleted = 0 AND uo.unics_role = 8
+                  ORDER BY u.lastname, u.firstname");
+        } else {
+            [$pk_where, $pk_params] = scope_checker::org_filter_sql((int)$USER->id, 'o');
+            $students_pool = $DB->get_records_sql(
+                "SELECT s.id, u.lastname, u.firstname, s.class_number, s.class_letter,
+                        s.organization_id
+                   FROM {unics_students} s
+                   JOIN {user} u ON u.id = s.mdl_user_id
+                   JOIN {unics_organizations} o ON o.id = s.organization_id
+                  WHERE u.deleted = 0 AND s.archived_at IS NULL AND s.graduated_at IS NULL
+                    AND ({$pk_where})
+                  ORDER BY u.lastname, u.firstname", $pk_params);
+            $teachers_pool = $DB->get_records_sql(
+                "SELECT t.id, u.lastname, u.firstname, t.organization_id, uo.unics_role
+                   FROM {unics_teachers} t
+                   JOIN {user} u ON u.id = t.mdl_user_id
+                   JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+                   JOIN {unics_organizations} o ON o.id = t.organization_id
+                  WHERE u.deleted = 0 AND uo.unics_role IN (4, 5, 6)
+                    AND ({$pk_where})
+                  ORDER BY u.lastname, u.firstname", $pk_params);
+            $parents_pool = $DB->get_records_sql(
+                "SELECT u.id, u.lastname, u.firstname, uo.organization_id
+                   FROM {user} u
+                   JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+                   JOIN {unics_organizations} o ON o.id = uo.organization_id
+                  WHERE u.deleted = 0 AND uo.unics_role = 8
+                    AND ({$pk_where})
+                  ORDER BY u.lastname, u.firstname", $pk_params);
         }
-        $mform->addElement('select', 'assign_teacher_id', 'Педагог учащегося', $teacher_menu);
-        $mform->setType('assign_teacher_id', PARAM_INT);
-        $mform->hideIf('assign_teacher_id', 'unics_role', 'neq', '7');
 
-        // Для родителя (роль 8) — выбор ребёнка. Запись в unics_parent_student.
+        // Сохранение отметок между submit'ами при ошибках валидации.
+        $sel_st = array_flip(array_map('intval',
+            optional_param_array('assign_student_ids', [], PARAM_INT)));
+        $sel_tc = array_flip(array_map('intval',
+            optional_param_array('assign_teacher_ids', [], PARAM_INT)));
+        $sel_pa = array_flip(array_map('intval',
+            optional_param_array('assign_parent_ids',  [], PARAM_INT)));
+
+        $mform->addElement('header', 'link_data', 'Привязки');
+
+        // --- Учащиеся (для педагога, роли 5/6) ---
+        $st_html  = '<div class="unics-pick" data-pick="student">';
+        $st_html .= '<div class="unics-pick-filters mb-2">';
+        $st_html .= '<label class="mr-2">Класс: <select class="pick-cls form-control form-control-sm d-inline-block w-auto">';
+        $st_html .= '<option value="">все</option>';
+        for ($i = 1; $i <= 11; $i++) {
+            $st_html .= '<option value="' . $i . '">' . $i . '</option>';
+        }
+        $st_html .= '</select></label> ';
+        $st_html .= '<label class="mr-2">Буква: <select class="pick-let form-control form-control-sm d-inline-block w-auto">';
+        $st_html .= '<option value="">все</option>';
+        foreach (['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж'] as $L) {
+            $st_html .= '<option value="' . $L . '">' . $L . '</option>';
+        }
+        $st_html .= '</select></label> ';
+        $st_html .= '<a href="#" class="pick-all">Выбрать видимых</a> ';
+        $st_html .= '<a href="#" class="pick-none">Снять все</a>';
+        $st_html .= '</div>';
+        $st_html .= '<div class="unics-pick-list border rounded p-2" '
+            . 'style="max-height:280px;overflow-y:auto;background:#fff">';
+        if (empty($students_pool)) {
+            $st_html .= '<div class="text-muted">Нет доступных учащихся.</div>';
+        } else {
+            foreach ($students_pool as $s) {
+                $checked = isset($sel_st[(int)$s->id]) ? ' checked' : '';
+                $cls = (int)($s->class_number ?? 0);
+                $let = (string)($s->class_letter ?? '');
+                $label = htmlspecialchars(trim("{$s->lastname} {$s->firstname}"))
+                    . ($cls ? ' — ' . $cls . htmlspecialchars($let) . ' кл.' : '');
+                $st_html .= '<div class="form-check unics-pick-row" '
+                    . 'data-org="' . (int)$s->organization_id . '" '
+                    . 'data-cls="' . $cls . '" '
+                    . 'data-let="' . htmlspecialchars($let) . '">';
+                $st_html .= '<input type="checkbox" class="form-check-input unics-pick-cb" '
+                    . 'name="assign_student_ids[]" value="' . (int)$s->id . '" '
+                    . 'id="pick_s_' . (int)$s->id . '"' . $checked . '>';
+                $st_html .= '<label class="form-check-label" for="pick_s_' . (int)$s->id . '">'
+                    . $label . '</label>';
+                $st_html .= '</div>';
+            }
+        }
+        $st_html .= '</div></div>';
+
+        $mform->addElement('static', 'link_students', 'Учащиеся педагога', $st_html);
+        foreach (['', '1', '2', '3', '4', '7', '8', '9'] as $r) {
+            $mform->hideIf('link_students', 'unics_role', 'eq', $r);
+        }
+
+        // --- Педагоги (для учащегося, роль 7) ---
+        $tc_html  = '<div class="unics-pick" data-pick="teacher">';
+        $tc_html .= '<div class="unics-pick-filters mb-2">';
+        $tc_html .= '<a href="#" class="pick-all">Выбрать видимых</a> ';
+        $tc_html .= '<a href="#" class="pick-none">Снять все</a>';
+        $tc_html .= '</div>';
+        $tc_html .= '<div class="unics-pick-list border rounded p-2" '
+            . 'style="max-height:280px;overflow-y:auto;background:#fff">';
+        if (empty($teachers_pool)) {
+            $tc_html .= '<div class="text-muted">Нет доступных педагогов.</div>';
+        } else {
+            $role_short = [4 => 'методист', 5 => 'педагог', 6 => 'педагог'];
+            foreach ($teachers_pool as $t) {
+                $checked = isset($sel_tc[(int)$t->id]) ? ' checked' : '';
+                $r = $role_short[(int)$t->unics_role] ?? 'педагог';
+                $label = htmlspecialchars(trim("{$t->lastname} {$t->firstname}")) . ' (' . $r . ')';
+                $tc_html .= '<div class="form-check unics-pick-row" '
+                    . 'data-org="' . (int)$t->organization_id . '">';
+                $tc_html .= '<input type="checkbox" class="form-check-input unics-pick-cb" '
+                    . 'name="assign_teacher_ids[]" value="' . (int)$t->id . '" '
+                    . 'id="pick_t_' . (int)$t->id . '"' . $checked . '>';
+                $tc_html .= '<label class="form-check-label" for="pick_t_' . (int)$t->id . '">'
+                    . $label . '</label>';
+                $tc_html .= '</div>';
+            }
+        }
+        $tc_html .= '</div></div>';
+
+        $mform->addElement('static', 'link_teachers', 'Педагоги учащегося', $tc_html);
+        foreach (['', '1', '2', '3', '4', '5', '6', '8', '9'] as $r) {
+            $mform->hideIf('link_teachers', 'unics_role', 'eq', $r);
+        }
+
+        // --- Родители (для учащегося, роль 7) ---
+        $pa_html  = '<div class="unics-pick" data-pick="parent">';
+        $pa_html .= '<div class="unics-pick-filters mb-2">';
+        $pa_html .= '<a href="#" class="pick-all">Выбрать видимых</a> ';
+        $pa_html .= '<a href="#" class="pick-none">Снять все</a>';
+        $pa_html .= '</div>';
+        $pa_html .= '<div class="unics-pick-list border rounded p-2" '
+            . 'style="max-height:280px;overflow-y:auto;background:#fff">';
+        if (empty($parents_pool)) {
+            $pa_html .= '<div class="text-muted">Нет доступных родителей.</div>';
+        } else {
+            foreach ($parents_pool as $p) {
+                $checked = isset($sel_pa[(int)$p->id]) ? ' checked' : '';
+                $label = htmlspecialchars(trim("{$p->lastname} {$p->firstname}"));
+                $pa_html .= '<div class="form-check unics-pick-row" '
+                    . 'data-org="' . (int)$p->organization_id . '">';
+                $pa_html .= '<input type="checkbox" class="form-check-input unics-pick-cb" '
+                    . 'name="assign_parent_ids[]" value="' . (int)$p->id . '" '
+                    . 'id="pick_p_' . (int)$p->id . '"' . $checked . '>';
+                $pa_html .= '<label class="form-check-label" for="pick_p_' . (int)$p->id . '">'
+                    . $label . '</label>';
+                $pa_html .= '</div>';
+            }
+        }
+        $pa_html .= '</div></div>';
+
+        $mform->addElement('static', 'link_parents', 'Родители учащегося', $pa_html);
+        foreach (['', '1', '2', '3', '4', '5', '6', '8', '9'] as $r) {
+            $mform->hideIf('link_parents', 'unics_role', 'eq', $r);
+        }
+
+        // --- Ребёнок (для родителя, роль 8) — оставляем single по решению #3 ---
         $student_menu = ['' => '— не привязывать (можно позже через «Назначения») —'];
         foreach (unics_user_manager::get_students(0) as $s) {
             $cls = $s->class_number ? ', ' . $s->class_number . ($s->class_letter ?? '') . ' кл.' : '';
@@ -250,11 +404,73 @@ class unics_create_user_form extends moodleform {
         $mform->setType('assign_student_id', PARAM_INT);
         $mform->hideIf('assign_student_id', 'unics_role', 'neq', '8');
 
-        // Весь блок виден только для ролей 7 (учащийся) и 8 (родитель).
-        // Скрываем для всех прочих ролей.
-        foreach (['', '1', '2', '3', '4', '5', '6', '9'] as $r) {
+        // Скрываем заголовок «Привязки» для ролей без связей.
+        foreach (['', '1', '2', '3', '4', '9'] as $r) {
             $mform->hideIf('link_data', 'unics_role', 'eq', $r);
         }
+
+        // JS: фильтрация чекбоксов по выбранной организации + локальным фильтрам.
+        $js = <<<'JS'
+<script>
+(function() {
+    function getOrg() {
+        var el = document.getElementById('id_organization_id');
+        return el ? el.value : '';
+    }
+    function applyAll() {
+        var org = getOrg();
+        document.querySelectorAll('.unics-pick').forEach(function(block) {
+            var clsSel = block.querySelector('.pick-cls');
+            var letSel = block.querySelector('.pick-let');
+            var cls = clsSel ? clsSel.value : '';
+            var let_ = letSel ? letSel.value : '';
+            block.querySelectorAll('.unics-pick-row').forEach(function(row) {
+                var rOrg = row.getAttribute('data-org') || '';
+                var rCls = row.getAttribute('data-cls') || '';
+                var rLet = row.getAttribute('data-let') || '';
+                var matchOrg = !org || rOrg === org;
+                var matchCls = !cls || rCls === cls;
+                var matchLet = !let_ || rLet === let_;
+                row.style.display = (matchOrg && matchCls && matchLet) ? '' : 'none';
+            });
+        });
+    }
+    function init() {
+        var org = document.getElementById('id_organization_id');
+        if (org) org.addEventListener('change', applyAll);
+        document.querySelectorAll('.unics-pick .pick-cls, .unics-pick .pick-let').forEach(function(el) {
+            el.addEventListener('change', applyAll);
+        });
+        document.querySelectorAll('.unics-pick .pick-all').forEach(function(a) {
+            a.addEventListener('click', function(e) {
+                e.preventDefault();
+                this.closest('.unics-pick').querySelectorAll('.unics-pick-row').forEach(function(row) {
+                    if (row.style.display !== 'none') {
+                        var cb = row.querySelector('.unics-pick-cb');
+                        if (cb) cb.checked = true;
+                    }
+                });
+            });
+        });
+        document.querySelectorAll('.unics-pick .pick-none').forEach(function(a) {
+            a.addEventListener('click', function(e) {
+                e.preventDefault();
+                this.closest('.unics-pick').querySelectorAll('.unics-pick-cb').forEach(function(cb) {
+                    cb.checked = false;
+                });
+            });
+        });
+        applyAll();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+</script>
+JS;
+        $mform->addElement('html', $js);
 
         // Блок данных учащегося — не для регион. админа.
         $mform->hideIf('student_data', 'unics_role', 'eq', '1');
@@ -268,7 +484,9 @@ class unics_create_user_form extends moodleform {
     }
 
     /**
-     * Сворачивает плоские advcheckbox'ы в CSV-строки `student_category` и `ovz_type`.
+     * Сворачивает плоский чеклист в CSV-строки `student_category` и `ovz_type`.
+     * Любая отметка «ОВЗ N категории» → категория 1 (ОВЗ) + вид ОВЗ N.
+     * «Одарённый» (cat_4) → категория 4. Ничего не отмечено → пусто (обычный).
      */
     public function get_data() {
         $data = parent::get_data();
@@ -276,22 +494,23 @@ class unics_create_user_form extends moodleform {
             return $data;
         }
 
-        $cats = [];
-        foreach ([1, 2, 3, 4] as $i) {
-            if (!empty($data->{'cat_' . $i})) {
-                $cats[] = $i;
-            }
-        }
-        $data->student_category = \local_unics\student_helper::to_csv($cats);
-
         $ovz = [];
         foreach ([1, 2, 3, 4, 5, 6] as $i) {
             if (!empty($data->{'ovz_' . $i})) {
                 $ovz[] = $i;
             }
         }
-        // Виды ОВЗ имеют смысл только если в категориях отмечен «ОВЗ» (1).
-        $data->ovz_type = in_array(1, $cats, true) ? \local_unics\student_helper::to_csv($ovz) : '';
+
+        $cats = [];
+        if (!empty($ovz)) {
+            $cats[] = 1; // отмечен хотя бы один вид ОВЗ → категория ОВЗ
+        }
+        if (!empty($data->cat_4)) {
+            $cats[] = 4; // одарённый
+        }
+
+        $data->student_category = \local_unics\student_helper::to_csv($cats);
+        $data->ovz_type = !empty($ovz) ? \local_unics\student_helper::to_csv($ovz) : '';
 
         return $data;
     }
@@ -319,28 +538,21 @@ class unics_create_user_form extends moodleform {
         // Территория зависит от роли:
         //   1 (региональн. админ) — регион;
         //   2 (районный админ), 9 (районный методист) — район;
-        //   остальные (4,5,6,7,8) — организация.
+        //   8 (родитель) — выводится через ребёнка, поля не требуем;
+        //   остальные (4,5,6,7) — организация.
         if ($role === 1) {
             if (empty($data['region_id'])) {
                 $errors['region_id'] = 'Укажите регион для регионального администратора';
             }
         } else if ($role === 2 || $role === 9) {
             if (empty($data['district_id'])) {
-                $errors['district_id'] = 'Укажите район для этой роли';
+                $errors['district_id'] = 'Укажите муниципалитет для этой роли';
             }
-        } else if (empty($data['organization_id'])) {
+        } else if ($role !== 8 && empty($data['organization_id'])) {
             $errors['organization_id'] = get_string('required');
         }
 
-        if ($role === 7) {
-            $any = false;
-            foreach (['cat_1','cat_2','cat_3','cat_4'] as $k) {
-                if (!empty($data[$k])) { $any = true; break; }
-            }
-            if (!$any) {
-                $errors['cat_1'] = 'Выберите хотя бы одну категорию учащегося';
-            }
-        }
+        // Категория учащегося больше не обязательна: пустой выбор = обычный учащийся.
 
         return $errors;
     }
