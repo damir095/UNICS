@@ -103,8 +103,10 @@
         <FIELD NAME="id"              TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
         <FIELD NAME="mdl_user_id"     TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="organization_id" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="subjects"        TYPE="char" LENGTH="500" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="subjects"        TYPE="char" LENGTH="500" NOTNULL="false" SEQUENCE="false" COMMENT="Человекочитаемый список предметов (имена категорий) для отображения; структурная привязка — в unics_teacher_subject"/>
         <FIELD NAME="qualification"   TYPE="char" LENGTH="200" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="grade_from"      TYPE="int"  LENGTH="4"   NOTNULL="false" SEQUENCE="false" COMMENT="Нижняя граница диапазона классов (1..11), мягкий фильтр"/>
+        <FIELD NAME="grade_to"        TYPE="int"  LENGTH="4"   NOTNULL="false" SEQUENCE="false" COMMENT="Верхняя граница диапазона классов (1..11), мягкий фильтр"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
@@ -113,6 +115,23 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="uq_teacher_user" UNIQUE="true" FIELDS="mdl_user_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_teacher_subject" COMMENT="Предметы педагога = категории курсов Moodle (множественный выбор)">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="teacher_id"  TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="category_id" TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="mdl_course_categories.id — предмет"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="teacher_id" TYPE="foreign" FIELDS="teacher_id" REFTABLE="unics_teachers" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_teacher_category" UNIQUE="true"  FIELDS="teacher_id, category_id"/>
+        <INDEX NAME="ix_category"         UNIQUE="false" FIELDS="category_id"/>
       </INDEXES>
     </TABLE>
 
@@ -201,6 +220,7 @@
         <FIELD NAME="target_section"   TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="-1"  SEQUENCE="false"/>
         <FIELD NAME="status"           TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"   SEQUENCE="false"/>
         <FIELD NAME="generated_at"     TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="published_at"     TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false" COMMENT="NULL = на проверке (черновик), задано = опубликован педагогом"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>

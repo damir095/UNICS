@@ -12,6 +12,7 @@ class notification_manager {
     const TYPE_LEVEL_DOWN   = 5;  // учащемуся + родителям: уровень понижен
     const TYPE_BADGE_EARNED = 6;  // учащемуся + родителям: получен значок
     const TYPE_NEW_COMMENT  = 7;  // учащемуся: педагог оставил заметку
+    const TYPE_UMK_REVIEW   = 8;  // педагогу: УМК сгенерирован, ждёт проверки/публикации
 
     // ----------------------------------------------------------------
     // Уведомление учащемуся: УМК готов
@@ -206,6 +207,54 @@ class notification_manager {
                  . '<p>Войдите в портал УНИКС, чтобы прочитать.</p>';
 
         self::send($student_mdl_user_id, $subject, $body, self::TYPE_NEW_COMMENT);
+    }
+
+    /**
+     * Уведомление родителям ученика о новой заметке педагога.
+     */
+    public static function notify_new_comment_parents(
+        array  $parent_mdl_user_ids,
+        string $teacher_name,
+        string $student_name,
+        string $context_label = ''
+    ): void {
+        if (empty($parent_mdl_user_ids)) {
+            return;
+        }
+
+        $subject = "Новая заметка о ребёнке: {$student_name}";
+        $body    = '<p>Педагог <strong>' . htmlspecialchars($teacher_name) . '</strong>'
+                 . ' оставил новую заметку о вашем ребёнке <strong>'
+                 . htmlspecialchars($student_name) . '</strong>'
+                 . ($context_label ? ' к «' . htmlspecialchars($context_label) . '»' : '')
+                 . '.</p>'
+                 . '<p>Войдите в портал УНИКС, чтобы прочитать.</p>';
+
+        foreach ($parent_mdl_user_ids as $parent_uid) {
+            self::send((int)$parent_uid, $subject, $body, self::TYPE_NEW_COMMENT);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Уведомление педагогу: УМК сгенерирован и ждёт проверки (review-гейт)
+    // ----------------------------------------------------------------
+    public static function notify_umk_review(
+        int    $teacher_mdl_user_id,
+        string $umk_title,
+        string $course_name,
+        int    $level
+    ): void {
+        $level_names = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
+        $lvl = $level_names[$level] ?? 'стандартный';
+
+        $subject = "УМК на проверке: {$umk_title}";
+        $body    = '<p>Сгенерирован учебный материал <strong>' . htmlspecialchars($umk_title) . '</strong>'
+                 . ' (уровень: ' . $lvl . ') в курсе'
+                 . ' <strong>' . htmlspecialchars($course_name) . '</strong>.</p>'
+                 . '<p>Материал скрыт от учащихся. Проверьте его и нажмите'
+                 . ' <strong>«Опубликовать»</strong> в истории генерации УМК, чтобы открыть доступ.</p>';
+
+        self::send($teacher_mdl_user_id, $subject, $body, self::TYPE_UMK_REVIEW);
     }
 
     // ----------------------------------------------------------------

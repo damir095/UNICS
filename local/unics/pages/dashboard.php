@@ -34,13 +34,10 @@ echo '</div>';
 // ----------------------------------------------------------------
 if ($is_admin) {
 
-    $total_students  = (int)$DB->count_records_sql(
-        "SELECT COUNT(s.id) FROM {unics_students} s
-           JOIN {user} u ON u.id = s.mdl_user_id AND u.deleted = 0
-          WHERE s.archived_at IS NULL");
+    $total_students  = \local_unics\student_helper::count_active_students();
     $total_orgs      = $DB->count_records('unics_organizations', ['is_active' => 1]);
-    $pending_queue   = $DB->count_records('unics_ai_queue', ['status' => 1]);
-    $processing_q    = $DB->count_records('unics_ai_queue', ['status' => 2]);
+    $ai_in_queue     = $DB->count_records_sql(
+        "SELECT COUNT(*) FROM {unics_ai_queue} WHERE status IN (1, 2)");
     $total_umk_ready = $DB->count_records('unics_umk', ['status' => 3]);
 
     $recent_umk = $DB->get_records_sql(
@@ -64,7 +61,7 @@ if ($is_admin) {
         [$total_students,  'Учащихся'],
         [$total_orgs,      'Организаций'],
         [$total_umk_ready, 'УМК готово'],
-        [$pending_queue + $processing_q, 'В очереди ИИ'],
+        [$ai_in_queue, 'В очереди ИИ'],
     ];
     foreach ($stats as [$val, $lbl]) {
         echo '<div class="col-6 col-md-3 mb-3">';
@@ -86,6 +83,7 @@ if ($is_admin) {
         ['/local/unics/pages/generate_umk.php',     'btn-primary',          'Генерация УМК'],
         ['/local/unics/pages/course_templates.php', 'btn-outline-secondary','Шаблоны курсов'],
         ['/local/unics/pages/my_students.php',      'btn-outline-secondary','Все учащиеся'],
+        ['/local/unics/pages/gradebook.php',        'btn-outline-secondary','Журнал'],
         ['/local/unics/pages/assign.php',           'btn-outline-secondary','Привязки'],
         ['/local/unics/pages/enrol_students.php',   'btn-outline-secondary','Запись учащихся на курс'],
         ['/local/unics/pages/enrol_teachers.php',   'btn-outline-secondary','Запись педагогов на курс'],
@@ -178,6 +176,7 @@ if ($is_admin) {
         ['/local/unics/pages/users.php',          'btn-primary',           'Пользователи'],
         ['/local/unics/pages/create_user.php',    'btn-outline-secondary', 'Создать пользователя'],
         ['/local/unics/pages/my_students.php',    'btn-outline-secondary', 'Все учащиеся'],
+        ['/local/unics/pages/gradebook.php',      'btn-outline-secondary', 'Журнал'],
         ['/local/unics/pages/assign.php',         'btn-outline-secondary', 'Привязки'],
         ['/local/unics/pages/organizations.php',  'btn-outline-secondary', 'Организации'],
         ['/local/unics/pages/courses.php',        'btn-outline-secondary', 'Курсы (архив)'],
@@ -191,11 +190,10 @@ if ($is_admin) {
     echo '</div>';
 
 // ----------------------------------------------------------------
-// ПЕДАГОГ / МЕТОДИСТ
+// МЕТОДИСТ
 // ----------------------------------------------------------------
 } elseif ($is_methodist) {
 
-    // --- Методист ---
     $fio_methodist = trim($USER->lastname . ' ' . $USER->firstname);
     echo '<div class="unics-welcome mb-4">';
     echo '<h2>Здравствуйте, ' . s($fio_methodist) . '</h2>';
@@ -208,17 +206,11 @@ if ($is_admin) {
         ? (int)$methodist_rec->organization_id : 0;
 
     if ($methodist_org_id) {
-        $total_students = (int)$DB->count_records_sql(
-            "SELECT COUNT(s.id) FROM {unics_students} s
-               JOIN {user} u ON u.id = s.mdl_user_id AND u.deleted = 0
-              WHERE s.organization_id = :oid AND s.archived_at IS NULL",
-            ['oid' => $methodist_org_id]);
+        $total_students = \local_unics\student_helper::count_active_students(
+            ['organization_id' => $methodist_org_id]);
         $students_label = 'Учащихся в организации';
     } else {
-        $total_students = (int)$DB->count_records_sql(
-            "SELECT COUNT(s.id) FROM {unics_students} s
-               JOIN {user} u ON u.id = s.mdl_user_id AND u.deleted = 0
-              WHERE s.archived_at IS NULL");
+        $total_students = \local_unics\student_helper::count_active_students();
         $students_label = 'Учащихся в системе';
     }
     $umk_active     = $DB->count_records_sql(
@@ -255,6 +247,8 @@ if ($is_admin) {
         'Шаблоны курсов', ['class' => 'btn btn-outline-secondary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
         'Все учащиеся', ['class' => 'btn btn-outline-secondary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/gradebook.php'),
+        'Журнал', ['class' => 'btn btn-outline-secondary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/assign.php'),
         'Привязки', ['class' => 'btn btn-outline-secondary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/enrol_students.php'),
@@ -368,6 +362,8 @@ if ($is_admin) {
     // course_templates.php — hide instead of prompting then rejecting.
     echo html_writer::link(new moodle_url('/local/unics/pages/my_students.php'),
         'Мои учащиеся', ['class' => 'btn btn-primary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/gradebook.php'),
+        'Журнал', ['class' => 'btn btn-outline-secondary']);
     if (!local_unics_is_nonediting_teacher()) {
         echo html_writer::link(new moodle_url('/local/unics/pages/generate_umk.php'),
             'Генерация УМК', ['class' => 'btn btn-primary']);

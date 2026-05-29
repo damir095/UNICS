@@ -165,7 +165,7 @@ $string['providers'] = 'Providers';
 $string['providersettings'] = 'Settings';
 $string['providertype'] = 'Choose AI provider plugin';
 $string['timegenerated'] = 'Time generated';
-$string['unknownvalue'] = '—';
+$string['unknownvalue'] = '-';
 $string['userpolicy'] = '<h4><strong>Welcome to the new AI feature!</strong></h4>
 <p>This Artificial Intelligence (AI) feature is based solely on external Large Language Models (LLM) to improve your learning and teaching experience. Before you start using these AI services, please read this usage policy.</p>
 <h4><strong>Accuracy of AI-generated content</strong></h4>

@@ -103,6 +103,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 $teacher_name,
                 $context_lbl
             );
+
+            // Уведомить родителей ученика.
+            $parent_ids = $DB->get_fieldset_select(
+                'unics_parent_student',
+                'parent_mdl_user_id',
+                'student_id = :sid',
+                ['sid' => $student_id]
+            );
+            if (!empty($parent_ids)) {
+                $student_name = trim($mdl_user->lastname . ' ' . $mdl_user->firstname);
+                \local_unics\notification_manager::notify_new_comment_parents(
+                    array_map('intval', $parent_ids),
+                    $teacher_name,
+                    $student_name,
+                    $context_lbl
+                );
+            }
         } catch (\Throwable $e) {
             // Нефатально
         }

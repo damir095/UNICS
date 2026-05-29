@@ -356,6 +356,75 @@ function local_unics_extend_settings_navigation(settings_navigation $settingsnav
     }
 }
 
+/**
+ * Пункты УНИКС во вкладке «Ещё» курса (вторичная навигация Moodle).
+ * Инструменты курса педагога — работает не уходя из курса.
+ *
+ * Учащемуся не показываем (проверка по unics_students в БД, не по Moodle-роли —
+ * как и во всём плагине: ошибочно назначенная роль не должна открыть меню).
+ * Каждый пункт гейтится в КОНТЕКСТЕ КУРСА, поэтому педагог видит инструменты
+ * только в своих курсах (как gradebook.php через course-context capability).
+ *
+ * Меню «Ещё» в Boost плоское (один уровень — ядро так же показывает «Отчёты»,
+ * «Банки вопросов» одиночными пунктами-ссылками на landing). Вложенный flyout
+ * тема не делает, поэтому добавляем пункты плоско с префиксом «УНИКС:» — так они
+ * визуально сгруппированы и оба достижимы. Когда в фазе 2-3 появится hub-страница
+ * курса, можно будет схлопнуть в один пункт «УНИКС» → hub.
+ *
+ * Фаза 1: только ссылки на уже готовые страницы.
+ *
+ * @param navigation_node $navigation вторичная навигация курса
+ * @param stdClass $course текущий курс
+ * @param context_course $context контекст курса
+ */
+function local_unics_extend_navigation_course(navigation_node $navigation, stdClass $course, context_course $context): void {
+    global $DB, $USER;
+
+    // Учащийся — меню курса не показываем.
+    if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+        return;
+    }
+
+    $items = [];
+
+    // Журнал курса — нативная capability moodle/grade:viewall в контексте курса
+    // (тот же гейт, что и сам gradebook.php).
+    if (has_capability('moodle/grade:viewall', $context)) {
+        $items[] = [
+            'УНИКС: Журнал курса',
+            new moodle_url('/local/unics/pages/gradebook.php', ['course_id' => $course->id]),
+            'local_unics_course_gradebook',
+        ];
+    }
+
+    // Сгенерировать УМК — педагог, создающий контент (course:manageactivities),
+    // методист или системный админ. Non-editing teacher (роль 6) контент не
+    // создаёт — пункт ему скрыт. Орг-скоуп дособлюдает сама generate_umk.php.
+    $can_umk = !local_unics_is_nonediting_teacher() && (
+        has_capability('local/unics:manage', context_system::instance())
+        || has_capability('moodle/course:manageactivities', $context)
+        || local_unics_is_methodist()
+    );
+    if ($can_umk) {
+        $items[] = [
+            'УНИКС: Сгенерировать УМК',
+            new moodle_url('/local/unics/pages/generate_umk.php', ['course_id' => $course->id]),
+            'local_unics_course_umk',
+        ];
+    }
+
+    foreach ($items as [$text, $url, $key]) {
+        $navigation->add(
+            $text,
+            $url,
+            navigation_node::TYPE_CUSTOM,
+            null,
+            $key,
+            new pix_icon('i/cohort', '')
+        );
+    }
+}
+
 function local_unics_extend_navigation(global_navigation $nav) {
     global $DB, $USER, $PAGE;
 
@@ -495,6 +564,9 @@ function local_unics_extend_navigation(global_navigation $nav) {
         $branch->add('Отчёт по организации',
             new moodle_url('/local/unics/pages/org_report.php'),
             navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_org_report');
+        $branch->add('Журнал',
+            new moodle_url('/local/unics/pages/gradebook.php'),
+            navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_gradebook');
         return;
     }
 
@@ -578,6 +650,13 @@ function local_unics_extend_navigation(global_navigation $nav) {
             null,
             'local_unics_methodist_org_report'
         );
+        $branch->add(
+            'Журнал',
+            new moodle_url('/local/unics/pages/gradebook.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_gradebook'
+        );
         return;
     }
 
@@ -608,6 +687,15 @@ function local_unics_extend_navigation(global_navigation $nav) {
         navigation_node::TYPE_CUSTOM,
         null,
         'local_unics_my_students'
+    );
+
+    // Журнал — для педагогов и админа (видит курсы, где есть grade:viewall).
+    $branch->add(
+        'Журнал',
+        new moodle_url('/local/unics/pages/gradebook.php'),
+        navigation_node::TYPE_CUSTOM,
+        null,
+        'local_unics_gradebook'
     );
 
     // Генерация УМК + Шаблоны курсов — только для педагогов, создающих курсы

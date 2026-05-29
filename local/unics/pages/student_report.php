@@ -65,20 +65,23 @@ $PAGE->set_pagelayout('standard');
 // Данные
 // ----------------------------------------------------------------
 
+// Тесты И задания. Балл всегда приводим к единой шкале (grade_scale::from_raw),
+// поэтому 100-балльные задания показываются в той же шкале, что и тесты.
 $quiz_grades = $DB->get_records_sql(
-    "SELECT gi.courseid, c.fullname AS course_name, gi.itemname AS quiz_name,
-            g.finalgrade, gi.grademax, g.timemodified,
+    "SELECT g.id, gi.courseid, c.fullname AS course_name, gi.itemname AS quiz_name,
+            gi.itemmodule, g.finalgrade, gi.grademax, g.timemodified,
             cm.id AS cmid
      FROM {grade_grades} g
      JOIN {grade_items} gi ON gi.id = g.itemid
      JOIN {course} c       ON c.id  = gi.courseid
+     LEFT JOIN {modules} m ON m.name = gi.itemmodule
      LEFT JOIN {course_modules} cm
            ON cm.instance = gi.iteminstance
           AND cm.course   = gi.courseid
-          AND cm.module   = (SELECT id FROM {modules} WHERE name = 'quiz')
+          AND cm.module   = m.id
      WHERE g.userid  = :userid
        AND gi.itemtype   = 'mod'
-       AND gi.itemmodule = 'quiz'
+       AND gi.itemmodule IN ('quiz', 'assign')
        AND g.finalgrade IS NOT NULL
        AND gi.grademax  > 0
      ORDER BY g.timemodified DESC",
@@ -87,12 +90,12 @@ $quiz_grades = $DB->get_records_sql(
 
 // Хронологический порядок для графика (ASC, max 20 точек)
 $grade_history = $DB->get_records_sql(
-    "SELECT g.finalgrade, gi.grademax, g.timemodified
+    "SELECT g.id, g.finalgrade, gi.grademax, g.timemodified
      FROM {grade_grades} g
      JOIN {grade_items} gi ON gi.id = g.itemid
      WHERE g.userid  = :userid
        AND gi.itemtype   = 'mod'
-       AND gi.itemmodule = 'quiz'
+       AND gi.itemmodule IN ('quiz', 'assign')
        AND g.finalgrade IS NOT NULL
        AND gi.grademax  > 0
      ORDER BY g.timemodified ASC
@@ -213,7 +216,7 @@ if (!$is_own_view) {
        . '</div>';
     echo '<div class="col-md-3"><b>Уровень:</b> ' . s($levels[$student->difficulty_level] ?? '-') . '</div>';
 }
-echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-' . $avg_badge_class . '">' . $avg_score . ' ' . grade_scale::label() . '</span></div>';
+echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-' . $avg_badge_class . '">' . grade_scale::format($avg_score) . '</span></div>';
 echo '</div>';
 echo '<div class="row mt-2">';
 echo '<div class="col-md-6"><b>Организация:</b> ' . s($org->name ?? '-') . '</div>';
@@ -231,24 +234,28 @@ if (count($grade_history) >= 2) {
     }
     $chart = new \core\chart_line();
     $chart->set_smooth(true);
-    $series = new \core\chart_series('Балл (' . grade_scale::label() . ')', $chart_vals);
+    $series = new \core\chart_series('Балл', $chart_vals);
     $chart->add_series($series);
     $chart->set_labels($chart_labels);
 
     echo '<h2 class="unics-section-title mt-4">Динамика успеваемости</h2>';
-    echo '<div style="max-height:220px">';
+    // Без фиксированной высоты: Moodle .chart-area тянется до высоты canvas, и
+    // фикс. height обрезал бы box, из-за чего график вылезал на след. секцию.
+    // Контейнер обнимает график по высоте, margin-bottom даёт отступ.
+    echo '<div style="margin-bottom:1.25rem;">';
     echo $OUTPUT->render_chart($chart, false);
     echo '</div>';
 }
 
-// Результаты тестов
-echo '<h2 class="unics-section-title mt-4">Результаты тестов</h2>';
+// Результаты тестов и заданий
+$type_labels = ['quiz' => 'Тест', 'assign' => 'Задание'];
+echo '<h2 class="unics-section-title mt-4">Результаты тестов и заданий</h2>';
 if (empty($quiz_grades)) {
-    echo '<p class="text-muted">Тесты ещё не сданы.</p>';
+    echo '<p class="text-muted">Тесты и задания ещё не оценены.</p>';
 } else {
     echo '<table class="table table-sm table-bordered">';
     echo '<thead class="table-light"><tr>
-        <th>Курс</th><th>Тест</th><th>Баллы</th><th>Балл (' . grade_scale::label() . ')</th><th>Дата</th><th></th>
+        <th>Курс</th><th>Тип</th><th>Тест / задание</th><th>Баллы</th><th>Балл</th><th>Дата</th><th></th>
     </tr></thead><tbody>';
     foreach ($quiz_grades as $g) {
         $score = grade_scale::from_raw((float)$g->finalgrade, (float)$g->grademax);
@@ -259,9 +266,10 @@ if (empty($quiz_grades)) {
 
         echo '<tr>';
         echo '<td>' . s($g->course_name) . '</td>';
+        echo '<td>' . s($type_labels[$g->itemmodule] ?? $g->itemmodule) . '</td>';
         echo '<td>' . s($g->quiz_name ?? '-') . '</td>';
         echo '<td>' . round($g->finalgrade, 1) . ' / ' . round($g->grademax, 1) . '</td>';
-        echo '<td><span class="badge badge-' . $bc . '">' . $score . ' ' . grade_scale::label() . '</span></td>';
+        echo '<td><span class="badge badge-' . $bc . '">' . grade_scale::format($score) . '</span></td>';
         echo '<td>' . ($g->timemodified ? userdate($g->timemodified, '%d.%m.%Y') : '-') . '</td>';
         echo '<td>';
         if ($gcmid && ($is_admin || $is_teacher)) {
@@ -280,19 +288,20 @@ if (empty($quiz_grades)) {
         echo '</td>';
         echo '</tr>';
 
-        // Показываем первую заметку inline
+        // Показываем все заметки этой активности inline
         if (!empty($notes_for_quiz)) {
-            $first_note = reset($notes_for_quiz);
-            $na = trim("{$first_note->lastname} {$first_note->firstname}");
             echo '<tr class="unics-note-row">';
-            echo '<td colspan="6">';
-            echo '<div class="unics-teacher-note">';
-            echo '<div class="note-meta">';
-            echo '<span class="note-author">' . s($na) . '</span>';
-            echo '<span class="note-date">' . userdate($first_note->created_at, '%d.%m.%Y') . '</span>';
-            echo '</div>';
-            echo '<p class="note-body">' . s($first_note->body) . '</p>';
-            echo '</div>';
+            echo '<td colspan="7">';
+            foreach ($notes_for_quiz as $note) {
+                $na = trim("{$note->lastname} {$note->firstname}");
+                echo '<div class="unics-teacher-note">';
+                echo '<div class="note-meta">';
+                echo '<span class="note-author">' . s($na) . '</span>';
+                echo '<span class="note-date">' . userdate($note->created_at, '%d.%m.%Y') . '</span>';
+                echo '</div>';
+                echo '<p class="note-body">' . s($note->body) . '</p>';
+                echo '</div>';
+            }
             echo '</td></tr>';
         }
     }
@@ -358,36 +367,37 @@ if ($is_admin || $is_teacher) {
     }
 }
 
-// Комментарии педагога (последние 3)
-if ($is_admin || $is_teacher) {
-    // Только общие заметки (cmid IS NULL) - активностные видны inline над
-    $last_comments = $DB->get_records_sql(
-        "SELECT c.body, c.created_at, u.lastname, u.firstname
-         FROM {unics_comments} c
-         JOIN {user} u ON u.id = c.teacher_mdl_user_id
-         WHERE c.student_id = :sid AND c.cmid IS NULL
-         ORDER BY c.created_at DESC",
-        ['sid' => $student_id],
-        0, 3
-    );
+// Общие заметки педагога (последние 3). Видны всем связанным ролям —
+// ученику и родителю в том числе; активностные заметки видны inline выше.
+$last_comments = $DB->get_records_sql(
+    "SELECT c.body, c.created_at, u.lastname, u.firstname
+     FROM {unics_comments} c
+     JOIN {user} u ON u.id = c.teacher_mdl_user_id
+     WHERE c.student_id = :sid AND c.cmid IS NULL
+     ORDER BY c.created_at DESC",
+    ['sid' => $student_id],
+    0, 3
+);
 
-    echo '<h2 class="unics-section-title mt-4">Общие заметки педагога</h2>';
-    if (empty($last_comments)) {
-        echo '<p class="text-muted">Комментариев ещё нет.</p>';
-    } else {
-        foreach ($last_comments as $cm) {
-            $author = trim("{$cm->lastname} {$cm->firstname}");
-            echo '<div class="card mb-2">';
-            echo '<div class="card-header d-flex justify-content-between">';
-            echo '<span class="font-weight-bold">' . s($author) . '</span>';
-            echo '<small class="text-muted">' . userdate($cm->created_at, '%d.%m.%Y') . '</small>';
-            echo '</div>';
-            echo '<div class="card-body py-2">';
-            echo '<p class="mb-0" style="white-space:pre-wrap">' . s($cm->body) . '</p>';
-            echo '</div>';
-            echo '</div>';
-        }
+echo '<h2 class="unics-section-title mt-4">Общие заметки педагога</h2>';
+if (empty($last_comments)) {
+    echo '<p class="text-muted">Комментариев ещё нет.</p>';
+} else {
+    foreach ($last_comments as $cm) {
+        $author = trim("{$cm->lastname} {$cm->firstname}");
+        echo '<div class="card mb-2">';
+        echo '<div class="card-header d-flex justify-content-between">';
+        echo '<span class="font-weight-bold">' . s($author) . '</span>';
+        echo '<small class="text-muted">' . userdate($cm->created_at, '%d.%m.%Y') . '</small>';
+        echo '</div>';
+        echo '<div class="card-body py-2">';
+        echo '<p class="mb-0" style="white-space:pre-wrap">' . s($cm->body) . '</p>';
+        echo '</div>';
+        echo '</div>';
     }
+}
+// Создавать заметки могут только педагог и админ.
+if ($is_admin || $is_teacher) {
     echo html_writer::link(
         new moodle_url('/local/unics/pages/student_comments.php', ['student_id' => $student_id]),
         count($last_comments) > 0 ? 'Все комментарии и добавить новый →' : 'Добавить комментарий →',

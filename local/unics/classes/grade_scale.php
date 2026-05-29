@@ -20,6 +20,11 @@ class grade_scale {
         return 'из ' . self::MAX;
     }
 
+    /** Значение единой шкалы в компактном виде «4/5». */
+    public static function format(float $val): string {
+        return $val . '/' . self::MAX;
+    }
+
     /** Процент (0..100) → единая шкала. */
     public static function from_percent(float $pct): float {
         if ($pct < 0) {

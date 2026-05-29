@@ -382,8 +382,10 @@ if (empty($tree)) {
             echo '</div>'; // border rounded
         }
 
-        // Server-side gate lives in the POST handler via _scope_region.
-        if ($is_admin_user || $my_scope['region_id'] !== null) {
+        // Тот же предикат, что серверный guard local_unics_require_manage_or_scope_region
+        // (POST). Держим UI и POST на одном scope_checker, чтобы не разъехались.
+        if ($is_admin_user
+                || \local_unics\scope_checker::user_can_access_region((int)$USER->id, (int)$region->id)) {
             echo '<details class="mt-2"><summary class="text-primary" style="cursor:pointer">Добавить муниципалитет в этот регион</summary>';
             echo '<form method="post" class="mt-2 form-inline">';
             echo '<input type="hidden" name="action"    value="save">';

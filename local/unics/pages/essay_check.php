@@ -80,7 +80,7 @@ echo html_writer::link(
 echo '</div>';
 
 echo '<div class="card mb-4"><div class="card-header bg-light"><strong>' . s($fio) . '</strong>'
-   . ' <span class="text-muted">— проверка в единой шкале (' . grade_scale::label() . ')</span></div>';
+   . ' <span class="text-muted">- проверка по шкале до ' . grade_scale::MAX . '</span></div>';
 echo '<div class="card-body"><p class="mb-1 text-muted small">ИИ выдаёт предварительную '
    . 'оценку и комментарий. Итоговую оценку в журнал выставляет педагог.</p></div></div>';
 
@@ -111,7 +111,7 @@ if ($do_subid && confirm_sesskey()) {
             echo '<div class="card-body">';
             echo '<p><strong>Предварительный балл:</strong> '
                . '<span class="badge badge-' . $bc . '" style="font-size:1rem">'
-               . $res['score'] . ' ' . grade_scale::label() . '</span></p>';
+               . grade_scale::format((float)$res['score']) . '</span></p>';
             echo '<p><strong>Комментарий ИИ:</strong></p>';
             echo '<div class="alert alert-light" style="white-space:pre-wrap">'
                . s($res['feedback']) . '</div>';
@@ -141,7 +141,7 @@ foreach ($submissions as $sub) {
     if ($sub->current_grade !== null && $sub->current_grade >= 0 && $sub->maxgrade > 0) {
         $g10  = grade_scale::from_raw((float)$sub->current_grade, (float)$sub->maxgrade);
         $gbc  = grade_scale::badge_class($g10);
-        $grade_cell = '<span class="badge badge-' . $gbc . '">' . $g10 . ' ' . grade_scale::label() . '</span>';
+        $grade_cell = '<span class="badge badge-' . $gbc . '">' . grade_scale::format($g10) . '</span>';
     } else {
         $grade_cell = '<span class="text-muted">не оценено</span>';
     }

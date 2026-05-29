@@ -159,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     if ($skipped)        { $parts[] = "пропущено: {$skipped}"; }
     if ($hidden_courses) { $parts[] = "скрыто курсов: {$hidden_courses}"; }
     if ($enrolments)     { $parts[] = "новых записей на курсы: {$enrolments}"; }
-    $msg = $parts ? ('Готово — ' . implode(', ', $parts) . '.') : 'Нечего переводить.';
+    $msg = $parts ? ('Готово - ' . implode(', ', $parts) . '.') : 'Нечего переводить.';
     redirect($back, $msg, null,
         ($promoted || $graduated) ? \core\output\notification::NOTIFY_SUCCESS
                                   : \core\output\notification::NOTIFY_WARNING);

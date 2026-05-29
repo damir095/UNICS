@@ -307,7 +307,7 @@ if ($cnt_risk > 0) {
 echo '<table class="table table-sm table-bordered table-hover">';
 echo '<thead class="table-light"><tr>
     <th>Учащийся</th><th>Класс</th><th>Категория</th><th>Уровень</th>
-    <th>Средний балл (' . grade_scale::label() . ')</th><th>Риск</th><th>Курсов</th><th>УМК</th><th>Отчёт</th>
+    <th>Средний балл</th><th>Риск</th><th>Курсов</th><th>УМК</th><th>Отчёт</th>
 </tr></thead><tbody>';
 
 foreach ($rows as $r) {
@@ -322,7 +322,7 @@ foreach ($rows as $r) {
         $avg_cell = '<span class="text-muted">-</span>';
     } else {
         $bc = grade_scale::badge_class($avg_scale);
-        $avg_cell = '<span class="badge badge-' . $bc . '">' . $avg_scale . ' ' . grade_scale::label() . '</span>';
+        $avg_cell = '<span class="badge badge-' . $bc . '">' . grade_scale::format($avg_scale) . '</span>';
     }
 
     if ($r['is_risk']) {
@@ -331,7 +331,7 @@ foreach ($rows as $r) {
     } elseif ($r['nodata']) {
         $risk_cell = '<span class="text-muted">нет данных</span>';
     } else {
-        $risk_cell = '<span class="badge badge-success">—</span>';
+        $risk_cell = '<span class="badge badge-success">-</span>';
     }
 
     $fio = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
@@ -365,7 +365,7 @@ if (!empty($all_avgs)) {
     $org_avg_scale = grade_scale::from_percent((float)$org_avg_pct);
     $bc            = grade_scale::badge_class($org_avg_scale);
     echo '<p class="mt-2"><strong>Средний балл по организации:</strong> '
-        . '<span class="badge badge-' . $bc . ' badge-lg">' . $org_avg_scale . ' ' . grade_scale::label() . '</span>'
+        . '<span class="badge badge-' . $bc . ' badge-lg">' . grade_scale::format($org_avg_scale) . '</span>'
         . ' (по последним 5 тестам каждого учащегося)</p>';
 }
 
@@ -374,7 +374,7 @@ if ($cnt_risk > 0) {
     echo '<div class="alert alert-warning mt-3"><strong>Рекомендации по группе риска:</strong> '
        . 'индивидуальная консультация педагога; пересмотр уровня сложности; '
        . 'генерация повторного УМК по слабым темам; контакт с родителями. '
-       . 'Критерии риска: средний балл &lt; ' . $low_avg_scale . ' ' . grade_scale::label() . ', '
+       . 'Критерии риска: средний балл &lt; ' . grade_scale::format($low_avg_scale) . ', '
        . 'падение динамики &gt; ' . UNICS_RISK_TREND_DROP . ' п.п., '
        . 'нет сданных тестов &gt; ' . UNICS_RISK_IDLE_DAYS . ' дн.</div>';
 }

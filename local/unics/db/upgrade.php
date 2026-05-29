@@ -582,5 +582,60 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026053001, 'local', 'unics');
     }
 
+    if ($oldversion < 2026053111) {
+        // Review-гейт УМК: published_at NULL = на проверке (черновик),
+        // задано = опубликован педагогом (активности стали visible=1).
+        $table = new xmldb_table('unics_umk');
+        $field = new xmldb_field('published_at', XMLDB_TYPE_CHAR, '20', null, null, null, null, 'generated_at');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026053111, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026053112) {
+        // Бэкфилл review-гейта: УМК, готовые ДО внедрения гейта (status=3), уже были
+        // видимы учащимся — считаем их опубликованными, иначе они покажутся как
+        // «черновик на проверке» и кнопка «Удалить черновик» снесёт живые активности.
+        $DB->execute(
+            "UPDATE {unics_umk} SET published_at = ? WHERE status = 3 AND published_at IS NULL",
+            [date('Y-m-d H:i:s')]
+        );
+
+        upgrade_plugin_savepoint(true, 2026053112, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026053113) {
+        // Детальный профиль педагога (#9/#2/#18): множественный выбор предметов
+        // (= категории курсов) + диапазон классов (мягкий фильтр).
+        $table = new xmldb_table('unics_teachers');
+        foreach ([
+            new xmldb_field('grade_from', XMLDB_TYPE_INTEGER, '4', null, null, null, null, 'qualification'),
+            new xmldb_field('grade_to',   XMLDB_TYPE_INTEGER, '4', null, null, null, null, 'grade_from'),
+        ] as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        // Привязка педагог × предмет (категория). Структурное хранение мультивыбора;
+        // unics_teachers.subjects остаётся как человекочитаемый дубль для отображения.
+        $tsub = new xmldb_table('unics_teacher_subject');
+        $tsub->add_field('id',          XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $tsub->add_field('teacher_id',  XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $tsub->add_field('category_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $tsub->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $tsub->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $tsub->add_key('teacher_id', XMLDB_KEY_FOREIGN, ['teacher_id'], 'unics_teachers', ['id']);
+        $tsub->add_index('uq_teacher_category', XMLDB_INDEX_UNIQUE,    ['teacher_id', 'category_id']);
+        $tsub->add_index('ix_category',         XMLDB_INDEX_NOTUNIQUE, ['category_id']);
+        if (!$dbman->table_exists($tsub)) {
+            $dbman->create_table($tsub);
+        }
+
+        upgrade_plugin_savepoint(true, 2026053113, 'local', 'unics');
+    }
+
     return true;
 }

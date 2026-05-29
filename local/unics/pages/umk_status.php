@@ -76,6 +76,119 @@ if ($cancel_all && confirm_sesskey()) {
     );
 }
 
+// Кто вправе публиковать/удалять черновик конкретного УМК (review-гейт):
+// системный админ, методист или педагог с правом редактировать активности курса УМК.
+$can_publish = function(\stdClass $umk): bool {
+    $sysctx = context_system::instance();
+    if (has_capability('local/unics:manage', $sysctx)) {
+        return true;
+    }
+    if (local_unics_is_methodist()) {
+        return true;
+    }
+    if (!empty($umk->mdl_course_id)) {
+        $cctx = \context_course::instance((int)$umk->mdl_course_id, IGNORE_MISSING);
+        if ($cctx && has_capability('moodle/course:manageactivities', $cctx)) {
+            return true;
+        }
+    }
+    return false;
+};
+
+// Публикация УМК: открыть скрытые активности учащимся + начислить баллы + уведомить.
+$publish_id = optional_param('publish_id', 0, PARAM_INT);
+if ($publish_id && confirm_sesskey()) {
+    require_once(__DIR__ . '/../classes/course_builder.php');
+    require_once(__DIR__ . '/../classes/points_manager.php');
+    require_once(__DIR__ . '/../classes/notification_manager.php');
+
+    $umk = $DB->get_record('unics_umk', ['id' => $publish_id]);
+    if (!$umk || (int)$umk->status !== 3 || !empty($umk->published_at)) {
+        redirect(new moodle_url('/local/unics/pages/umk_status.php'),
+            'Опубликовать можно только готовый, ещё не опубликованный УМК.',
+            null, \core\output\notification::NOTIFY_WARNING);
+    }
+    if (!$can_publish($umk)) {
+        throw new \moodle_exception('nopermissions', 'error', '', 'публикация УМК вне вашего доступа');
+    }
+
+    $builder = new \local_unics\course_builder();
+    $cmids = $DB->get_fieldset_select('unics_umk_materials',
+        'mdl_course_module_id', 'umk_id = ?', [$umk->id]);
+    foreach ($cmids as $cmid) {
+        $builder->set_cm_visible((int)$cmid, 1);
+    }
+    $DB->set_field('unics_umk', 'published_at', date('Y-m-d H:i:s'), ['id' => $umk->id]);
+
+    // Баллы + уведомление учащимся (перенесено со сборки на момент публикации).
+    $course_rec  = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
+    $course_name = $course_rec ? $course_rec->fullname : '';
+    $umk_students = $DB->get_records('unics_umk_students', ['umk_id' => $umk->id]);
+    foreach ($umk_students as $row) {
+        $student = $DB->get_record('unics_students', ['id' => $row->student_id]);
+        if (!$student) {
+            continue;
+        }
+        try {
+            \local_unics\points_manager::award(
+                (int)$student->id,
+                \local_unics\points_manager::POINTS_UMK_READY,
+                \local_unics\points_manager::REASON_UMK_READY,
+                'Готов УМК «' . mb_substr($umk->title, 0, 50) . '»'
+            );
+        } catch (\Throwable $ep) {
+            debugging('УМК publish: баллы не начислены: ' . $ep->getMessage());
+        }
+        try {
+            \local_unics\notification_manager::notify_umk_ready(
+                (int)$student->mdl_user_id,
+                $umk->title,
+                $course_name,
+                (int)$umk->difficulty_level,
+                \local_unics\points_manager::POINTS_UMK_READY
+            );
+        } catch (\Throwable $en) {
+            debugging('УМК publish: уведомление не отправлено: ' . $en->getMessage());
+        }
+    }
+
+    redirect(new moodle_url('/local/unics/pages/umk_status.php'),
+        'УМК #' . $umk->id . ' опубликован: материалы открыты учащимся.',
+        null, \core\output\notification::NOTIFY_SUCCESS);
+}
+
+// Удаление черновика: снести неопубликованные активности УМК и пометить отменённым.
+$delete_draft_id = optional_param('delete_draft_id', 0, PARAM_INT);
+if ($delete_draft_id && confirm_sesskey()) {
+    require_once($CFG->dirroot . '/course/lib.php');
+
+    $umk = $DB->get_record('unics_umk', ['id' => $delete_draft_id]);
+    if (!$umk || (int)$umk->status !== 3 || !empty($umk->published_at)) {
+        redirect(new moodle_url('/local/unics/pages/umk_status.php'),
+            'Удалить черновик можно только у готового, ещё не опубликованного УМК.',
+            null, \core\output\notification::NOTIFY_WARNING);
+    }
+    if (!$can_publish($umk)) {
+        throw new \moodle_exception('nopermissions', 'error', '', 'удаление черновика УМК вне вашего доступа');
+    }
+
+    $cmids = $DB->get_fieldset_select('unics_umk_materials',
+        'mdl_course_module_id', 'umk_id = ?', [$umk->id]);
+    foreach ($cmids as $cmid) {
+        try {
+            course_delete_module((int)$cmid);
+        } catch (\Throwable $e) {
+            debugging('УМК draft delete: модуль ' . $cmid . ' не удалён: ' . $e->getMessage());
+        }
+    }
+    $DB->delete_records('unics_umk_materials', ['umk_id' => $umk->id]);
+    $DB->set_field('unics_umk', 'status', 5, ['id' => $umk->id]);
+
+    redirect(new moodle_url('/local/unics/pages/umk_status.php'),
+        'Черновик УМК #' . $umk->id . ' удалён.',
+        null, \core\output\notification::NOTIFY_SUCCESS);
+}
+
 $status_labels = [
     1 => '<span class="badge badge-secondary">Ожидает</span>',
     2 => '<span class="badge badge-primary">Генерируется</span>',
@@ -85,7 +198,7 @@ $status_labels = [
 ];
 
 $records = $DB->get_records_sql(
-    "SELECT u.id, u.title, u.topic, u.difficulty_level, u.status, u.generated_at, u.mdl_course_id,
+    "SELECT u.id, u.title, u.topic, u.difficulty_level, u.status, u.generated_at, u.published_at, u.mdl_course_id,
             q.error_message, q.processed_at,
             c.fullname AS course_name,
             (SELECT COUNT(*) FROM {unics_umk_students} us WHERE us.umk_id = u.id) AS student_count
@@ -127,7 +240,15 @@ if (empty($records)) {
     $table->attributes['class'] = 'table table-striped table-sm';
 
     foreach ($records as $r) {
-        $status = $status_labels[$r->status] ?? '<span class="badge badge-light">?</span>';
+        // Статус «Готов» (3) расщепляется review-гейтом: пока published_at пуст —
+        // материал «На проверке» (скрыт от учащихся), после публикации — «Опубликован».
+        if ((int)$r->status === 3) {
+            $status = empty($r->published_at)
+                ? '<span class="badge badge-warning">На проверке</span>'
+                : '<span class="badge badge-success">Опубликован</span>';
+        } else {
+            $status = $status_labels[$r->status] ?? '<span class="badge badge-light">?</span>';
+        }
 
         if ($r->status == 4 && $r->error_message) {
             $status .= '<br><small class="text-danger">' . s($r->error_message) . '</small>';
@@ -150,6 +271,18 @@ if (empty($records)) {
             $actions = html_writer::link($cancel_url, 'Отменить',
                 ['class' => 'btn btn-outline-danger btn-sm',
                  'onclick' => "return confirm('Отменить УМК #{$r->id}?')"]);
+        } elseif ((int)$r->status === 3 && empty($r->published_at) && $can_publish($r)) {
+            // Готовый черновик на проверке: опубликовать или удалить.
+            $publish_url = new moodle_url('/local/unics/pages/umk_status.php',
+                ['publish_id' => $r->id, 'sesskey' => sesskey()]);
+            $delete_url  = new moodle_url('/local/unics/pages/umk_status.php',
+                ['delete_draft_id' => $r->id, 'sesskey' => sesskey()]);
+            $actions = html_writer::link($publish_url, 'Опубликовать',
+                    ['class' => 'btn btn-success btn-sm me-1',
+                     'onclick' => "return confirm('Открыть материалы УМК #{$r->id} учащимся?')"])
+                . html_writer::link($delete_url, 'Удалить черновик',
+                    ['class' => 'btn btn-outline-danger btn-sm',
+                     'onclick' => "return confirm('Удалить черновик УМК #{$r->id}? Активности будут удалены.')"]);
         }
 
         $table->data[] = [

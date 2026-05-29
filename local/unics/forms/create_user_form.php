@@ -127,9 +127,9 @@ class unics_create_user_form extends moodleform {
             $districts_raw = [];
         }
 
-        $regions_menu   = ['' => '— не выбран —'];
+        $regions_menu   = ['' => '- не выбран -'];
         foreach ($regions_raw   as $r) { $regions_menu[$r->id]   = $r->name; }
-        $districts_menu = ['' => '— не выбран —'];
+        $districts_menu = ['' => '- не выбран -'];
         foreach ($districts_raw as $d) { $districts_menu[$d->id] = $d->name; }
 
         // Регион — территория ТОЛЬКО регионального администратора (роль 1).
@@ -196,19 +196,45 @@ class unics_create_user_form extends moodleform {
         $mform->hideIf('class_number', 'unics_role', 'neq', '7');
         $mform->hideIf('special_needs', 'unics_role', 'neq', '7');
 
-        // --- Поля педагога (показываются для ролей 4 методист, 5 педагог) ---
+        // --- Поля педагога (показываются для ролей 4 методист, 9 районный методист,
+        //     5 педагог создающий курсы, 6 педагог non-editing) ---
         $mform->addElement('header', 'teacher_data', 'Данные педагога');
 
-        $mform->addElement('text', 'subjects', get_string('subjects', 'local_unics'));
-        $mform->setType('subjects', PARAM_TEXT);
+        // Предметы = категории курсов Moodle (верхний уровень дерева). Множественный
+        // выбор; список берётся из реальных категорий, поэтому новые предметы
+        // подхватываются автоматически при добавлении категории. См. [[subject-binding-design]].
+        $subject_options = [];
+        foreach ($DB->get_records('course_categories', ['parent' => 0, 'visible' => 1],
+                'sortorder ASC', 'id, name') as $cat) {
+            $subject_options[(int)$cat->id] = format_string($cat->name);
+        }
+        $mform->addElement('autocomplete', 'subject_categories',
+            get_string('subject_categories', 'local_unics'), $subject_options,
+            ['multiple' => true]);
+        $mform->addHelpButton('subject_categories', 'subject_categories', 'local_unics');
 
         $mform->addElement('text', 'qualification', get_string('qualification', 'local_unics'));
         $mform->setType('qualification', PARAM_TEXT);
 
+        // Диапазон классов — мягкий фильтр (можно не указывать).
+        $grade_menu = ['' => get_string('grade_any', 'local_unics')];
+        for ($g = 1; $g <= 11; $g++) {
+            $grade_menu[$g] = $g;
+        }
+        $grade_grp = [
+            $mform->createElement('select', 'grade_from', '', $grade_menu),
+            $mform->createElement('select', 'grade_to',   '', $grade_menu),
+        ];
+        $mform->addGroup($grade_grp, 'grade_range_grp',
+            get_string('grade_range', 'local_unics'), ' - ', false);
+        $mform->setType('grade_from', PARAM_INT);
+        $mform->setType('grade_to', PARAM_INT);
+        $mform->addHelpButton('grade_range_grp', 'grade_range', 'local_unics');
+
         // Показывать блок педагога для ролей 4 (методист орг.), 9 (районный методист),
         // 5 (педагог создающий курсы), 6 (педагог non-editing).
         // Скрыть для пустой, 1, 2 (админы), 3 (legacy), 7, 8.
-        foreach (['teacher_data', 'subjects', 'qualification'] as $el) {
+        foreach (['teacher_data', 'subject_categories', 'qualification', 'grade_range_grp'] as $el) {
             $mform->hideIf($el, 'unics_role', 'eq', '');
             $mform->hideIf($el, 'unics_role', 'eq', '2');
             $mform->hideIf($el, 'unics_role', 'eq', '3');
@@ -476,7 +502,7 @@ JS;
         $mform->hideIf('student_data', 'unics_role', 'eq', '1');
 
         // Блок данных педагога — не для регион. админа.
-        foreach (['teacher_data', 'subjects', 'qualification'] as $el) {
+        foreach (['teacher_data', 'subject_categories', 'qualification', 'grade_range_grp'] as $el) {
             $mform->hideIf($el, 'unics_role', 'eq', '1');
         }
 
@@ -553,6 +579,13 @@ JS;
         }
 
         // Категория учащегося больше не обязательна: пустой выбор = обычный учащийся.
+
+        // Диапазон классов педагога (роли 4/9/5/6): нижняя граница ≤ верхней.
+        if (in_array($role, [4, 9, 5, 6], true)
+                && !empty($data['grade_from']) && !empty($data['grade_to'])
+                && (int)$data['grade_from'] > (int)$data['grade_to']) {
+            $errors['grade_range_grp'] = get_string('err_grade_range', 'local_unics');
+        }
 
         return $errors;
     }

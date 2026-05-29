@@ -32,6 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $group_id        = optional_param('group_id',       0, PARAM_INT);
     $new_group       = trim(optional_param('new_group', '', PARAM_TEXT));
     $separate_groups = optional_param('separate_groups', 0, PARAM_INT);
+    $enrol_students  = optional_param('enrol_students',  0, PARAM_INT);
+    // #11.3 расширение: выбор конкретных учеников + фильтры для fallback'а.
+    $enrol_student_ids   = optional_param_array('enrol_student_ids', [], PARAM_INT);
+    $enrol_filter_class  = optional_param('enrol_filter_class', 0, PARAM_INT);
+    $enrol_filter_letter = optional_param('enrol_filter_letter', '', PARAM_TEXT);
+    $enrol_student_ids   = array_values(array_filter(array_map('intval', $enrol_student_ids)));
 
     $teacher_ids = array_filter($teacher_ids);
 
@@ -134,6 +140,119 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         }
     }
 
+    // #11.3: авто-запись закреплённых учеников. Подтягиваем пары teacher_student для
+    // выбранных педагогов, группируем по (class, letter, org) и записываем учеников
+    // на курс. При включённом separate_groups — кладём каждую (class, letter, org)-
+    // комбинацию в свою группу (имя «Группа<N><L>_<orgname>»), существующие группы
+    // с этим именем переиспользуем. Педагога тоже добавляем в группы своих учеников
+    // (продолжение #12 — иначе он не увидит участников при separate-groups).
+    $stu_enrolled    = 0;
+    $stu_skipped     = 0;
+    $stu_groups_used = [];
+    if ($enrol_students && !empty($teacher_ids)) {
+        [$tin, $tin_p] = $DB->get_in_or_equal($teacher_ids, SQL_PARAMS_NAMED, 'tt');
+        $extra_where  = '';
+        $extra_params = [];
+        if (!empty($enrol_student_ids)) {
+            // Явный выбор — записываем только отмеченных (только из их пар с выбранными
+            // педагогами; орг-/scope-проверки ниже).
+            [$sin, $sin_p] = $DB->get_in_or_equal($enrol_student_ids, SQL_PARAMS_NAMED, 'ss');
+            $extra_where .= " AND s.id {$sin}";
+            $extra_params = array_merge($extra_params, $sin_p);
+        } else {
+            // Без явных отметок — применяем фильтры панели (как «всех видимых»).
+            if ($enrol_filter_class > 0) {
+                $extra_where .= ' AND s.class_number = :ef_cls';
+                $extra_params['ef_cls'] = $enrol_filter_class;
+            }
+            if ($enrol_filter_letter !== '') {
+                $extra_where .= ' AND s.class_letter = :ef_let';
+                $extra_params['ef_let'] = $enrol_filter_letter;
+            }
+        }
+        $rows = $DB->get_records_sql(
+            "SELECT ts.id, ts.student_id, ts.teacher_id,
+                    s.class_number, s.class_letter, s.organization_id,
+                    s.mdl_user_id AS student_mdl_id,
+                    o.name AS org_name,
+                    t.mdl_user_id AS teacher_mdl_id
+               FROM {unics_teacher_student} ts
+               JOIN {unics_students} s ON s.id = ts.student_id
+               JOIN {user} u ON u.id = s.mdl_user_id
+               LEFT JOIN {unics_organizations} o ON o.id = s.organization_id
+               JOIN {unics_teachers} t ON t.id = ts.teacher_id
+              WHERE ts.teacher_id {$tin}
+                AND u.deleted = 0
+                AND s.archived_at IS NULL
+                AND s.graduated_at IS NULL
+                {$extra_where}",
+            array_merge($tin_p, $extra_params));
+
+        $student_role_id = $resolve_role_id('student');
+        $group_cache = [];   // key "class|letter|org_id" → group_id
+        $teacher_in_group = []; // [teacher_mdl_id][group_id] = true
+        $student_seen = []; // student_mdl_id → true (запись на курс — один раз)
+
+        foreach ($rows as $r) {
+            $student_uid = (int)$r->student_mdl_id;
+
+            // Scope-check для не-админа — тихий skip при отказе.
+            if (!$is_admin_user) {
+                try {
+                    local_unics_require_manage_or_scope_user($student_uid);
+                } catch (\Throwable $e) {
+                    continue;
+                }
+            }
+
+            if (!isset($student_seen[$student_uid])) {
+                $student_seen[$student_uid] = true;
+                if (!is_enrolled($ctx, $student_uid)) {
+                    $enrol->enrol_user($instance, $student_uid, $student_role_id);
+                    $stu_enrolled++;
+                } else {
+                    $stu_skipped++;
+                }
+            }
+
+            // Группа создаётся только при separate_groups + у ученика есть класс.
+            if (!$separate_groups || empty($r->class_number)) {
+                continue;
+            }
+            $letter = $r->class_letter ?? '';
+            $key    = $r->class_number . '|' . $letter . '|' . (int)$r->organization_id;
+            if (!isset($group_cache[$key])) {
+                $org_part = $r->org_name ? '_' . $r->org_name : '';
+                $gname    = 'Группа' . $r->class_number . $letter . $org_part;
+                $existing = $DB->get_records('groups',
+                    ['courseid' => $course_id, 'name' => $gname], 'id', 'id', 0, 1);
+                if ($existing) {
+                    $group_cache[$key] = (int)reset($existing)->id;
+                } else {
+                    $g = new stdClass();
+                    $g->courseid = $course_id;
+                    $g->name     = $gname;
+                    $group_cache[$key] = (int)groups_create_group($g);
+                }
+                $stu_groups_used[$gname] = true;
+            }
+            $gid = $group_cache[$key];
+
+            if (!groups_is_member($gid, $student_uid)) {
+                groups_add_member($gid, $student_uid);
+            }
+
+            // Педагога в группу своих учеников — один раз на пару (teacher, group).
+            $tmid = (int)$r->teacher_mdl_id;
+            if (empty($teacher_in_group[$tmid][$gid])) {
+                if (is_enrolled($ctx, $tmid) && !groups_is_member($gid, $tmid)) {
+                    groups_add_member($gid, $tmid);
+                }
+                $teacher_in_group[$tmid][$gid] = true;
+            }
+        }
+    }
+
     $msg = "Записано: {$enrolled}";
     if ($skipped > 0) {
         $msg .= ", уже были записаны: {$skipped}";
@@ -144,6 +263,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     }
     if ($separate_groups) {
         $msg .= '. Режим «Раздельные группы» включён.';
+    }
+    if ($enrol_students) {
+        $msg .= '. Учащихся записано: ' . $stu_enrolled;
+        if ($stu_skipped > 0) {
+            $msg .= ' (уже было: ' . $stu_skipped . ')';
+        }
+        if (!empty($stu_groups_used)) {
+            $msg .= '. Групп использовано: ' . count($stu_groups_used);
+        }
     }
 
     redirect(
@@ -243,6 +371,37 @@ if ($selected_course > 0) {
 }
 
 $unics_role_labels = [4 => 'Методист', 5 => 'Педагог (создаёт курсы)', 6 => 'Педагог'];
+
+// #11.3 расширение: пары (педагог, ученик) для построения панели выбора учеников.
+// Сгруппированы по student_id — каждый ученик показывается один раз с data-tids,
+// чтобы JS прятал тех, чей педагог не отмечен на странице.
+$student_picks = [];
+if (!empty($teachers)) {
+    $tids_on_page = array_map(fn($t) => (int)$t->teacher_id, array_values($teachers));
+    [$tinp, $tinp_p] = $DB->get_in_or_equal($tids_on_page, SQL_PARAMS_NAMED, 'tip');
+    $pairs = $DB->get_records_sql(
+        "SELECT ts.id AS pair_id, ts.student_id, ts.teacher_id,
+                s.class_number, s.class_letter, s.organization_id,
+                u.lastname, u.firstname,
+                o.name AS org_name
+           FROM {unics_teacher_student} ts
+           JOIN {unics_students} s ON s.id = ts.student_id
+           JOIN {user} u ON u.id = s.mdl_user_id
+           LEFT JOIN {unics_organizations} o ON o.id = s.organization_id
+          WHERE ts.teacher_id {$tinp}
+            AND u.deleted = 0
+            AND s.archived_at IS NULL
+            AND s.graduated_at IS NULL
+          ORDER BY u.lastname, u.firstname",
+        $tinp_p);
+    foreach ($pairs as $p) {
+        $sid = (int)$p->student_id;
+        if (!isset($student_picks[$sid])) {
+            $student_picks[$sid] = ['row' => $p, 'tids' => []];
+        }
+        $student_picks[$sid]['tids'][] = (int)$p->teacher_id;
+    }
+}
 
 // ----------------------------------------------------------------
 // Вывод
@@ -345,30 +504,115 @@ if ($selected_course > 0) {
 
     // Раздельные группы
     echo html_writer::tag('div',
-        html_writer::tag('label', '', ['class' => 'd-block']) .
-        html_writer::tag('div',
+        html_writer::div(
             html_writer::empty_tag('input', [
                 'type'    => 'checkbox',
                 'name'    => 'separate_groups',
                 'id'      => 'separate_groups',
                 'value'   => '1',
-                'class'   => 'mr-1',
+                'class'   => 'form-check-input',
                 'checked' => 'checked',
             ]) .
             html_writer::tag('label',
-                '<strong>Включить режим «Раздельные группы» для курса</strong>' .
-                html_writer::tag('br', '') .
-                html_writer::tag('small',
+                html_writer::tag('strong', 'Включить режим «Раздельные группы» для курса') .
+                html_writer::div(
                     'Педагоги будут видеть только участников своей группы.',
-                    ['class' => 'text-muted font-weight-normal']
+                    'text-muted small'
                 ),
-                ['for' => 'separate_groups', 'class' => 'mb-0']
+                ['for' => 'separate_groups', 'class' => 'form-check-label mb-0']
             ),
-            ['class' => 'form-check']
+            'form-check'
         ),
         ['class' => 'col-12 mt-2']
     );
 
+    // #11.3: авто-запись закреплённых учеников выбранных педагогов.
+    echo html_writer::tag('div',
+        html_writer::div(
+            html_writer::empty_tag('input', [
+                'type'  => 'checkbox',
+                'name'  => 'enrol_students',
+                'id'    => 'enrol_students',
+                'value' => '1',
+                'class' => 'form-check-input',
+            ]) .
+            html_writer::tag('label',
+                html_writer::tag('strong',
+                    'Также записать на курс учащихся, закреплённых за выбранными педагогами') .
+                html_writer::div(
+                    'Если включены «Раздельные группы» — учащиеся разбиваются на группы по '
+                    . 'формуле <code>Группа&lt;класс&gt;&lt;буква&gt;_&lt;организация&gt;</code>; '
+                    . 'педагог попадает в каждую группу своих учеников. Существующие группы '
+                    . 'с тем же именем переиспользуются. Выбор «Добавить в группу» / «Создать '
+                    . 'новую группу» выше относится к самим педагогам и не зависит от этого '
+                    . 'чекбокса.',
+                    'text-muted small'
+                ),
+                ['for' => 'enrol_students', 'class' => 'form-check-label mb-0']
+            ),
+            'form-check'
+        ),
+        ['class' => 'col-12 mt-2']
+    );
+
+    echo html_writer::end_tag('div');
+    echo html_writer::end_tag('div');
+    echo html_writer::end_tag('div');
+
+    // --- Панель выбора учеников (видна при включённом чекбоксе) ---
+    echo html_writer::start_tag('div',
+        ['id' => 'enrol_students_panel', 'class' => 'card mb-3', 'style' => 'display:none']);
+    echo html_writer::start_tag('div', ['class' => 'card-body']);
+    echo html_writer::tag('h6', 'Учащиеся для записи',
+        ['class' => 'mb-2']);
+    echo html_writer::tag('small',
+        'Без явных отметок — будут записаны все ученики выбранных педагогов, '
+        . 'подходящие под фильтр.',
+        ['class' => 'text-muted d-block mb-2']);
+
+    echo html_writer::start_tag('div', ['class' => 'd-flex flex-wrap gap-2 mb-2 align-items-center']);
+    echo '<label class="mb-0">Класс: <select id="esp_cls" class="form-control form-control-sm d-inline-block w-auto"><option value="">все</option>';
+    for ($i = 1; $i <= 11; $i++) { echo '<option value="' . $i . '">' . $i . '</option>'; }
+    echo '</select></label>';
+    echo '<label class="mb-0 ml-2">Буква: <select id="esp_let" class="form-control form-control-sm d-inline-block w-auto"><option value="">все</option>';
+    foreach (['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж'] as $L) { echo '<option value="' . $L . '">' . $L . '</option>'; }
+    echo '</select></label>';
+    echo ' <a href="#" id="esp_all" class="ml-3">Выбрать видимых</a>';
+    echo ' <a href="#" id="esp_none">Снять все</a>';
+    echo html_writer::end_tag('div');
+
+    // Hidden inputs синхронизируются из селектов фильтра — нужны серверу для fallback'а.
+    echo html_writer::empty_tag('input', ['type' => 'hidden',
+        'name' => 'enrol_filter_class', 'id' => 'esp_cls_hidden', 'value' => '']);
+    echo html_writer::empty_tag('input', ['type' => 'hidden',
+        'name' => 'enrol_filter_letter', 'id' => 'esp_let_hidden', 'value' => '']);
+
+    echo html_writer::start_tag('div', ['id' => 'esp_list', 'class' => 'border rounded p-2',
+        'style' => 'max-height:280px;overflow-y:auto;background:#fff']);
+    if (empty($student_picks)) {
+        echo html_writer::tag('div', 'У педагогов на странице нет закреплённых учеников.',
+            ['class' => 'text-muted']);
+    } else {
+        foreach ($student_picks as $sid => $info) {
+            $r = $info['row'];
+            $cls = (int)($r->class_number ?? 0);
+            $let = (string)($r->class_letter ?? '');
+            $org = htmlspecialchars($r->org_name ?? '');
+            $fio = htmlspecialchars(trim("{$r->lastname} {$r->firstname}"));
+            $cls_str = $cls ? ' - ' . $cls . htmlspecialchars($let) . ' кл.' : '';
+            $org_str = $org !== '' ? " ({$org})" : '';
+            echo '<div class="form-check esp-row" '
+                . 'data-tids="' . implode(',', $info['tids']) . '" '
+                . 'data-cls="' . $cls . '" '
+                . 'data-let="' . htmlspecialchars($let) . '">';
+            echo '<input type="checkbox" class="form-check-input esp-cb" '
+                . 'name="enrol_student_ids[]" value="' . $sid . '" '
+                . 'id="esp_s_' . $sid . '">';
+            echo '<label class="form-check-label" for="esp_s_' . $sid . '">'
+                . $fio . $cls_str . $org_str . '</label>';
+            echo '</div>';
+        }
+    }
     echo html_writer::end_tag('div');
     echo html_writer::end_tag('div');
     echo html_writer::end_tag('div');
@@ -434,6 +678,7 @@ document.getElementById('check_all').addEventListener('change', function() {
     document.querySelectorAll('.teacher-check').forEach(function(cb) {
         cb.checked = document.getElementById('check_all').checked;
     });
+    if (typeof espApply === 'function') espApply();
 });
 
 var newGroupInput = document.querySelector('input[name=new_group]');
@@ -445,6 +690,64 @@ if (newGroupInput && groupSelect) {
     groupSelect.addEventListener('change', function() {
         if (this.value !== '0') newGroupInput.value = '';
     });
+}
+
+// #11.3 расширение: панель выбора учеников.
+function espGetCheckedTeachers() {
+    return Array.from(document.querySelectorAll('.teacher-check:checked'))
+        .map(function(cb) { return cb.value; });
+}
+function espApply() {
+    var clsSel = document.getElementById('esp_cls');
+    var letSel = document.getElementById('esp_let');
+    if (!clsSel) return;
+    var cls  = clsSel.value;
+    var let_ = letSel.value;
+    document.getElementById('esp_cls_hidden').value = cls;
+    document.getElementById('esp_let_hidden').value = let_;
+    var tch = espGetCheckedTeachers();
+    document.querySelectorAll('.esp-row').forEach(function(row) {
+        var rTids = (row.getAttribute('data-tids') || '').split(',').filter(Boolean);
+        var rCls  = row.getAttribute('data-cls') || '';
+        var rLet  = row.getAttribute('data-let') || '';
+        var matchT = tch.length === 0 ? false :
+            rTids.some(function(t) { return tch.indexOf(t) !== -1; });
+        var matchC = !cls  || rCls === cls;
+        var matchL = !let_ || rLet === let_;
+        row.style.display = (matchT && matchC && matchL) ? '' : 'none';
+    });
+}
+document.querySelectorAll('.teacher-check').forEach(function(cb) {
+    cb.addEventListener('change', espApply);
+});
+['esp_cls', 'esp_let'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', espApply);
+});
+var espAllBtn = document.getElementById('esp_all');
+if (espAllBtn) espAllBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.querySelectorAll('.esp-row').forEach(function(row) {
+        if (row.style.display !== 'none') {
+            var cb = row.querySelector('.esp-cb');
+            if (cb) cb.checked = true;
+        }
+    });
+});
+var espNoneBtn = document.getElementById('esp_none');
+if (espNoneBtn) espNoneBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.querySelectorAll('.esp-cb').forEach(function(cb) { cb.checked = false; });
+});
+var enrolStuCb = document.getElementById('enrol_students');
+var espPanel   = document.getElementById('enrol_students_panel');
+if (enrolStuCb && espPanel) {
+    function espSyncPanel() {
+        espPanel.style.display = enrolStuCb.checked ? '' : 'none';
+        if (enrolStuCb.checked) espApply();
+    }
+    enrolStuCb.addEventListener('change', espSyncPanel);
+    espSyncPanel();
 }
 ");
 

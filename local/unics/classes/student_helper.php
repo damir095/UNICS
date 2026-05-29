@@ -136,4 +136,25 @@ class student_helper {
             [$param_name => (string)$ovz],
         ];
     }
+
+    /**
+     * Подсчёт «активных» учащихся: не удалён в Moodle (u.deleted=0) и не
+     * архивирован (s.archived_at IS NULL). Опциональный фильтр по организации.
+     *
+     * @param array $filters поддерживает 'organization_id' => int
+     */
+    public static function count_active_students(array $filters = []): int {
+        global $DB;
+        $where  = ['s.archived_at IS NULL'];
+        $params = [];
+        if (!empty($filters['organization_id'])) {
+            $where[] = 's.organization_id = :org';
+            $params['org'] = (int)$filters['organization_id'];
+        }
+        $sql = "SELECT COUNT(s.id)
+                  FROM {unics_students} s
+                  JOIN {user} u ON u.id = s.mdl_user_id AND u.deleted = 0
+                 WHERE " . implode(' AND ', $where);
+        return (int)$DB->count_records_sql($sql, $params);
+    }
 }

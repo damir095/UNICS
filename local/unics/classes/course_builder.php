@@ -6,6 +6,38 @@ defined('MOODLE_INTERNAL') || die();
 class course_builder {
 
     /**
+     * Видимость (course_modules.visible), с которой создаются новые активности.
+     * 1 = видима сразу (по умолчанию). 0 = скрыта (review-гейт УМК: ученик не видит
+     * материал, пока педагог не опубликует). Меняется через set_default_visibility().
+     */
+    protected int $default_cm_visible = 1;
+
+    /**
+     * Задать видимость по умолчанию для последующих add_*-вызовов.
+     * process_ai_queue ставит 0 перед сборкой УМК (черновик на проверке).
+     */
+    public function set_default_visibility(int $visible): void {
+        $this->default_cm_visible = $visible ? 1 : 0;
+    }
+
+    /**
+     * Показать/скрыть готовую активность (для публикации черновика УМК).
+     * Использует нативный set_coursemodule_visible() — корректно обновляет
+     * visibleold, видимость в ленте/календаре/оценках.
+     */
+    public function set_cm_visible(int $cmid, int $visible): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/course/lib.php');
+        set_coursemodule_visible($cmid, $visible ? 1 : 0);
+
+        // set_coursemodule_visible не перестраивает кэш курса сам.
+        $courseid = (int)$DB->get_field('course_modules', 'course', ['id' => $cmid]);
+        if ($courseid) {
+            rebuild_course_cache($courseid, true);
+        }
+    }
+
+    /**
      * Добавить текстовую страницу (mod_page) в секцию курса.
      * Возвращает cmid.
      */
@@ -734,13 +766,14 @@ HTML;
             $section->id = $DB->insert_record('course_sections', $section);
         }
 
-        $cm           = new \stdClass();
-        $cm->course   = $course_id;
-        $cm->module   = $module->id;
-        $cm->instance = $instance_id;
-        $cm->section  = $section->id;
-        $cm->visible  = 1;
-        $cm->added    = time();
+        $cm              = new \stdClass();
+        $cm->course      = $course_id;
+        $cm->module      = $module->id;
+        $cm->instance    = $instance_id;
+        $cm->section     = $section->id;
+        $cm->visible     = $this->default_cm_visible;
+        $cm->visibleold  = $this->default_cm_visible;
+        $cm->added       = time();
         $cm->id = $DB->insert_record('course_modules', $cm);
 
         $seq = array_filter(explode(',', $section->sequence ?? ''));

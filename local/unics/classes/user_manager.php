@@ -80,13 +80,43 @@ class unics_user_manager {
             case 9: // Районный методист (скоуп: район — organization_id будет null)
             case 5: // Педагог, создающий курсы (editingteacher)
             case 6: // Педагог, non-editing (teacher)
-                $DB->insert_record('unics_teachers', (object)[
+                // Предметы = категории курсов (множественный выбор). Валидируем по
+                // реально существующим категориям; имена дублируем в subjects для
+                // отображения (legacy-поле), структурную привязку пишем в
+                // unics_teacher_subject. См. [[subject-binding-design]].
+                $cat_ids = array_values(array_unique(array_filter(array_map('intval',
+                    (array)($data['subject_categories'] ?? [])))));
+                $subject_names = [];
+                if ($cat_ids) {
+                    [$in_sql, $in_params] = $DB->get_in_or_equal($cat_ids);
+                    $cats = $DB->get_records_select('course_categories',
+                        "id {$in_sql}", $in_params, 'sortorder ASC', 'id, name');
+                    $cat_ids = array_map('intval', array_keys($cats)); // только существующие
+                    foreach ($cats as $c) { $subject_names[] = format_string($c->name); }
+                }
+                // Legacy free-text: имена выбранных категорий, иначе строка из API/импорта.
+                $subjects_text = $subject_names
+                    ? implode(', ', $subject_names)
+                    : (is_string($data['subjects'] ?? null) ? $data['subjects'] : null);
+
+                $teacher_id = $DB->insert_record('unics_teachers', (object)[
                     'mdl_user_id'     => $mdl_user_id,
                     // Районный методист (9) скоупится районом — organization_id пуст.
                     'organization_id' => !empty($data['organization_id']) ? (int)$data['organization_id'] : null,
-                    'subjects'        => $data['subjects'] ?? null,
+                    'subjects'        => $subjects_text,
                     'qualification'   => $data['qualification'] ?? null,
+                    'grade_from'      => !empty($data['grade_from']) ? (int)$data['grade_from'] : null,
+                    'grade_to'        => !empty($data['grade_to'])   ? (int)$data['grade_to']   : null,
                 ]);
+
+                $now = time();
+                foreach ($cat_ids as $cid) {
+                    $DB->insert_record('unics_teacher_subject', (object)[
+                        'teacher_id'  => $teacher_id,
+                        'category_id' => $cid,
+                        'timecreated' => $now,
+                    ]);
+                }
                 break;
         }
 

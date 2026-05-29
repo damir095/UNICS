@@ -20,6 +20,11 @@ class process_ai_queue extends \core\task\scheduled_task {
         $generator = new \local_unics\ai_generator();
         $builder   = new \local_unics\course_builder();
 
+        // Review-гейт УМК: материалы создаются скрытыми (visible=0). Ученик не видит
+        // их, пока педагог не нажмёт «Опубликовать» на umk_status.php. Секции остаются
+        // видимыми, чтобы педагог видел структуру.
+        $builder->set_default_visibility(0);
+
         $tasks = $DB->get_records(
             'unics_ai_queue', ['status' => 1], 'created_at ASC', '*', 0, 15
         );
@@ -281,32 +286,9 @@ class process_ai_queue extends \core\task\scheduled_task {
                         mtrace("  [warn] Достижения не обновлены: " . $eb->getMessage());
                     }
 
-                    // Начислить баллы за готовый УМК
-                    try {
-                        \local_unics\points_manager::award(
-                            (int)$student->id,
-                            \local_unics\points_manager::POINTS_UMK_READY,
-                            \local_unics\points_manager::REASON_UMK_READY,
-                            'Готов УМК «' . mb_substr($umk->title, 0, 50) . '»'
-                        );
-                    } catch (\Throwable $ep) {
-                        mtrace("  [warn] Баллы не начислены: " . $ep->getMessage());
-                    }
-
-                    // Уведомление учащемуся: материал готов
-                    try {
-                        $course_rec  = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
-                        $course_name = $course_rec ? $course_rec->fullname : '';
-                        \local_unics\notification_manager::notify_umk_ready(
-                            (int)$student->mdl_user_id,
-                            $umk->title,
-                            $course_name,
-                            $umk_level,
-                            \local_unics\points_manager::POINTS_UMK_READY
-                        );
-                    } catch (\Throwable $en) {
-                        mtrace("  [warn] Уведомление учащемуся #{$student->mdl_user_id} не отправлено: " . $en->getMessage());
-                    }
+                    // Баллы за УМК + уведомление учащемуся «материал готов» перенесены
+                    // на момент публикации (review-гейт): пока материал скрыт, ученик
+                    // о нём не знает и баллов не получает. См. umk_status.php (publish).
 
                     // Уведомление педагогу: низкий балл (< 50%)
                     if ($s_avg < 50) {
@@ -331,6 +313,31 @@ class process_ai_queue extends \core\task\scheduled_task {
                             mtrace("  [warn] Уведомление педагогу о низком балле: " . $en->getMessage());
                         }
                     }
+                }
+
+                // Уведомление педагогам учащихся: УМК на проверке (review-гейт).
+                // Материал скрыт; педагог проверяет и публикует на umk_status.php.
+                try {
+                    $course_rec   = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
+                    $course_name  = $course_rec ? $course_rec->fullname : '';
+                    [$tin, $tparams] = $DB->get_in_or_equal($student_ids, SQL_PARAMS_NAMED, 'sid');
+                    $review_teachers = $DB->get_records_sql(
+                        "SELECT DISTINCT t.mdl_user_id
+                           FROM {unics_teacher_student} ts
+                           JOIN {unics_teachers} t ON t.id = ts.teacher_id
+                          WHERE ts.student_id {$tin}",
+                        $tparams
+                    );
+                    foreach ($review_teachers as $rt) {
+                        \local_unics\notification_manager::notify_umk_review(
+                            (int)$rt->mdl_user_id,
+                            $umk->title,
+                            $course_name,
+                            $umk_level
+                        );
+                    }
+                } catch (\Throwable $en) {
+                    mtrace("  [warn] Уведомление педагогу о проверке УМК не отправлено: " . $en->getMessage());
                 }
 
                 $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
