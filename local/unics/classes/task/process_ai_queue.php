@@ -104,6 +104,11 @@ class process_ai_queue extends \core\task\scheduled_task {
                     $text
                 );
                 $builder->restrict_activity_to_group($text_cmid, $group_id);
+                $builder->set_view_completion($text_cmid); // B1/B8
+
+                // B1: материалы темы для гейта теста (текст всегда + аудио/видео ниже).
+                $material_cmids = [$text_cmid];
+                $quiz_cmid_gate = null;
 
                 $DB->insert_record('unics_umk_materials', (object)[
                     'umk_id'               => $umk->id,
@@ -123,6 +128,8 @@ class process_ai_queue extends \core\task\scheduled_task {
                         $generator->get_audio_ext()
                     );
                     $builder->restrict_activity_to_group($audio_cmid, $group_id);
+                    $builder->set_view_completion($audio_cmid); // B1/B8
+                    $material_cmids[] = $audio_cmid;
 
                     $DB->insert_record('unics_umk_materials', (object)[
                         'umk_id'               => $umk->id,
@@ -144,6 +151,8 @@ class process_ai_queue extends \core\task\scheduled_task {
                             $questions
                         );
                         $builder->restrict_activity_to_group($quiz_cmid, $group_id);
+                        $builder->set_view_completion($quiz_cmid); // B8 (тест входит в завершение курса)
+                        $quiz_cmid_gate = $quiz_cmid;               // B1: гейт навесим после сборки материалов
                         $DB->insert_record('unics_umk_materials', (object)[
                             'umk_id'               => $umk->id,
                             'mdl_course_module_id' => $quiz_cmid,
@@ -169,6 +178,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                             $assign_desc
                         );
                         $builder->restrict_activity_to_group($assign_cmid, $group_id);
+                        $builder->set_view_completion($assign_cmid); // B8
                         $DB->insert_record('unics_umk_materials', (object)[
                             'umk_id'               => $umk->id,
                             'mdl_course_module_id' => $assign_cmid,
@@ -227,6 +237,8 @@ class process_ai_queue extends \core\task\scheduled_task {
                             $slide_images
                         );
                         $builder->restrict_activity_to_group($video_cmid, $group_id);
+                        $builder->set_view_completion($video_cmid); // B1/B8
+                        $material_cmids[] = $video_cmid;
                         $DB->insert_record('unics_umk_materials', (object)[
                             'umk_id'               => $umk->id,
                             'mdl_course_module_id' => $video_cmid,
@@ -238,6 +250,14 @@ class process_ai_queue extends \core\task\scheduled_task {
                     } catch (\Throwable $ev) {
                         mtrace("  [warn] Видео не создано: " . $ev->getMessage());
                     }
+                }
+
+                // --- B1: гейт «материал освоен» — тест доступен после просмотра
+                // материалов темы (текст/аудио/видео). Навешиваем после сборки всех
+                // материалов, т.к. видео создаётся позже теста. ---
+                if ($quiz_cmid_gate !== null) {
+                    $builder->gate_quiz_on_materials($quiz_cmid_gate, $group_id, $material_cmids);
+                    mtrace("  Гейт теста: доступен после " . count($material_cmids) . " материал(ов)");
                 }
 
                 // --- 6. Обработка каждого учащегося ---
@@ -349,6 +369,13 @@ class process_ai_queue extends \core\task\scheduled_task {
                     'status'       => 3,
                     'processed_at' => date('Y-m-d H:i:s'),
                 ]);
+
+                // B8: пересобрать критерии завершения курса (все активности с completion).
+                try {
+                    $builder->rebuild_course_completion_criteria((int)$umk->mdl_course_id);
+                } catch (\Throwable $ec) {
+                    mtrace("  [warn] Критерии завершения курса не пересобраны: " . $ec->getMessage());
+                }
 
                 mtrace("UMK #{$umk->id} «{$umk->title}» - готов. Уровень: {$level_label}, учащихся: {$enrolled_count}, секция: {$section}");
 

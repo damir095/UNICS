@@ -747,6 +747,98 @@ HTML;
     }
 
     /**
+     * B1/B8: включить отслеживание выполнения «по просмотру» для активности.
+     * completion=AUTOMATIC + completionview=1 — Moodle отметит активность
+     * выполненной, когда учащийся её откроет. Требует enablecompletion на курсе
+     * (шаблон ставит 1). Нужно и для гейта теста (B1), и для критерия завершения (B8).
+     */
+    public function set_view_completion(int $cmid): void {
+        global $CFG, $DB;
+        require_once($CFG->libdir . '/completionlib.php');
+
+        $cm = $DB->get_record('course_modules', ['id' => $cmid], 'id, course, completion, completionview');
+        if (!$cm) {
+            return;
+        }
+        $DB->update_record('course_modules', (object)[
+            'id'                       => $cmid,
+            'completion'               => COMPLETION_TRACKING_AUTOMATIC,
+            'completionview'           => 1,
+            'completiongradeitemnumber' => null,
+            'completionpassgrade'      => 0,
+        ]);
+        rebuild_course_cache((int)$cm->course, true);
+    }
+
+    /**
+     * B1: гейт «материал освоен» — тест доступен, когда выполнены все материалы темы
+     * И учащийся в группе своего уровня. Объединяет ограничение по группе (скрытое)
+     * с условиями completion по каждому материалу (показываются как «недоступно, пока…»).
+     *
+     * @param int   $quiz_cmid      cmid теста
+     * @param int   $group_id       группа уровня (как в restrict_activity_to_group)
+     * @param int[] $material_cmids cmid материалов, которые надо выполнить (текст/аудио/видео)
+     */
+    public function gate_quiz_on_materials(int $quiz_cmid, int $group_id, array $material_cmids): void {
+        global $DB;
+
+        $conditions = [['type' => 'group', 'id' => $group_id]];
+        $showc      = [false]; // группу скрываем полностью (чужой уровень не видит тест)
+
+        foreach (array_unique(array_filter($material_cmids)) as $mcmid) {
+            $conditions[] = ['type' => 'completion', 'cm' => (int)$mcmid, 'e' => 1]; // 1 = COMPLETION_COMPLETE
+            $showc[]      = true; // показываем «доступно после прохождения материала»
+        }
+
+        $DB->set_field('course_modules', 'availability', json_encode([
+            'op'    => '&',
+            'c'     => $conditions,
+            'showc' => $showc,
+        ]), ['id' => $quiz_cmid]);
+
+        $courseid = (int)$DB->get_field('course_modules', 'course', ['id' => $quiz_cmid]);
+        if ($courseid) {
+            rebuild_course_cache($courseid, true);
+        }
+    }
+
+    /**
+     * B8: пересобрать критерии завершения курса = «все активности с включённым
+     * completion выполнены». Идемпотентно: удаляет прежние activity-критерии и
+     * вставляет по одному на каждую такую активность. Агрегация по умолчанию = ALL.
+     * Вызывать после создания/обновления активностей курса.
+     */
+    public function rebuild_course_completion_criteria(int $course_id): void {
+        global $CFG, $DB;
+        require_once($CFG->libdir . '/completionlib.php');
+        require_once($CFG->dirroot . '/completion/criteria/completion_criteria.php');
+        require_once($CFG->dirroot . '/completion/criteria/completion_criteria_activity.php');
+
+        // Снять прежние activity-критерии (полная пересборка).
+        $DB->delete_records('course_completion_criteria', [
+            'course'       => $course_id,
+            'criteriatype' => COMPLETION_CRITERIA_TYPE_ACTIVITY,
+        ]);
+
+        // Активности курса с включённым отслеживанием выполнения.
+        $cms = $DB->get_records_select('course_modules',
+            'course = :course AND completion > 0 AND deletioninprogress = 0',
+            ['course' => $course_id], 'id ASC', 'id');
+        if (!$cms) {
+            return;
+        }
+
+        $criterion = new \completion_criteria_activity();
+        $data = new \stdClass();
+        $data->id = $course_id; // update_config трактует ->id как courseid
+        $data->criteria_activity = [];
+        foreach ($cms as $cm) {
+            $data->criteria_activity[(int)$cm->id] = 1;
+        }
+        $criterion->update_config($data);
+    }
+
+    /**
      * Прикрепить экземпляр модуля к секции курса.
      * Если секции не существует - создаёт её.
      */

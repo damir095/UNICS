@@ -411,6 +411,18 @@ function local_unics_extend_navigation_course(navigation_node $navigation, stdCl
             new moodle_url('/local/unics/pages/generate_umk.php', ['course_id' => $course->id]),
             'local_unics_course_umk',
         ];
+        // B5: пометить итоговый экзамен курса (+ открытые пересдачи B7).
+        $items[] = [
+            'УНИКС: Итоговый экзамен',
+            new moodle_url('/local/unics/pages/course_final_exam.php', ['course_id' => $course->id]),
+            'local_unics_course_final',
+        ];
+        // B4: контрольные точки курса (промежуточная аттестация) + сводка по учащимся.
+        $items[] = [
+            'УНИКС: Контрольные точки',
+            new moodle_url('/local/unics/pages/course_milestones.php', ['course_id' => $course->id]),
+            'local_unics_course_milestones',
+        ];
     }
 
     foreach ($items as [$text, $url, $key]) {

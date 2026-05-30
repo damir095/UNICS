@@ -80,42 +80,28 @@ class unics_user_manager {
             case 9: // Районный методист (скоуп: район — organization_id будет null)
             case 5: // Педагог, создающий курсы (editingteacher)
             case 6: // Педагог, non-editing (teacher)
-                // Предметы = категории курсов (множественный выбор). Валидируем по
-                // реально существующим категориям; имена дублируем в subjects для
-                // отображения (legacy-поле), структурную привязку пишем в
-                // unics_teacher_subject. См. [[subject-binding-design]].
+                // Предметы = категории курсов (множественный выбор). Структурная
+                // привязка — в unics_teacher_subject; имена дублируются в поле subjects
+                // для legacy-отображения. См. [[subject-binding-design]].
                 $cat_ids = array_values(array_unique(array_filter(array_map('intval',
                     (array)($data['subject_categories'] ?? [])))));
-                $subject_names = [];
-                if ($cat_ids) {
-                    [$in_sql, $in_params] = $DB->get_in_or_equal($cat_ids);
-                    $cats = $DB->get_records_select('course_categories',
-                        "id {$in_sql}", $in_params, 'sortorder ASC', 'id, name');
-                    $cat_ids = array_map('intval', array_keys($cats)); // только существующие
-                    foreach ($cats as $c) { $subject_names[] = format_string($c->name); }
-                }
-                // Legacy free-text: имена выбранных категорий, иначе строка из API/импорта.
-                $subjects_text = $subject_names
-                    ? implode(', ', $subject_names)
-                    : (is_string($data['subjects'] ?? null) ? $data['subjects'] : null);
 
                 $teacher_id = $DB->insert_record('unics_teachers', (object)[
                     'mdl_user_id'     => $mdl_user_id,
                     // Районный методист (9) скоупится районом — organization_id пуст.
                     'organization_id' => !empty($data['organization_id']) ? (int)$data['organization_id'] : null,
-                    'subjects'        => $subjects_text,
+                    // Если категории не выбраны — оставляем строку из API/импорта.
+                    'subjects'        => is_string($data['subjects'] ?? null) ? $data['subjects'] : null,
                     'qualification'   => $data['qualification'] ?? null,
                     'grade_from'      => !empty($data['grade_from']) ? (int)$data['grade_from'] : null,
                     'grade_to'        => !empty($data['grade_to'])   ? (int)$data['grade_to']   : null,
                 ]);
 
-                $now = time();
-                foreach ($cat_ids as $cid) {
-                    $DB->insert_record('unics_teacher_subject', (object)[
-                        'teacher_id'  => $teacher_id,
-                        'category_id' => $cid,
-                        'timecreated' => $now,
-                    ]);
+                if ($cat_ids) {
+                    $names = self::persist_teacher_subjects($teacher_id, $cat_ids);
+                    if ($names !== '') {
+                        $DB->set_field('unics_teachers', 'subjects', $names, ['id' => $teacher_id]);
+                    }
                 }
                 break;
         }
@@ -424,10 +410,63 @@ class unics_user_manager {
         // Обновить расширенный профиль педагога/тьютора/методиста
         $teacher = $DB->get_record('unics_teachers', ['mdl_user_id' => $mdl_user_id]);
         if ($teacher) {
-            $teacher->subjects       = $data['subjects'] ?? $teacher->subjects;
-            $teacher->qualification  = $data['qualification'] ?? $teacher->qualification;
+            // Предметы = категории (мультивыбор) синхронизируются в unics_teacher_subject;
+            // имена дублируются в subjects. Если форма прислала subject_categories —
+            // считаем его полным набором (пустой = снять все предметы).
+            if (array_key_exists('subject_categories', $data)) {
+                $cat_ids = array_values(array_unique(array_filter(array_map('intval',
+                    (array)$data['subject_categories']))));
+                $names = self::persist_teacher_subjects((int)$teacher->id, $cat_ids);
+                $teacher->subjects = $names !== '' ? $names : null;
+            } else {
+                $teacher->subjects = $data['subjects'] ?? $teacher->subjects;
+            }
+            $teacher->qualification = $data['qualification'] ?? $teacher->qualification;
+            if (array_key_exists('grade_from', $data)) {
+                $teacher->grade_from = !empty($data['grade_from']) ? (int)$data['grade_from'] : null;
+            }
+            if (array_key_exists('grade_to', $data)) {
+                $teacher->grade_to = !empty($data['grade_to']) ? (int)$data['grade_to'] : null;
+            }
             $DB->update_record('unics_teachers', $teacher);
         }
+    }
+
+    /**
+     * Синхронизирует предметы педагога (категории курсов) в unics_teacher_subject:
+     * удаляет прежние привязки и записывает переданные (только реально существующие
+     * категории). Возвращает человекочитаемую строку имён для поля subjects.
+     */
+    private static function persist_teacher_subjects(int $teacher_id, array $cat_ids): string {
+        global $DB;
+        $DB->delete_records('unics_teacher_subject', ['teacher_id' => $teacher_id]);
+        $cat_ids = array_values(array_unique(array_filter(array_map('intval', $cat_ids))));
+        if (empty($cat_ids)) {
+            return '';
+        }
+        [$in_sql, $in_params] = $DB->get_in_or_equal($cat_ids);
+        $cats = $DB->get_records_select('course_categories',
+            "id {$in_sql}", $in_params, 'sortorder ASC', 'id, name');
+        $now   = time();
+        $names = [];
+        foreach ($cats as $c) {
+            $DB->insert_record('unics_teacher_subject', (object)[
+                'teacher_id'  => $teacher_id,
+                'category_id' => (int)$c->id,
+                'timecreated' => $now,
+            ]);
+            $names[] = format_string($c->name);
+        }
+        return implode(', ', $names);
+    }
+
+    /**
+     * ID категорий-предметов педагога (для предзаполнения формы редактирования).
+     */
+    public static function get_teacher_subject_ids(int $teacher_id): array {
+        global $DB;
+        return array_map('intval', $DB->get_fieldset_select(
+            'unics_teacher_subject', 'category_id', 'teacher_id = ?', [$teacher_id]));
     }
 
     /**
@@ -448,7 +487,8 @@ class unics_user_manager {
                        uo.unics_role, uo.organization_id,
                        s.id AS student_id, s.category AS student_category, s.ovz_type,
                        s.difficulty_level, s.class_number, s.class_letter, s.special_needs,
-                       t.id AS teacher_id, t.subjects, t.qualification
+                       t.id AS teacher_id, t.subjects, t.qualification,
+                       t.grade_from, t.grade_to
                 FROM {user} u
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
                 LEFT JOIN {unics_students} s ON s.mdl_user_id = u.id

@@ -13,6 +13,8 @@ class notification_manager {
     const TYPE_BADGE_EARNED = 6;  // учащемуся + родителям: получен значок
     const TYPE_NEW_COMMENT  = 7;  // учащемуся: педагог оставил заметку
     const TYPE_UMK_REVIEW   = 8;  // педагогу: УМК сгенерирован, ждёт проверки/публикации
+    const TYPE_RETAKE       = 9;  // педагогу: учащийся провалил итоговый — нужна пересдача
+    const TYPE_TOPIC_RETRY  = 10; // педагогу + учащемуся: провален тест темы, нужно повторить тему (B2)
 
     // ----------------------------------------------------------------
     // Уведомление учащемуся: УМК готов
@@ -255,6 +257,80 @@ class notification_manager {
                  . ' <strong>«Опубликовать»</strong> в истории генерации УМК, чтобы открыть доступ.</p>';
 
         self::send($teacher_mdl_user_id, $subject, $body, self::TYPE_UMK_REVIEW);
+    }
+
+    // ----------------------------------------------------------------
+    // Уведомление педагогу: провал итогового экзамена → нужна пересдача (B7)
+    // ----------------------------------------------------------------
+    public static function notify_retake_needed(
+        int    $teacher_mdl_user_id,
+        string $student_name,
+        string $course_name,
+        string $quiz_name,
+        float  $grade,
+        float  $grademax
+    ): void {
+        $pct = $grademax > 0 ? round($grade / $grademax * 100, 1) : 0;
+
+        $subject = "Нужна пересдача: {$student_name}";
+        $body    = '<p>Учащийся <strong>' . htmlspecialchars($student_name) . '</strong>'
+                 . ' не сдал итоговый экзамен <strong>' . htmlspecialchars($quiz_name) . '</strong>'
+                 . ' в курсе <strong>' . htmlspecialchars($course_name) . '</strong>.</p>'
+                 . '<p>Результат: <strong>' . rtrim(rtrim(number_format($grade, 2, '.', ''), '0'), '.')
+                 . ' из ' . rtrim(rtrim(number_format($grademax, 2, '.', ''), '0'), '.')
+                 . '</strong> (' . $pct . '%).</p>'
+                 . '<p>Рекомендуется назначить пересдачу и при необходимости дополнительное обучение.</p>';
+
+        self::send($teacher_mdl_user_id, $subject, $body, self::TYPE_RETAKE);
+    }
+
+    // ----------------------------------------------------------------
+    // Уведомление педагогу: провал теста темы → нужно повторить тему (B2)
+    // ----------------------------------------------------------------
+    public static function notify_topic_retry_teacher(
+        int    $teacher_mdl_user_id,
+        string $student_name,
+        string $course_name,
+        string $quiz_name,
+        float  $grade,
+        float  $grademax
+    ): void {
+        $pct = $grademax > 0 ? round($grade / $grademax * 100, 1) : 0;
+
+        $subject = "Нужно повторить тему: {$student_name}";
+        $body    = '<p>Учащийся <strong>' . htmlspecialchars($student_name) . '</strong>'
+                 . ' не прошёл тест темы <strong>' . htmlspecialchars($quiz_name) . '</strong>'
+                 . ' в курсе <strong>' . htmlspecialchars($course_name) . '</strong>.</p>'
+                 . '<p>Результат: <strong>' . rtrim(rtrim(number_format($grade, 2, '.', ''), '0'), '.')
+                 . ' из ' . rtrim(rtrim(number_format($grademax, 2, '.', ''), '0'), '.')
+                 . '</strong> (' . $pct . '%).</p>'
+                 . '<p>Рекомендуется предложить учащемуся повторить материалы темы'
+                 . ' и пройти тест заново.</p>';
+
+        self::send($teacher_mdl_user_id, $subject, $body, self::TYPE_TOPIC_RETRY);
+    }
+
+    // ----------------------------------------------------------------
+    // Уведомление учащемуся: провал теста темы → повтори тему (B2)
+    // ----------------------------------------------------------------
+    public static function notify_topic_retry_student(
+        int    $student_mdl_user_id,
+        string $course_name,
+        string $quiz_name,
+        float  $grade,
+        float  $grademax
+    ): void {
+        $pct = $grademax > 0 ? round($grade / $grademax * 100, 1) : 0;
+
+        $subject = "Повторите тему: {$quiz_name}";
+        $body    = '<p>Тест <strong>' . htmlspecialchars($quiz_name) . '</strong>'
+                 . ' в курсе <strong>' . htmlspecialchars($course_name) . '</strong>'
+                 . ' пока не пройден.</p>'
+                 . '<p>Ваш результат: <strong>' . $pct . '%</strong>.</p>'
+                 . '<p>Повторите материалы темы и пройдите тест заново -'
+                 . ' так вы лучше усвоите материал.</p>';
+
+        self::send($student_mdl_user_id, $subject, $body, self::TYPE_TOPIC_RETRY);
     }
 
     // ----------------------------------------------------------------

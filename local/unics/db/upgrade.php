@@ -637,5 +637,74 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026053113, 'local', 'unics');
     }
 
+    if ($oldversion < 2026053115) {
+        // Образовательный цикл B5: флаг «итоговый экзамен» (+ задел под B4 «контрольная точка»).
+        // Метаданные активности курса хранятся отдельной таблицей (cmid → флаги),
+        // чтобы не трогать ядровые course_modules. См. [[educational-cycle-implementation]].
+        $table = new xmldb_table('unics_activity_meta');
+        $table->add_field('id',           XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('cmid',         XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('is_final',     XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('is_milestone', XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timecreated',  XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('uq_cmid', XMLDB_INDEX_UNIQUE, ['cmid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026053115, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026053117) {
+        // B7: автопересдача итогового экзамена при провале (observer на attempt_submitted).
+        $table = new xmldb_table('unics_retakes');
+        $table->add_field('id',            XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('mdl_user_id',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('mdl_course_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('cmid',          XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('grade',         XMLDB_TYPE_NUMBER, '10, 2', null, null, null, null);
+        $table->add_field('grademax',      XMLDB_TYPE_NUMBER, '10, 2', null, null, null, null);
+        $table->add_field('gradepass',     XMLDB_TYPE_NUMBER, '10, 2', null, null, null, null);
+        $table->add_field('status',        XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timecreated',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timeresolved',  XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('ix_user_cm',     XMLDB_INDEX_NOTUNIQUE, ['mdl_user_id', 'cmid']);
+        $table->add_index('ix_course_open', XMLDB_INDEX_NOTUNIQUE, ['mdl_course_id', 'status']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026053117, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026053121) {
+        // B2: «темы для повторения». Провал теста темы (с B1-гейтом, не итогового)
+        // фиксируется записью; учащемуся и педагогу уходит уведомление. Структура
+        // зеркалит unics_retakes (B7), но это отдельная сущность (повтор темы, не пересдача
+        // экзамена). См. [[educational-cycle-implementation]] узлы 14/16/17.
+        $table = new xmldb_table('unics_topic_retries');
+        $table->add_field('id',            XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('mdl_user_id',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('mdl_course_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('cmid',          XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('grade',         XMLDB_TYPE_NUMBER, '10, 2', null, null, null, null);
+        $table->add_field('grademax',      XMLDB_TYPE_NUMBER, '10, 2', null, null, null, null);
+        $table->add_field('gradepass',     XMLDB_TYPE_NUMBER, '10, 2', null, null, null, null);
+        $table->add_field('status',        XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timecreated',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timeresolved',  XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('ix_user_cm',     XMLDB_INDEX_NOTUNIQUE, ['mdl_user_id', 'cmid']);
+        $table->add_index('ix_course_open', XMLDB_INDEX_NOTUNIQUE, ['mdl_course_id', 'status']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026053121, 'local', 'unics');
+    }
+
     return true;
 }

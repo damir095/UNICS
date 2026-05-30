@@ -135,6 +135,67 @@
       </INDEXES>
     </TABLE>
 
+    <TABLE NAME="unics_activity_meta" COMMENT="Метаданные активности курса: флаги итоговый экзамен (B5) и контрольная точка (B4)">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="cmid"         TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="course_modules.id"/>
+        <FIELD NAME="is_final"     TYPE="int" LENGTH="2"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0" COMMENT="1 = итоговый экзамен курса (B5)"/>
+        <FIELD NAME="is_milestone" TYPE="int" LENGTH="2"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0" COMMENT="1 = промежуточная контрольная точка (B4)"/>
+        <FIELD NAME="timecreated"  TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_cmid" UNIQUE="true" FIELDS="cmid"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_retakes" COMMENT="Назначенные пересдачи итогового экзамена при провале (B7)">
+      <FIELDS>
+        <FIELD NAME="id"            TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"   TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="учащийся (user.id)"/>
+        <FIELD NAME="mdl_course_id" TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="cmid"          TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="итоговый quiz (course_modules.id)"/>
+        <FIELD NAME="grade"         TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="полученный балл"/>
+        <FIELD NAME="grademax"      TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="gradepass"     TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="порог сдачи, по которому признан провал"/>
+        <FIELD NAME="status"        TYPE="int"    LENGTH="2"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0" COMMENT="0 = открыта, 1 = закрыта"/>
+        <FIELD NAME="timecreated"   TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="timeresolved"  TYPE="int"    LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_user_cm"     UNIQUE="false" FIELDS="mdl_user_id, cmid"/>
+        <INDEX NAME="ix_course_open" UNIQUE="false" FIELDS="mdl_course_id, status"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_topic_retries" COMMENT="Темы для повторения: провал теста темы с B1-гейтом (B2)">
+      <FIELDS>
+        <FIELD NAME="id"            TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"   TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="учащийся (user.id)"/>
+        <FIELD NAME="mdl_course_id" TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="cmid"          TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="тест темы (course_modules.id)"/>
+        <FIELD NAME="grade"         TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="полученный балл"/>
+        <FIELD NAME="grademax"      TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="gradepass"     TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="порог сдачи, по которому признан провал"/>
+        <FIELD NAME="status"        TYPE="int"    LENGTH="2"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0" COMMENT="0 = открыта (нужно повторить), 1 = закрыта (позже сдал)"/>
+        <FIELD NAME="timecreated"   TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="timeresolved"  TYPE="int"    LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_user_cm"     UNIQUE="false" FIELDS="mdl_user_id, cmid"/>
+        <INDEX NAME="ix_course_open" UNIQUE="false" FIELDS="mdl_course_id, status"/>
+      </INDEXES>
+    </TABLE>
+
     <TABLE NAME="unics_teacher_student" COMMENT="Назначение педагога учащемуся">
       <FIELDS>
         <FIELD NAME="id"          TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>

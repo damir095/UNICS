@@ -308,6 +308,87 @@ if (empty($quiz_grades)) {
     echo '</tbody></table>';
 }
 
+// Контрольные точки (B4) — промежуточная аттестация по milestone-тестам.
+// Видны всем ролям, у кого есть доступ к отчёту (учащийся видит свои).
+$milestones = \local_unics\milestone_manager::student_milestones($student->mdl_user_id);
+echo '<h2 class="unics-section-title mt-4">Контрольные точки</h2>';
+if (empty($milestones)) {
+    echo '<p class="text-muted">Контрольных точек пока нет.</p>';
+} else {
+    echo '<table class="table table-sm table-bordered">';
+    echo '<thead class="table-light"><tr>
+        <th>Курс</th><th>Контрольная точка</th><th>Статус</th><th>Балл</th><th>Дата</th>
+    </tr></thead><tbody>';
+    foreach ($milestones as $m) {
+        $r = $m->result;
+        echo '<tr>';
+        echo '<td>' . s($m->course_name) . '</td>';
+        echo '<td>' . s($m->quiz_name) . '</td>';
+        echo '<td>' . \local_unics\milestone_manager::status_html($r) . '</td>';
+        echo '<td>' . \local_unics\milestone_manager::grade_text($r) . '</td>';
+        echo '<td>' . (!empty($r->timemodified) ? userdate($r->timemodified, '%d.%m.%Y') : '-') . '</td>';
+        echo '</tr>';
+    }
+    echo '</tbody></table>';
+}
+
+// Темы для повторения (B2) — проваленные тесты темы (с B1-гейтом), ожидающие повтора.
+// Видны всем ролям с доступом к отчёту (учащийся видит свои).
+$topic_retries = \local_unics\topic_retry_manager::student_open_retries($student->mdl_user_id);
+echo '<h2 class="unics-section-title mt-4">Темы для повторения</h2>';
+if (empty($topic_retries)) {
+    echo '<p class="text-muted">Тем для повторения нет.</p>';
+} else {
+    echo '<p class="text-muted">Тесты темы, которые пока не пройдены - стоит повторить материалы и пройти заново.</p>';
+    echo '<table class="table table-sm table-bordered">';
+    echo '<thead class="table-light"><tr>
+        <th>Курс</th><th>Тема (тест)</th><th>Результат</th><th>Дата</th>
+    </tr></thead><tbody>';
+    foreach ($topic_retries as $tr) {
+        echo '<tr>';
+        echo '<td>' . s($tr->course_name) . '</td>';
+        echo '<td>' . s($tr->quiz_name ?? 'тест темы') . '</td>';
+        echo '<td>' . \local_unics\topic_retry_manager::grade_text($tr) . '</td>';
+        echo '<td>' . (!empty($tr->timecreated) ? userdate($tr->timecreated, '%d.%m.%Y') : '-') . '</td>';
+        echo '</tr>';
+    }
+    echo '</tbody></table>';
+}
+
+// Пробелы (B3) - вопросы с ошибками по последней завершённой попытке каждого теста,
+// сгруппированные по теме (тесту). Правило, без ИИ; читаем из ядровых question_*.
+// Видны всем ролям с доступом к отчёту (учащийся видит свои).
+$gaps = \local_unics\gap_manager::student_gaps($student->mdl_user_id);
+echo '<h2 class="unics-section-title mt-4">Пробелы</h2>';
+if (empty($gaps)) {
+    echo '<p class="text-muted">Пробелов по тестам не выявлено.</p>';
+} else {
+    echo '<p class="text-muted">Вопросы с ошибками по последним попыткам - темы, которые стоит повторить.</p>';
+    echo '<table class="table table-sm table-bordered">';
+    echo '<thead class="table-light"><tr>
+        <th>Курс</th><th>Тема (тест)</th><th>Ошибки</th>
+    </tr></thead><tbody>';
+    foreach ($gaps as $topic) {
+        echo '<tr>';
+        echo '<td>' . s($topic->course_name) . '</td>';
+        echo '<td>' . s($topic->quiz_name) . '</td>';
+        echo '<td>' . s(\local_unics\gap_manager::summary_text($topic)) . '</td>';
+        echo '</tr>';
+
+        // Перечень ошибочных вопросов этой темы inline (что ответил учащийся).
+        echo '<tr class="unics-note-row"><td colspan="3"><ul class="mb-0">';
+        foreach ($topic->questions as $qq) {
+            $resp = ($qq->response !== null && $qq->response !== '')
+                ? ' <span class="text-muted small">- ответ: ' . s($qq->response) . '</span>'
+                : '';
+            echo '<li>' . \local_unics\gap_manager::state_html($qq->state)
+               . ' ' . s($qq->qname) . $resp . '</li>';
+        }
+        echo '</ul></td></tr>';
+    }
+    echo '</tbody></table>';
+}
+
 // Записан на курсы
 echo '<h2 class="unics-section-title mt-4">Записан на курсы (' . count($enrolled_courses) . ')</h2>';
 if (empty($enrolled_courses)) {

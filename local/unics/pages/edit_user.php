@@ -31,12 +31,23 @@ local_unics_require_manage_or_scope_user((int)$user_id);
 
 $unics_role = (int)$profile->unics_role;
 $is_student = ($unics_role === 7);
-$is_teacher = in_array($unics_role, [4, 5]);
+// Профиль педагога есть у методистов (4, 9) и педагогов (5, 6).
+$is_teacher = in_array($unics_role, [4, 9, 5, 6]);
 
 // Категория ОВЗ — метки берём из lang (абстрактные «ОВЗ N категории»); расшифровка
 // только в вики (student-categories.md). Хардкод-названий диагнозов здесь быть не должно.
 $level_options    = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
-$role_labels      = [3 => 'Администратор организации', 4 => 'Методист', 5 => 'Педагог', 7 => 'Учащийся', 8 => 'Родитель'];
+$role_labels      = [
+    1 => get_string('role_region_admin', 'local_unics'),
+    2 => get_string('role_district_admin', 'local_unics'),
+    3 => get_string('role_org_admin', 'local_unics'),
+    4 => get_string('role_methodist', 'local_unics'),
+    5 => get_string('role_editingteacher', 'local_unics'),
+    6 => get_string('role_teacher', 'local_unics'),
+    7 => get_string('role_student', 'local_unics'),
+    8 => get_string('role_parent', 'local_unics'),
+    9 => get_string('role_district_methodist', 'local_unics'),
+];
 
 // Обработка деактивации
 if ($action === 'suspend' && confirm_sesskey()) {
@@ -79,8 +90,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $data['special_needs']    = optional_param('special_needs', '', PARAM_TEXT);
     }
     if ($is_teacher) {
-        $data['subjects']      = optional_param('subjects', '', PARAM_TEXT);
-        $data['qualification'] = optional_param('qualification', '', PARAM_TEXT);
+        $data['subject_categories'] = optional_param_array('subject_categories', [], PARAM_INT);
+        $data['qualification']      = optional_param('qualification', '', PARAM_TEXT);
+        $gf = optional_param('grade_from', 0, PARAM_INT);
+        $gt = optional_param('grade_to', 0, PARAM_INT);
+        if ($gf && $gt && $gf > $gt) {
+            redirect(
+                new moodle_url('/local/unics/pages/edit_user.php', ['id' => $user_id]),
+                get_string('err_grade_range', 'local_unics'),
+                null,
+                \core\output\notification::NOTIFY_ERROR
+            );
+        }
+        $data['grade_from'] = $gf;
+        $data['grade_to']   = $gt;
     }
 
     unics_user_manager::update_user($user_id, $data);
@@ -195,15 +218,49 @@ if ($is_student) {
     echo '</div></div>';
 }
 
-// Поля педагога/тьютора/методиста
+// Поля педагога/методиста
 if ($is_teacher) {
-    $subj = s($profile->subjects ?? '');
-    $qual = s($profile->qualification ?? '');
+    $qual          = s($profile->qualification ?? '');
+    $selected_cats = unics_user_manager::get_teacher_subject_ids((int)$profile->teacher_id);
+    $cats          = $DB->get_records('course_categories',
+        ['parent' => 0, 'visible' => 1], 'sortorder ASC', 'id, name');
+    $gf = (int)($profile->grade_from ?? 0);
+    $gt = (int)($profile->grade_to ?? 0);
+
     echo '<div class="card mb-3"><div class="card-header">Профиль педагога</div><div class="card-body">';
-    echo "<div class=\"mb-2\"><label class=\"form-label\">Предметы</label>
-        <input type=\"text\" name=\"subjects\" value=\"{$subj}\" class=\"form-control\"></div>";
+
+    // Предметы = категории курсов (множественный выбор).
+    echo '<div class="mb-2"><label class="form-label">'
+        . s(get_string('subject_categories', 'local_unics')) . '</label>';
+    echo '<select name="subject_categories[]" multiple size="8" class="form-select">';
+    foreach ($cats as $c) {
+        $sel = in_array((int)$c->id, $selected_cats, true) ? 'selected' : '';
+        echo '<option value="' . (int)$c->id . '" ' . $sel . '>'
+            . s(format_string($c->name)) . '</option>';
+    }
+    echo '</select>';
+    echo '<div class="form-text">' . s(get_string('subject_categories_help', 'local_unics'))
+        . '</div></div>';
+
     echo "<div class=\"mb-2\"><label class=\"form-label\">Квалификация</label>
         <input type=\"text\" name=\"qualification\" value=\"{$qual}\" class=\"form-control\"></div>";
+
+    // Диапазон классов (мягкий фильтр).
+    $grade_opt = function (int $cur): string {
+        $h = '<option value="">' . s(get_string('grade_any', 'local_unics')) . '</option>';
+        for ($g = 1; $g <= 11; $g++) {
+            $h .= '<option value="' . $g . '"' . ($cur === $g ? ' selected' : '') . '>' . $g . '</option>';
+        }
+        return $h;
+    };
+    echo '<div class="mb-2"><label class="form-label">'
+        . s(get_string('grade_range', 'local_unics')) . '</label>'
+        . '<div class="d-flex gap-2 align-items-center">'
+        . '<select name="grade_from" class="form-select" style="width:auto">' . $grade_opt($gf) . '</select>'
+        . '<span>—</span>'
+        . '<select name="grade_to" class="form-select" style="width:auto">' . $grade_opt($gt) . '</select>'
+        . '</div></div>';
+
     echo '</div></div>';
 }
 
