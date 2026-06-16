@@ -92,6 +92,7 @@ if ($is_admin) {
         ['/local/unics/pages/courses.php',          'btn-outline-secondary','Курсы (архив)'],
         ['/local/unics/pages/umk_status.php',       'btn-outline-secondary','История УМК'],
         ['/local/unics/pages/org_report.php',       'btn-outline-secondary','Отчёт по организации'],
+        ['/local/unics/pages/statistics.php',       'btn-outline-secondary','Статистика'],
         ['/local/unics/pages/import_users.php',     'btn-outline-secondary','Импорт CSV'],
     ];
     foreach ($actions as [$url, $cls, $label]) {
@@ -154,9 +155,14 @@ if ($is_admin) {
     }
 
     $fio_admin = trim($USER->lastname . ' ' . $USER->firstname);
+    // Региональный методист (v3 фаза 2) делит дашборд с региональным администратором,
+    // но это методическая роль - меняем подпись панели.
+    $panel_label = local_unics_user_has_role((int)$USER->id, ['region_methodist'])
+        ? 'Портал регионального методиста'
+        : 'Панель администратора';
     echo '<div class="unics-welcome mb-4">';
     echo '<h2>Добро пожаловать, ' . s($fio_admin) . '</h2>';
-    echo '<div class="sub">Панель администратора' . ($scope_name ? ' — ' . s($scope_name) : '') . '</div>';
+    echo '<div class="sub">' . $panel_label . ($scope_name ? ' - ' . s($scope_name) : '') . '</div>';
     echo '</div>';
 
     echo '<div class="row mb-4">';
@@ -183,6 +189,7 @@ if ($is_admin) {
         ['/local/unics/pages/enrol_students.php', 'btn-outline-secondary', 'Запись учащихся на курс'],
         ['/local/unics/pages/enrol_teachers.php', 'btn-outline-secondary', 'Запись педагогов на курс'],
         ['/local/unics/pages/org_report.php',     'btn-outline-secondary', 'Отчёт по организации'],
+        ['/local/unics/pages/statistics.php',     'btn-outline-secondary', 'Статистика'],
     ];
     foreach ($actions as [$url, $cls, $label]) {
         echo html_writer::link(new moodle_url($url), $label, ['class' => 'btn ' . $cls]);
@@ -251,6 +258,12 @@ if ($is_admin) {
         'Журнал', ['class' => 'btn btn-outline-secondary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/assign.php'),
         'Привязки', ['class' => 'btn btn-outline-secondary']);
+    // «Организации» - муниципальному методисту (district_methodist), принявшему функции
+    // удалённого муниципального администратора (v3 [[role-model-v3-2026-06-11]]).
+    if (local_unics_user_has_role((int)$USER->id, ['district_methodist'])) {
+        echo html_writer::link(new moodle_url('/local/unics/pages/organizations.php'),
+            'Организации', ['class' => 'btn btn-outline-secondary']);
+    }
     echo html_writer::link(new moodle_url('/local/unics/pages/enrol_students.php'),
         'Запись учащихся на курс', ['class' => 'btn btn-outline-secondary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/enrol_teachers.php'),
@@ -259,6 +272,8 @@ if ($is_admin) {
         'Курсы (архив)', ['class' => 'btn btn-outline-secondary']);
     echo html_writer::link(new moodle_url('/local/unics/pages/org_report.php'),
         'Отчёт по организации', ['class' => 'btn btn-outline-secondary']);
+    echo html_writer::link(new moodle_url('/local/unics/pages/statistics.php'),
+        'Статистика', ['class' => 'btn btn-outline-secondary']);
     echo '</div>';
 
 } elseif ($is_teacher) {
@@ -396,8 +411,12 @@ if ($is_admin) {
         echo '<div class="unics-welcome mb-4">';
         echo '<h2>Привет, ' . s($USER->firstname) . '!';
         if ($active_title) {
+            $title_pic = !empty($active_title->icon)
+                ? '<img src="' . $OUTPUT->image_url('shop/' . $active_title->icon, 'local_unics')
+                  . '" width="20" height="20" alt="" style="vertical-align:-4px;margin-right:4px;">'
+                : '';
             echo ' <span class="badge badge-warning ml-1" style="font-size:.8em;">'
-               . s($active_title->icon_emoji) . ' ' . s($active_title->name) . '</span>';
+               . $title_pic . s($active_title->name) . '</span>';
         }
         echo '</h2>';
         echo '<div class="sub">' . s($class_str) . '</div>';
@@ -439,7 +458,7 @@ if ($is_admin) {
         echo '<div class="stat-value">' . $badges_earned . ' / 4</div><div class="stat-label mt-1">Значков</div>';
         echo '</div></div>';
         echo '<div class="col-6 col-md-3 mb-3"><div class="card unics-stat-card unics-points-card p-3 text-center">';
-        echo '<div class="stat-value">🪙 ' . number_format($points_bal) . '</div>';
+        echo '<div class="stat-value">' . number_format($points_bal) . '</div>';
         echo '<div class="stat-label mt-1">Баллов</div>';
         echo '</div></div>';
         echo '</div>';
@@ -452,14 +471,31 @@ if ($is_admin) {
             ['class' => 'btn btn-primary']
         );
         echo html_writer::link(
+            new moodle_url('/local/unics/pages/my_path.php', ['student_id' => $student->id]),
+            'Мой маршрут',
+            ['class' => 'btn btn-outline-primary']
+        );
+        echo html_writer::link(
             new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student->id]),
             'Мои значки',
             ['class' => 'btn btn-outline-warning']
         );
         echo html_writer::link(
             new moodle_url('/local/unics/pages/shop.php'),
-            '🛍 Магазин',
+            'Магазин',
             ['class' => 'btn btn-warning']
+        );
+        // Заметки педагога с бейджем непрочитанных (видимые ученику по audience).
+        $unread_notes = \local_unics\comment_manager::count_unread((int)$student->id, (int)$USER->id);
+        $notes_label = 'Заметки педагога';
+        if ($unread_notes > 0) {
+            $notes_label .= ' <span class="badge badge-light">' . $unread_notes . '</span>';
+        }
+        echo html_writer::link(
+            new moodle_url('/local/unics/pages/student_report.php',
+                ['student_id' => $student->id], 'notes'),
+            $notes_label,
+            ['class' => 'btn ' . ($unread_notes > 0 ? 'btn-danger' : 'btn-outline-secondary')]
         );
         echo '</div>';
 
@@ -552,9 +588,15 @@ if ($is_admin) {
                 ? '<span class="badge badge-' . $bc . ' ml-2">' . $avg . '%</span>'
                 : '<span class="badge badge-secondary ml-2">-</span>';
             echo '</div>';
+            // Бейдж новых заметок об этом ребёнке (видимых родителю по audience).
+            $unread_notes = \local_unics\comment_manager::count_unread((int)$ch->id, (int)$USER->id);
+            if ($unread_notes > 0) {
+                echo '<div class="mt-1"><span class="badge badge-danger">'
+                   . $unread_notes . ' новых</span></div>';
+            }
             echo '<div class="mt-2">';
             echo html_writer::link(
-                new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $ch->id]),
+                new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $ch->id], 'notes'),
                 'Отчёт →',
                 ['class' => 'btn btn-sm btn-outline-primary ml-2']
             );

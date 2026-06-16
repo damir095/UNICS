@@ -42,10 +42,10 @@ class unics_user_manager {
 
         // 3. Создаём расширение профиля в зависимости от роли
         switch ((int)$data['unics_role']) {
-            case 1: // Региональный администратор (скоуп: регион)
-            case 2: // Районный администратор (скоуп: район)
-                    // Управленческие роли без расширения профиля; весь скоуп —
-                    // в unics_user_org (region_id / district_id).
+            case 1:  // Региональный администратор (скоуп: регион)
+            case 10: // Региональный методист (скоуп: регион) — v3 фаза 2
+                    // Управленческие роли уровня региона без расширения профиля;
+                    // весь скоуп — в unics_user_org (region_id).
                 break;
 
             case 7: // Учащийся
@@ -95,6 +95,7 @@ class unics_user_manager {
                     'qualification'   => $data['qualification'] ?? null,
                     'grade_from'      => !empty($data['grade_from']) ? (int)$data['grade_from'] : null,
                     'grade_to'        => !empty($data['grade_to'])   ? (int)$data['grade_to']   : null,
+                    'teacher_type'    => self::clean_teacher_type($data['teacher_type'] ?? null),
                 ]);
 
                 if ($cat_ids) {
@@ -174,13 +175,15 @@ class unics_user_manager {
         $sql = "SELECT u.id, u.firstname, u.lastname, u.middlename,
                        u.email, u.username, uo.unics_role, uo.organization_id,
                        COALESCE(o.name, d.name, rg.name) AS org_name,
-                       s.id AS student_id, s.class_number, s.class_letter, s.archived_at
+                       s.id AS student_id, s.class_number, s.class_letter, s.archived_at,
+                       t.teacher_type
                 FROM {user} u
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
                 LEFT JOIN {unics_organizations} o ON o.id = uo.organization_id
                 LEFT JOIN {unics_districts}     d ON d.id = uo.district_id
                 LEFT JOIN {unics_regions}      rg ON rg.id = uo.region_id
                 LEFT JOIN {unics_students}      s ON s.mdl_user_id = u.id
+                LEFT JOIN {unics_teachers}      t ON t.mdl_user_id = u.id
                 WHERE $where AND u.deleted = 0
                 ORDER BY u.lastname, u.firstname";
 
@@ -428,6 +431,9 @@ class unics_user_manager {
             if (array_key_exists('grade_to', $data)) {
                 $teacher->grade_to = !empty($data['grade_to']) ? (int)$data['grade_to'] : null;
             }
+            if (array_key_exists('teacher_type', $data)) {
+                $teacher->teacher_type = self::clean_teacher_type($data['teacher_type']);
+            }
             $DB->update_record('unics_teachers', $teacher);
         }
     }
@@ -470,6 +476,34 @@ class unics_user_manager {
     }
 
     /**
+     * Коды архетипов педагога (teacher_type) -> человекочитаемые метки.
+     * Один источник для форм (создание/редактирование) и отображения в ростере.
+     * См. [[subject-binding-design]] «Три архетипа педагога».
+     */
+    public static function teacher_type_options(): array {
+        return [
+            'subject' => get_string('teacher_type_subject', 'local_unics'),
+            'primary' => get_string('teacher_type_primary', 'local_unics'),
+            'support' => get_string('teacher_type_support', 'local_unics'),
+        ];
+    }
+
+    /** Метка архетипа по коду (пусто для NULL/неизвестного) - для отображения. */
+    public static function teacher_type_label(?string $code): string {
+        if ($code === null || $code === '') {
+            return '';
+        }
+        $opts = self::teacher_type_options();
+        return $opts[$code] ?? '';
+    }
+
+    /** Нормализует код архетипа: валидный subject/primary/support или null. */
+    private static function clean_teacher_type($v): ?string {
+        $v = is_string($v) ? trim($v) : '';
+        return in_array($v, ['subject', 'primary', 'support'], true) ? $v : null;
+    }
+
+    /**
      * Деактивировать пользователя (soft-delete через mdl_user.suspended).
      */
     public static function suspend_user(int $mdl_user_id): void {
@@ -488,7 +522,7 @@ class unics_user_manager {
                        s.id AS student_id, s.category AS student_category, s.ovz_type,
                        s.difficulty_level, s.class_number, s.class_letter, s.special_needs,
                        t.id AS teacher_id, t.subjects, t.qualification,
-                       t.grade_from, t.grade_to
+                       t.grade_from, t.grade_to, t.teacher_type
                 FROM {user} u
                 JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
                 LEFT JOIN {unics_students} s ON s.mdl_user_id = u.id
@@ -518,7 +552,7 @@ class unics_user_manager {
 
         $map = [
             1 => 'region_admin',        // Региональный администратор (скоуп: регион)
-            2 => 'district_admin',      // Районный администратор (скоуп: район)
+            // код 2 (district_admin) удалён в v3 [[role-model-v3-2026-06-11]] — слит в district_methodist (9)
             3 => 'org_admin',           // Адм. организации — legacy, из селекта убран, маппинг сохранён
             4 => 'methodist',           // Методист организации (скоуп: организация)
             5 => 'editingteacher',      // Педагог, создающий курсы (скоуп: организация)
@@ -526,6 +560,7 @@ class unics_user_manager {
             7 => 'student',             // Учащийся
             8 => 'parent',              // Родитель
             9 => 'district_methodist',  // Районный методист (скоуп: район)
+            10 => 'region_methodist',   // Региональный методист (скоуп: регион) — v3 фаза 2
         ];
 
         if (!isset($map[$unics_role])) {

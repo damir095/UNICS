@@ -295,6 +295,8 @@
         }
     }
 
+    // Правая панель - собственный UI переписки (M2.1): заголовок / лента / композер.
+    // Колонка фиксированной высоты: лента скроллится, композер прилипает снизу.
     &__chat {
         flex: 1 1 auto;
         min-width: 0;
@@ -302,17 +304,100 @@
         border-radius: var(--unics-radius);
         overflow: hidden;
         background: var(--unics-surface);
+        display: flex;
+        flex-direction: column;
+        height: 70vh;
     }
 
-    &__chat-frame {
-        width: 100%;
-        height: 70vh;
+    &__thread-header {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: var(--unics-space-2);
+        padding: var(--unics-space-2) var(--unics-space-3);
+        border-bottom: 1px solid var(--unics-border);
+        background: var(--unics-bg, #f7f4f2);
+    }
+
+    &__thread-title {
+        font-weight: 600;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__thread-sub {
+        font-weight: 400;
+        font-size: 0.9rem;
+        color: var(--unics-muted, #6c757d);
+    }
+
+    &__thread {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: var(--unics-space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--unics-space-2);
+    }
+
+    &__state {
+        margin: auto;
+        text-align: center;
+        padding: var(--unics-space-4);
+        color: var(--unics-muted, #6c757d);
+    }
+
+    &__composer {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: flex-end;
+        gap: var(--unics-space-2);
+        padding: var(--unics-space-2) var(--unics-space-3);
+        border-top: 1px solid var(--unics-border);
+        background: var(--unics-surface);
+        margin: 0;
+    }
+
+    &__input {
+        flex: 1 1 auto;
+        min-height: 2.75rem;
+        max-height: 8rem;
+        resize: vertical;
+    }
+
+    &__send {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    // Плашка «новые сообщения» (M2.2): центрированная пилюля между лентой и
+    // композером. По умолчанию hidden; JS показывает её, когда при поллинге
+    // пришли новые сообщения, а пользователь прокручен вверх.
+    &__jump {
+        flex: 0 0 auto;
+        align-self: center;
+        margin: var(--unics-space-1) auto;
+        padding: var(--unics-space-1) var(--unics-space-4);
         border: 0;
-        display: block;
+        border-radius: var(--unics-radius-pill);
+        background: var(--unics-primary-deep);
+        color: #fff;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        box-shadow: var(--unics-shadow-md);
+        cursor: pointer;
+
+        &:hover,
+        &:focus {
+            background: var(--unics-primary-hover);
+            color: #fff;
+        }
     }
 
     &__placeholder {
-        height: 70vh;
+        flex: 1 1 auto;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -331,6 +416,82 @@
         position: sticky;
         top: 0;
         z-index: 1;
+    }
+
+    // Кнопка «показать ранние» (M2.3): тонкая полоса над лентой; JS показывает её,
+    // когда есть что грузить выше. Прокрутка ленты сохраняется при подгрузке.
+    &__earlier {
+        flex: 0 0 auto;
+        border: 0;
+        border-bottom: 1px solid var(--unics-border);
+        background: var(--unics-bg, #f7f4f2);
+        color: var(--unics-primary-text);
+        padding: var(--unics-space-2);
+        font-size: 0.95rem;
+        cursor: pointer;
+
+        &:hover,
+        &:focus {
+            background: var(--unics-surface);
+        }
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    // Разделитель дат в ленте (M2.3): центрированная подпись «Сегодня / Вчера / 8 июня».
+    &__date-sep {
+        align-self: center;
+        margin: var(--unics-space-1) auto;
+
+        span {
+            display: inline-block;
+            padding: 0 var(--unics-space-3);
+            border-radius: var(--unics-radius-pill);
+            background: var(--unics-bg, #f7f4f2);
+            border: 1px solid var(--unics-border);
+            color: var(--unics-muted, #6c757d);
+            font-size: 0.8rem;
+            line-height: 1.6;
+        }
+    }
+
+    // Панель быстрого ввода (M2.3): готовые фразы над композером (ученику с ОВЗ).
+    &__quick {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--unics-space-1);
+        padding: var(--unics-space-2) var(--unics-space-3) 0;
+    }
+
+    // Кнопка диктовки (voice_input/A1) в композере: убрать вертикальные отступы,
+    // чтобы вписаться в flex-строку (align-items: flex-end).
+    &__composer .unics-voice-wrap {
+        margin: 0;
+        flex: 0 0 auto;
+    }
+}
+
+// Кнопка быстрой фразы (M2.3): пилюля; крупная цель, AA-контраст текста.
+.unics-quick-btn {
+    border: 1px solid var(--unics-border);
+    border-radius: var(--unics-radius-pill);
+    background: var(--unics-surface);
+    color: var(--unics-primary-text);
+    padding: var(--unics-space-1) var(--unics-space-3);
+    min-height: 2.5rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover,
+    &:focus {
+        background: var(--unics-primary-deep);
+        color: #fff;
+        border-color: var(--unics-primary-deep);
     }
 }
 
@@ -387,4 +548,109 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
+
+    // Бейдж непрочитанного (M2.2): красная пилюля справа от имени. Наполняется JS
+    // из get_conversations; hidden, когда непрочитанного нет.
+    &__badge {
+        flex: 0 0 auto;
+        min-width: 1.5rem;
+        padding: 0 var(--unics-space-1);
+        border-radius: var(--unics-radius-pill);
+        background: var(--unics-error);
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        line-height: 1.5rem;
+        text-align: center;
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    // На активном (оранжевом) контакте бейдж - белый с тёмно-красным текстом,
+    // чтобы не сливаться с фоном.
+    &--active &__badge {
+        background: #fff;
+        color: var(--unics-error);
+    }
+
+    // Беседа класса (M1) - визуально отделяем от персональных контактов.
+    &--class &__avatar {
+        background: var(--unics-primary-deep);
+        font-size: 1.15rem;
+    }
+
+    &--class.unics-contact--active &__avatar {
+        background: #fff;
+    }
+
+    // Аватар групповой беседы в заголовке переписки (вне списка контактов).
+    &__avatar--group {
+        background: var(--unics-primary-deep);
+        font-size: 1.15rem;
+    }
+}
+
+// ----------------------------------------------------------------
+// Пузыри сообщений (M2.1). Свои - справа на --unics-primary-deep (контраст 6:1,
+// белый текст); чужие - слева на светлой поверхности. Различие НЕ только цветом:
+// выравнивание + (в группе) подпись автора.
+// ----------------------------------------------------------------
+.unics-msg {
+    display: flex;
+
+    &--own {
+        justify-content: flex-end;
+    }
+
+    &--other {
+        justify-content: flex-start;
+    }
+
+    &__bubble {
+        max-width: 78%;
+        padding: var(--unics-space-2) var(--unics-space-3);
+        border-radius: var(--unics-radius-lg);
+        line-height: 1.5;
+    }
+
+    &--own &__bubble {
+        background: var(--unics-primary-deep);
+        color: #fff;
+    }
+
+    &--other &__bubble {
+        background: var(--unics-bg, #f7f4f2);
+        border: 1px solid var(--unics-border);
+    }
+
+    &__author {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--unics-primary-text);
+        margin-bottom: 0.15rem;
+    }
+
+    &__text {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    &__time {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        margin-top: 0.15rem;
+        text-align: right;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// AA-безопасный акцентный текст: Bootstrap .text-primary = #F26545 (3.12:1 на белом,
+// провал WCAG 1.4.3). Привязываем к --unics-primary-text, который тема-зависим
+// (светлая #C44A2F, темная #ff8a6e, контраст #9a3216, акценты - свой базовый цвет).
+// -----------------------------------------------------------------------------
+.text-primary {
+    color: var(--unics-primary-text) !important;
 }

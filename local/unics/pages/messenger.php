@@ -132,6 +132,11 @@ if ($role === 'student') {
     }
 }
 
+// M1: групповые беседы класса (с педагогом). Для учащегося - его класс,
+// для педагога - все классы, где у него есть ученики. Заодно лениво создаёт/
+// синхронизирует беседы. Для родителя/методиста/админа - пусто.
+$class_convs = \local_unics\class_chat_manager::get_user_class_conversations((int)$USER->id, $role);
+
 // Допустимые для переписки id = только из контактов под роль (защита,
 // чтобы во фрейм нельзя было подставить произвольного пользователя).
 $allowed_ids = [];
@@ -140,8 +145,20 @@ foreach ($groups as $people) {
         $allowed_ids[(int)$p->id] = true;
     }
 }
+$allowed_conv_ids = [];
+foreach ($class_convs as $cc) {
+    $allowed_conv_ids[(int)$cc->convid] = true;
+}
 $to = optional_param('to', 0, PARAM_INT);
 if ($to && !isset($allowed_ids[$to])) {
+    $to = 0;
+}
+// conv = id групповой беседы класса (взаимоисключающе с to).
+$conv = optional_param('conv', 0, PARAM_INT);
+if ($conv && !isset($allowed_conv_ids[$conv])) {
+    $conv = 0;
+}
+if ($conv) {
     $to = 0;
 }
 
@@ -165,7 +182,7 @@ if ($role === 'admin') {
     exit;
 }
 
-$has_any = false;
+$has_any = !empty($class_convs);
 foreach ($groups as $people) {
     if (!empty($people)) { $has_any = true; break; }
 }
@@ -182,6 +199,26 @@ echo '<div class="unics-messenger">';
 
 // --- Левая панель: контакты ---
 echo '<div class="unics-messenger__contacts">';
+
+// Беседы класса - отдельной группой вверху списка.
+if (!empty($class_convs)) {
+    echo '<div class="unics-messenger__group-title">Беседы класса ('
+       . count($class_convs) . ')</div>';
+    foreach ($class_convs as $cc) {
+        $cactive = ((int)$cc->convid === $conv);
+        $chref   = new moodle_url('/local/unics/pages/messenger.php', ['conv' => $cc->convid]);
+        echo '<a href="' . $chref . '" class="unics-contact unics-contact--class'
+           . ($cactive ? ' unics-contact--active' : '') . '" data-convid="' . (int)$cc->convid . '"'
+           . ($cactive ? ' aria-current="true"' : '') . '>';
+        echo '<span class="unics-contact__avatar" aria-hidden="true">&#128101;</span>';
+        echo '<span class="unics-contact__name">' . s($cc->name)
+           . ' <span class="text-muted">(' . (int)$cc->count . ')</span></span>';
+        // Бейдж непрочитанного (M2.2) - наполняется JS из get_conversations.
+        echo '<span class="unics-contact__badge" hidden></span>';
+        echo '</a>';
+    }
+}
+
 foreach ($groups as $title => $people) {
     if (empty($people)) {
         continue;
@@ -198,28 +235,150 @@ foreach ($groups as $title => $people) {
         $href    = new moodle_url('/local/unics/pages/messenger.php', ['to' => $person->id]);
 
         echo '<a href="' . $href . '" class="unics-contact'
-           . ($active ? ' unics-contact--active' : '') . '">';
+           . ($active ? ' unics-contact--active' : '') . '" data-userid="' . (int)$person->id . '"'
+           . ($active ? ' aria-current="true"' : '') . '>';
         echo '<span class="unics-contact__avatar">' . s($initial) . '</span>';
         echo '<span class="unics-contact__name">' . s($name) . '</span>';
+        // Бейдж непрочитанного (M2.2) - наполняется JS из get_conversations.
+        echo '<span class="unics-contact__badge" hidden></span>';
         echo '</a>';
     }
 }
 echo '</div>';
 
-// --- Правая панель: переписка (штатный Moodle messaging во фрейме) ---
+// --- Правая панель: переписка (собственный UI, M2.1) ---
+// Заменяет iframe штатного виджета: чтение и отправка через внешние функции
+// core_message_* (ajax => true) из AMD-модуля messenger_app. См.
+// [[messenger-ui-design]].
 echo '<div class="unics-messenger__chat">';
-if ($to) {
-    $frame_src = (new moodle_url('/message/index.php', ['id' => $to]))->out(false);
-    echo '<iframe class="unics-messenger__chat-frame" src="' . $frame_src . '" '
-       . 'title="Переписка"></iframe>';
+
+// Метаданные активной беседы (одна на загрузку: либо группа $conv, либо личный $to).
+$active_convid    = 0;
+$active_userid    = 0;
+$active_isgroup   = 0;
+$active_name      = '';
+$active_initials  = '';
+$active_membercnt = 0;
+
+if ($conv) {
+    // Беседа класса - имя/счётчик уже посчитаны в $class_convs.
+    $active_convid  = $conv;
+    $active_isgroup = 1;
+    foreach ($class_convs as $cc) {
+        if ((int)$cc->convid === $conv) {
+            $active_name      = (string)$cc->name;
+            $active_membercnt = (int)$cc->count;
+            break;
+        }
+    }
+} else if ($to) {
+    // Личная переписка - резолвим существующую беседу (может ещё не быть -> 0).
+    $active_userid = $to;
+    $existing = \core_message\api::get_conversation_between_users([(int)$USER->id, $to]);
+    $active_convid = $existing ? (int)$existing : 0;
+    // Имя/инициалы из уже загруженных контактов ($groups keyed by user id).
+    foreach ($groups as $people) {
+        if (isset($people[$to])) {
+            $p = $people[$to];
+            $active_name     = trim($p->lastname . ' ' . $p->firstname);
+            $active_initials = core_text::strtoupper(
+                core_text::substr((string)$p->lastname, 0, 1)
+                . core_text::substr((string)$p->firstname, 0, 1));
+            break;
+        }
+    }
+}
+
+if ($active_convid || $active_userid) {
+    // Заголовок беседы.
+    echo '<div class="unics-messenger__thread-header">';
+    if ($active_isgroup) {
+        echo '<span class="unics-contact__avatar unics-contact__avatar--group" '
+           . 'aria-hidden="true">&#128101;</span>';
+    } else {
+        echo '<span class="unics-contact__avatar">' . s($active_initials) . '</span>';
+    }
+    echo '<span class="unics-messenger__thread-title">' . s($active_name);
+    if ($active_isgroup && $active_membercnt) {
+        echo ' <span class="unics-messenger__thread-sub">('
+           . $active_membercnt . ' участников)</span>';
+    }
+    echo '</span>';
+    echo '</div>';
+
+    // Кнопка подгрузки более ранних сообщений (M2.3). JS показывает её, когда на
+    // загрузке пришла полная страница (есть что грузить выше); скролл сохраняется.
+    echo '<button type="button" id="unics-thread-earlier" '
+       . 'class="unics-messenger__earlier" hidden>Показать ранние сообщения</button>';
+
+    // Лента сообщений - наполняется JS.
+    echo '<div id="unics-thread" class="unics-messenger__thread" role="log" '
+       . 'aria-live="polite" aria-relevant="additions" '
+       . 'aria-label="Сообщения беседы" tabindex="0">';
+    echo '<div class="unics-messenger__state">Загрузка сообщений...</div>';
+    echo '</div>';
+
+    // Плашка «новые сообщения» (M2.2): показывается JS, когда при поллинге пришли
+    // новые сообщения, а пользователь прокручен вверх. Клик - вниз ленты.
+    echo '<button type="button" id="unics-thread-jump" '
+       . 'class="unics-messenger__jump" hidden>'
+       . 'Новые сообщения <span aria-hidden="true">&#8595;</span></button>';
+
+    // Панель быстрого ввода (M2.3, Q3): готовые фразы для детей с ОВЗ, кому трудно
+    // набирать. Только ученику. Без эмодзи (предпочтение пользователя). Клик
+    // вставляет фразу в поле ввода (JS, делегирование по .unics-quick-btn).
+    if ($role === 'student') {
+        $quick_phrases = [
+            'Здравствуйте!',
+            'Спасибо!',
+            'Не понял(а), повторите, пожалуйста',
+            'Мне нужна помощь',
+            'У меня получилось!',
+            'Можно вопрос?',
+            'До свидания!',
+        ];
+        echo '<div class="unics-messenger__quick" role="group" aria-label="Быстрые фразы">';
+        foreach ($quick_phrases as $phrase) {
+            echo '<button type="button" class="unics-quick-btn" data-insert="'
+               . s($phrase) . '">' . s($phrase) . '</button>';
+        }
+        echo '</div>';
+    }
+
+    // Композер. Решение Q2: отправка ТОЛЬКО кнопкой, Enter = новая строка
+    // (без случайных отправок - безопаснее для детей с ОВЗ).
+    echo '<form id="unics-composer" class="unics-messenger__composer" autocomplete="off">';
+    echo '<textarea id="unics-composer-input" class="unics-messenger__input form-control" '
+       . 'rows="2" aria-label="Новое сообщение" '
+       . 'placeholder="Напишите сообщение и нажмите кнопку Отправить"></textarea>';
+    echo '<button type="submit" id="unics-composer-send" '
+       . 'class="btn btn-primary unics-cta unics-messenger__send">Отправить</button>';
+    echo '</form>';
 } else {
     echo '<div class="unics-messenger__placeholder">'
-       . '<div><p class="mb-1"><strong>Выберите контакт слева</strong></p>'
+       . '<div><p class="mb-1"><strong>Выберите беседу слева</strong></p>'
        . '<p class="text-muted small mb-0">Переписка откроется здесь, '
        . 'не покидая страницу.</p></div></div>';
 }
 echo '</div>';
 
 echo '</div>'; // .unics-messenger
+
+// AMD-клиент запускаем ВСЕГДА, когда показан мессенджер: даже без открытой беседы
+// он поллит бейджи непрочитанного по левому списку (get_conversations). Если беседа
+// открыта - дополнительно ведёт ленту + живой поллинг активной беседы (M2.2).
+$PAGE->requires->js_call_amd('local_unics/messenger_app', 'init', [[
+    'currentuserid' => (int)$USER->id,
+    'convid'        => $active_convid,
+    'userid'        => $active_userid,
+    'isgroup'       => $active_isgroup,
+]]);
+
+// Микрофон (M2.3): переиспользуем voice_input (A1) - он навешивает кнопку диктовки
+// на textarea композера. Только ученику и только если админ включил голосовой ввод
+// (тот же тумблер, что на заданиях/тестах). Web Speech на стороне браузера.
+if ($role === 'student' && get_config('local_unics', 'voice_input_enabled')) {
+    $PAGE->requires->js_call_amd('local_unics/voice_input', 'init', []);
+}
 
 echo $OUTPUT->footer();

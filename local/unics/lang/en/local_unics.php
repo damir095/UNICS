@@ -29,7 +29,8 @@ $string['role_org_admin']          = 'Администратор организ�
 $string['role_methodist']          = 'Методист организации';      // код 4
 $string['role_district_methodist'] = 'Муниципальный методист';     // код 9
 $string['role_region_admin']       = 'Региональный администратор'; // код 1
-$string['role_district_admin']     = 'Муниципальный администратор';// код 2
+$string['role_region_methodist']   = 'Региональный методист';      // код 10 (v3 фаза 2)
+// role_district_admin (код 2) удалён в v3 [[role-model-v3-2026-06-11]] — слит в district_methodist (9)
 
 // Поля учащегося
 $string['student_category']      = 'Категория учащегося';
@@ -67,6 +68,12 @@ $string['grade_to']              = 'По класс';
 $string['grade_any']             = '- любой -';
 $string['grade_range_help']      = 'Классы, с которыми работает педагог (мягкий фильтр для назначений и записи на курсы). Можно не указывать.';
 $string['err_grade_range']       = 'Нижняя граница диапазона классов не может быть больше верхней';
+$string['teacher_type']          = 'Тип педагога';
+$string['teacher_type_help']     = 'Роль педагога в школе: предметник, учитель начальных классов или специалист сопровождения. Характеристика для отображения, на доступ пока не влияет. Можно не указывать.';
+$string['teacher_type_none']     = '- не указан -';
+$string['teacher_type_subject']  = 'Предметник (5-11 классы)';
+$string['teacher_type_primary']  = 'Учитель начальных классов (1-4 классы)';
+$string['teacher_type_support']  = 'Специалист сопровождения (логопед, дефектолог, психолог)';
 
 // Список пользователей
 $string['filter_role']           = 'Фильтр по роли';

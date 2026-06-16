@@ -151,4 +151,21 @@ if ($hassiteconfig) {
             'Bys_24000' => 'Сергей (мужской)',
         ]
     ));
+
+    // Настройки доступности (A1).
+    $a11y = new admin_settingpage('local_unics_a11y', 'Доступность');
+    $ADMIN->add('local_unics_cat', $a11y);
+
+    $a11y->add(new admin_setting_heading(
+        'local_unics/voice_heading', 'Голосовой ввод ответов', ''
+    ));
+    $a11y->add(new admin_setting_configcheckbox(
+        'local_unics/voice_input_enabled',
+        'Включить голосовой ввод',
+        'Добавляет кнопку «Диктовать» к полям ответа в заданиях и тестах '
+        . '(браузерный Web Speech API). ВНИМАНИЕ: в некоторых браузерах аудио '
+        . 'обрабатывается на внешнем сервере - убедитесь, что это допустимо политикой '
+        . 'обработки персональных данных. По умолчанию выключено.',
+        0
+    ));
 }

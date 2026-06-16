@@ -117,9 +117,14 @@ function local_unics_is_methodist(?int $userid = null): bool {
 }
 
 /**
- * Возвращает true, если пользователь - региональный или районный администратор
- * (Moodle-роль 'region_admin' / 'district_admin'). Это управленцы со scope-доступом
- * через local/unics:manageorg, но БЕЗ системного local/unics:manage.
+ * Возвращает true, если пользователь - управленец уровня региона со scope-доступом
+ * через local/unics:manageorg, но БЕЗ системного local/unics:manage:
+ * региональный администратор ('region_admin') ИЛИ региональный методист
+ * ('region_methodist', v3 фаза 2 [[role-model-v3-2026-06-11]]) - права и скоуп (регион)
+ * у них совпадают, обе получают управленческое меню. Различие - организационное
+ * (admin = техобслуживание, methodist = распределение курсов/отчётность) и в заголовке меню.
+ * Муниципальный администратор (district_admin) удалён в v3 — муниципальный уровень ведёт
+ * district_methodist (методическое меню), см. local_unics_is_methodist().
  *
  * @param int|null $userid id пользователя; null = текущий $USER->id
  * @return bool
@@ -129,7 +134,7 @@ function local_unics_is_scoped_admin(?int $userid = null): bool {
     if ($userid === null) {
         $userid = (int)$USER->id;
     }
-    return local_unics_user_has_role($userid, ['region_admin', 'district_admin']);
+    return local_unics_user_has_role($userid, ['region_admin', 'region_methodist']);
 }
 
 /**
@@ -152,10 +157,12 @@ function local_unics_is_nonediting_teacher(?int $userid = null): bool {
  * Какие коды unics_role пользователь вправе назначать при создании другого пользователя.
  * Принцип: нельзя создать роль своего уровня или выше — только нижестоящих.
  *   - системный администратор (manage) — все роли;
- *   - региональный администратор — районный администратор и ниже (не другого региона);
- *   - районный администратор — районный методист и ниже (без администраторов);
- *   - методист организации/района — только педагоги, учащиеся, родители;
+ *   - региональный администратор — региональный методист (10) и ниже (не другого региона);
+ *   - региональный методист — муниципальный методист (9) и ниже (назначает мун. методистов);
+ *   - методист организации/муниципалитета — только педагоги, учащиеся, родители;
  *   - остальные — никого.
+ * Муниципальный администратор (код 2) удалён в v3 [[role-model-v3-2026-06-11]];
+ * региональный методист (код 10) добавлен в фазе 2.
  *
  * @param int|null $userid id пользователя; null = текущий $USER->id
  * @return int[] разрешённые коды unics_role
@@ -168,12 +175,12 @@ function local_unics_creatable_roles(?int $userid = null): array {
     $ctx = context_system::instance();
 
     if (has_capability('local/unics:manage', $ctx, $userid)) {
-        return [1, 2, 9, 4, 5, 6, 7, 8];
+        return [1, 10, 9, 4, 5, 6, 7, 8];
     }
     if (local_unics_user_has_role($userid, ['region_admin'])) {
-        return [2, 9, 4, 5, 6, 7, 8];
+        return [10, 9, 4, 5, 6, 7, 8];
     }
-    if (local_unics_user_has_role($userid, ['district_admin'])) {
+    if (local_unics_user_has_role($userid, ['region_methodist'])) {
         return [9, 4, 5, 6, 7, 8];
     }
     if (local_unics_is_methodist($userid)) {
@@ -333,25 +340,78 @@ function local_unics_require_manage_or_scope_user(int $target_mdl_user_id): void
 function local_unics_extend_settings_navigation(settings_navigation $settingsnav, context $context): void {
     global $DB, $USER, $PAGE;
 
-    if (!$DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+    // На странице (mod_page) - пункт «Скачать PDF» во «Ещё». Для ВСЕХ, кто видит
+    // модуль (педагог/методист/админ и ученик: офлайн-чтение, печать крупным
+    // шрифтом - линия доступности). Ставим до студенческой ветки (та делает return).
+    // cmid берём из контекста модуля - $PAGE->cm на этом этапе ещё не заполнен.
+    if ($context instanceof context_module && has_capability('mod/page:view', $context)) {
+        $cmid = (int)$context->instanceid;
+        $modname = $DB->get_field_sql(
+            "SELECT m.name FROM {course_modules} cm JOIN {modules} m ON m.id = cm.module WHERE cm.id = ?",
+            [$cmid]
+        );
+        if ($modname === 'page') {
+            $target = $settingsnav->find('modulesettings', null) ?: $settingsnav;
+            $target->add(
+                'УНИКС: Скачать PDF',
+                new moodle_url('/local/unics/pages/umk_export.php', ['cmid' => $cmid]),
+                navigation_node::TYPE_SETTING,
+                null,
+                'local_unics_umk_export',
+                new pix_icon('t/download', '')
+            );
+        }
+    }
+
+    // Ветка «учащийся»: локдаун профиля (скрываем настройки, редиректим с edit).
+    if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+        // Редиректим со страниц редактирования профиля (совместимо с PHP 7.x)
+        $path = $PAGE->url->get_path();
+        if (strpos($path, '/user/edit.php') !== false || strpos($path, '/user/editadvanced.php') !== false) {
+            redirect(new moodle_url('/local/unics/pages/dashboard.php'));
+        }
+
+        // Скрываем настройки профиля в навигации (null = искать по ключу без ограничения по типу)
+        $usersettings = $settingsnav->find('usersettings', null);
+        if ($usersettings) {
+            foreach (['editprofile', 'useraccount', 'usermessaging', 'userpreferences',
+                      'security', 'contactable', 'blog', 'mnet_loginas', 'myprofile'] as $key) {
+                $node = $usersettings->find($key, null);
+                if ($node) {
+                    $node->remove();
+                }
+            }
+        }
         return;
     }
 
-    // Редиректим со страниц редактирования профиля (совместимо с PHP 7.x)
-    $path = $PAGE->url->get_path();
-    if (strpos($path, '/user/edit.php') !== false || strpos($path, '/user/editadvanced.php') !== false) {
-        redirect(new moodle_url('/local/unics/pages/dashboard.php'));
-    }
-
-    // Скрываем настройки профиля в навигации (null = искать по ключу без ограничения по типу)
-    $usersettings = $settingsnav->find('usersettings', null);
-    if ($usersettings) {
-        foreach (['editprofile', 'useraccount', 'usermessaging', 'userpreferences',
-                  'security', 'contactable', 'blog', 'mnet_loginas', 'myprofile'] as $key) {
-            $node = $usersettings->find($key, null);
-            if ($node) {
-                $node->remove();
-            }
+    // Ветка «персонал»: на странице задания (mod_assign) добавляем во «Ещё»
+    // пункт ИИ-проверки развёрнутых ответов. Гейт - mod/assign:grade в контексте
+    // модуля (педагог видит инструмент только в своих заданиях). Открывает
+    // essay_check.php в режиме «по заданию» (?cmid=).
+    //
+    // cmid берём из КОНТЕКСТА модуля, а не из $PAGE->cm: на момент построения
+    // settings-навигации $PAGE->cm ещё не заполнен (проверено), тогда как
+    // контекст модуля уже доступен.
+    if ($context instanceof context_module && has_capability('mod/assign:grade', $context)) {
+        $cmid = (int)$context->instanceid;
+        $modname = $DB->get_field_sql(
+            "SELECT m.name
+               FROM {course_modules} cm
+               JOIN {modules} m ON m.id = cm.module
+              WHERE cm.id = ?",
+            [$cmid]
+        );
+        if ($modname === 'assign') {
+            $target = $settingsnav->find('modulesettings', null) ?: $settingsnav;
+            $target->add(
+                'УНИКС: Проверить ответы ИИ',
+                new moodle_url('/local/unics/pages/essay_check.php', ['cmid' => $cmid]),
+                navigation_node::TYPE_SETTING,
+                null,
+                'local_unics_essay_check',
+                new pix_icon('i/cohort', '')
+            );
         }
     }
 }
@@ -387,13 +447,32 @@ function local_unics_extend_navigation_course(navigation_node $navigation, stdCl
 
     $items = [];
 
-    // Журнал курса — нативная capability moodle/grade:viewall в контексте курса
-    // (тот же гейт, что и сам gradebook.php).
-    if (has_capability('moodle/grade:viewall', $context)) {
+    // Журнал курса, Отчёт по курсу, Учащиеся курса, Адаптивные уровни — персонал
+    // курса (moodle/grade:viewall в контексте курса: педагог видит только свои
+    // курсы), либо методист/системный админ. Те же гейты, что и на самих страницах.
+    $is_course_staff = has_capability('moodle/grade:viewall', $context)
+        || has_capability('local/unics:manage', context_system::instance())
+        || local_unics_is_methodist();
+    if ($is_course_staff) {
         $items[] = [
             'УНИКС: Журнал курса',
             new moodle_url('/local/unics/pages/gradebook.php', ['course_id' => $course->id]),
             'local_unics_course_gradebook',
+        ];
+        $items[] = [
+            'УНИКС: Отчёт по курсу',
+            new moodle_url('/local/unics/pages/course_report.php', ['course_id' => $course->id]),
+            'local_unics_course_report',
+        ];
+        $items[] = [
+            'УНИКС: Учащиеся курса',
+            new moodle_url('/local/unics/pages/course_students.php', ['course_id' => $course->id]),
+            'local_unics_course_students',
+        ];
+        $items[] = [
+            'УНИКС: Адаптивные уровни',
+            new moodle_url('/local/unics/pages/course_levels.php', ['course_id' => $course->id]),
+            'local_unics_course_levels',
         ];
     }
 
@@ -410,6 +489,12 @@ function local_unics_extend_navigation_course(navigation_node $navigation, stdCl
             'УНИКС: Сгенерировать УМК',
             new moodle_url('/local/unics/pages/generate_umk.php', ['course_id' => $course->id]),
             'local_unics_course_umk',
+        ];
+        // Стартовая диагностика: пометить входной тест (определяет стартовый уровень).
+        $items[] = [
+            'УНИКС: Входная диагностика',
+            new moodle_url('/local/unics/pages/course_diagnostic.php', ['course_id' => $course->id]),
+            'local_unics_course_diagnostic',
         ];
         // B5: пометить итоговый экзамен курса (+ открытые пересдачи B7).
         $items[] = [
@@ -452,6 +537,15 @@ function local_unics_extend_navigation(global_navigation $nav) {
             'local_unics_messenger',
             new pix_icon('t/message', '')
         );
+        // A1: Доступность — персональные темы/контраст/шрифт/акцент. Для всех ролей.
+        $nav->add(
+            'Доступность',
+            new moodle_url('/local/unics/pages/accessibility.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_accessibility',
+            new pix_icon('t/preferences', '')
+        );
     }
 
     // Учащийся - проверяем по БД в первую очередь, до любых проверок возможностей.
@@ -479,6 +573,13 @@ function local_unics_extend_navigation(global_navigation $nav) {
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_achievements'
+        );
+        $branch->add(
+            'Мой маршрут',
+            new moodle_url('/local/unics/pages/my_path.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_my_path'
         );
 
         // Ссылки «Заметки педагога» для активного курса
@@ -544,8 +645,13 @@ function local_unics_extend_navigation(global_navigation $nav) {
     // Региональный / районный администратор: меню управленца (без создания курсов и УМК).
     // Закрывает прежний пробел — region_admin раньше не получал никакого меню.
     if ($is_scoped_admin) {
+        // Заголовок ветки зависит от роли: региональный методист (v3 фаза 2) делит
+        // меню и права с региональным администратором, но это методическая роль.
+        $scoped_title = local_unics_user_has_role($USER->id, ['region_methodist'])
+            ? 'УНИКС - Портал регионального методиста'
+            : 'УНИКС - Портал администратора';
         $branch = $nav->add(
-            'УНИКС - Портал администратора',
+            $scoped_title,
             new moodle_url('/local/unics/pages/dashboard.php'),
             navigation_node::TYPE_CUSTOM,
             null,
@@ -576,6 +682,9 @@ function local_unics_extend_navigation(global_navigation $nav) {
         $branch->add('Отчёт по организации',
             new moodle_url('/local/unics/pages/org_report.php'),
             navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_org_report');
+        $branch->add('Статистика',
+            new moodle_url('/local/unics/pages/statistics.php'),
+            navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_statistics');
         $branch->add('Журнал',
             new moodle_url('/local/unics/pages/gradebook.php'),
             navigation_node::TYPE_CUSTOM, null, 'local_unics_sa_gradebook');
@@ -613,6 +722,19 @@ function local_unics_extend_navigation(global_navigation $nav) {
             null,
             'local_unics_methodist_assign'
         );
+        // «Организации» — для муниципального методиста (district_methodist): в v3
+        // [[role-model-v3-2026-06-11]] он принял функции удалённого муниципального
+        // администратора, включая управление организациями своего муниципалитета.
+        // Методисту организации (methodist) пункт не показываем — его скоуп = одна орг.
+        if (local_unics_user_has_role((int)$USER->id, ['district_methodist'])) {
+            $branch->add(
+                get_string('organizations', 'local_unics'),
+                new moodle_url('/local/unics/pages/organizations.php'),
+                navigation_node::TYPE_CUSTOM,
+                null,
+                'local_unics_methodist_orgs'
+            );
+        }
         $branch->add(
             'Шаблоны курсов',
             new moodle_url('/local/unics/pages/course_templates.php'),
@@ -661,6 +783,13 @@ function local_unics_extend_navigation(global_navigation $nav) {
             navigation_node::TYPE_CUSTOM,
             null,
             'local_unics_methodist_org_report'
+        );
+        $branch->add(
+            'Статистика',
+            new moodle_url('/local/unics/pages/statistics.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_methodist_statistics'
         );
         $branch->add(
             'Журнал',
@@ -818,6 +947,152 @@ function local_unics_extend_navigation(global_navigation $nav) {
             null,
             'local_unics_org_report'
         );
+        $reports->add(
+            'Статистика',
+            new moodle_url('/local/unics/pages/statistics.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_statistics'
+        );
 
     }
+}
+
+// =============================================================================
+// A1. Доступность (per-user темы + голосовой ввод) — [[accessibility-features-design]]
+// =============================================================================
+
+/**
+ * Допустимые значения предпочтений доступности.
+ * Используется и при чтении (валидация), и формой accessibility.php (рендер опций).
+ *
+ * @return array<string, string[]>
+ */
+function local_unics_a11y_allowed_values(): array {
+    return [
+        'theme'    => ['light', 'dark'],
+        'contrast' => ['0', '1'],
+        'font'     => ['normal', 'large', 'xlarge'],
+        'accent'   => ['default', 'blue', 'green', 'purple'],
+    ];
+}
+
+/**
+ * Читает предпочтения доступности текущего (или указанного) пользователя
+ * из Moodle user preferences. Невалидные/отсутствующие значения → дефолт.
+ *
+ * @param int|null $userid id пользователя; null = текущий
+ * @return array{theme:string, contrast:string, font:string, accent:string}
+ */
+function local_unics_a11y_get_prefs(?int $userid = null): array {
+    $allowed = local_unics_a11y_allowed_values();
+    $defaults = ['theme' => 'light', 'contrast' => '0', 'font' => 'normal', 'accent' => 'default'];
+    $prefs = [];
+    foreach ($defaults as $key => $def) {
+        $val = get_user_preferences('local_unics_a11y_' . $key, $def, $userid);
+        $prefs[$key] = in_array($val, $allowed[$key], true) ? $val : $def;
+    }
+    return $prefs;
+}
+
+/**
+ * Callback ядра Moodle: вызывается при построении <head> на каждой странице.
+ *
+ * Делает две вещи:
+ *  1. Доступность — по предпочтениям пользователя вешает классы на <body>
+ *     (тёмная схема / контраст / акцент) и возвращает инлайн-стиль масштаба шрифта
+ *     (на <html>, т.к. rem считается от корня, а классы мы вешаем на body).
+ *  2. Голосовой ввод — если включён админом и страница это assign/quiz, подключает
+ *     AMD-модуль, навешивающий кнопку «Диктовать» на текстовые поля ответа.
+ *
+ * @return string HTML/стиль для вставки в <head>
+ */
+function local_unics_before_standard_html_head(): string {
+    global $PAGE;
+
+    if (!isloggedin() || isguestuser()) {
+        return '';
+    }
+
+    $out = '';
+
+    // --- 1. Доступность: классы на <html> + масштаб шрифта. ---
+    // Классы вешаем на <html> инлайн-скриптом в <head>, а НЕ через
+    // $PAGE->add_body_class(): к моменту вызова этого callback'а страница уже в
+    // состоянии PRINTING_HEADER, и add_body_class бросает coding_exception.
+    // Скрипт в <head> отрабатывает синхронно до отрисовки body — без мигания.
+    $prefs = local_unics_a11y_get_prefs();
+    $classes = [];
+    if ($prefs['theme'] === 'dark') {
+        $classes[] = 'unics-a11y-dark';
+    }
+    if ($prefs['contrast'] === '1') {
+        $classes[] = 'unics-a11y-contrast';
+    }
+    if ($prefs['accent'] !== 'default') {
+        $classes[] = 'unics-a11y-accent-' . $prefs['accent'];
+    }
+    if ($classes) {
+        $json = json_encode($classes);
+        $out .= '<script>(function(c){var e=document.documentElement;'
+              . 'c.forEach(function(x){e.classList.add(x);});})(' . $json . ');</script>' . "\n";
+    }
+    if ($prefs['font'] !== 'normal') {
+        $scale = $prefs['font'] === 'xlarge' ? '125%' : '112.5%';
+        $out .= '<style id="unics-a11y-font">html{font-size:' . $scale . ';}</style>' . "\n";
+    }
+
+    // --- 2. Голосовой ввод (Web Speech API). ---
+    if (get_config('local_unics', 'voice_input_enabled')) {
+        $pagetype = (string)$PAGE->pagetype;
+        // Страницы ответа: онлайн-текст задания и попытка теста.
+        $voicepages = ['mod-assign-view', 'mod-quiz-attempt'];
+        if (in_array($pagetype, $voicepages, true)) {
+            try {
+                $PAGE->requires->js_call_amd('local_unics/voice_input', 'init');
+            } catch (\Throwable $e) {
+                // Нефатально — кнопка просто не появится.
+            }
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * Хук навбара: иконки УНИКС рядом с колокольчиком уведомлений.
+ *
+ * Moodle вызывает `*_render_navbar_output` для каждого плагина из
+ * `core_renderer::navbar_plugin_output()` (рядом с попап'ами сообщений/уведомлений).
+ * Добавляем две иконки: «Сообщения» (наш мессенджер взамен скрытого нативного) и
+ * «Доступность» (тема/контраст/шрифт - быстрый доступ для детей с ОВЗ). Те же
+ * core-иконки, что и в боковом меню (`t/message`, `t/preferences`).
+ *
+ * @param \renderer_base $output renderer ядра
+ * @return string HTML
+ */
+function local_unics_render_navbar_output(\renderer_base $output): string {
+    if (!isloggedin() || isguestuser()) {
+        return '';
+    }
+
+    $items = [
+        ['/local/unics/pages/messenger.php',     't/message',             'Сообщения'],
+        ['/local/unics/pages/accessibility.php', 'e/accessibility_checker', 'Доступность'],
+    ];
+
+    $links = '';
+    foreach ($items as [$path, $pix, $label]) {
+        $links .= html_writer::link(
+            new moodle_url($path),
+            $output->pix_icon($pix, $label),
+            [
+                'class'      => 'nav-link unics-navbar-link',
+                'title'      => $label,
+                'aria-label' => $label,
+            ]
+        );
+    }
+
+    return html_writer::div($links, 'd-flex align-items-center unics-navbar-actions');
 }

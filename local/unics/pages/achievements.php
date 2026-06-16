@@ -93,16 +93,19 @@ foreach ($badge_info as $badge_type => $info) {
     echo '<div class="col-lg-3 col-sm-6 mb-4">';
     echo '<div class="card h-100 ' . $border_class . ' ' . $bg_class . ' text-center shadow-sm">';
     echo '<div class="card-body d-flex flex-column align-items-center py-4">';
-    // Фиксированная высота иконки — чтобы заголовки всех карточек начинались на одном уровне
-    // независимо от размера эмодзи.
-    echo '<div style="font-size:3.5rem;line-height:1;height:4.5rem;display:flex;align-items:center;justify-content:center;' . $opacity . '">' . $info['icon'] . '</div>';
+    // Фиксированная высота иконки — чтобы заголовки всех карточек начинались на одном уровне.
+    $badge_pic = !empty($info['icon_key'])
+        ? '<img src="' . $OUTPUT->image_url('shop/' . $info['icon_key'], 'local_unics')
+          . '" width="72" height="72" alt="">'
+        : $info['icon'];
+    echo '<div style="height:4.5rem;display:flex;align-items:center;justify-content:center;' . $opacity . '">' . $badge_pic . '</div>';
     echo '<h5 class="card-title mt-3 mb-1">' . htmlspecialchars($info['name']) . '</h5>';
     echo '<p class="card-text text-muted small mb-3">' . htmlspecialchars($info['desc']) . '</p>';
     // mt-auto прижимает бейдж к низу карточки → у всех карточек он на одной линии.
     if ($awarded) {
         echo '<span class="badge badge-success px-3 py-2 mt-auto">Получен ' . $awarded_date . '</span>';
     } else {
-        echo '<span class="badge badge-secondary px-3 py-2 mt-auto">Ещё не получен</span>';
+        echo '<span class="badge badge-secondary px-3 py-2 mt-auto">Еще не получен</span>';
     }
     echo '</div></div>';
     echo '</div>';
@@ -130,7 +133,7 @@ if (optional_param('recheck', 0, PARAM_INT) && confirm_sesskey() && ($is_admin |
     if ($new_badges) {
         $names = [];
         foreach ($new_badges as $bt) {
-            $names[] = $badge_info[$bt]['icon'] . ' ' . $badge_info[$bt]['name'];
+            $names[] = $badge_info[$bt]['name'];
         }
         echo $OUTPUT->notification('Новые значки: ' . implode(', ', $names), 'success');
     } else {

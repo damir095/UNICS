@@ -119,6 +119,25 @@ class topic_retry_manager {
         ]);
 
         self::notify($userid, (int)$cm->course, $cmid, $grade, $grademax);
+
+        // Адаптация маршрута (стадия цикла «Адаптация маршрута»): авто-шаг ИОМ
+        // «вернуться к теме» (source=adaptive) для УНИКС-учащегося. Дедуп - внутри
+        // path_manager. Тема выводится из имени теста («<Тема> - тест» -> «<Тема>»).
+        // Нефатально: маршрут не должен валить обработку B2.
+        try {
+            $student = $DB->get_record('unics_students', ['mdl_user_id' => $userid], 'id, difficulty_level');
+            if ($student) {
+                $topic = preg_replace('/\s*-\s*тест\s*$/ui', '', self::quiz_name($cmid));
+                path_manager::add_adaptive_topic_step(
+                    (int)$student->id, $userid, (int)$cm->course, (string)$topic,
+                    (int)$student->difficulty_level,
+                    'Добавлено автоматически: возврат к теме после провала контрольной точки'
+                );
+            }
+        } catch (\Throwable $e) {
+            debugging('local_unics: авто-шаг ИОМ из B2 не удался: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
         return $id;
     }
 

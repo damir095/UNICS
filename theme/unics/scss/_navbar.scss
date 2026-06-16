@@ -52,15 +52,14 @@
     }
 }
 
-// Breadcrumb — тёмный текст по умолчанию.
-// --unics-dark (#292F3B) даёт ~9.7:1 на оранжевом #F26545 и ~13:1 на белом —
-// универсально читается без знания фактического фон-класса родителя.
-// Раньше пытались красить ссылки белым через `.bg-primary` — но контейнер
-// breadcrumb'а в Moodle Boost 5 НЕ `.bg-primary`, селектор не цеплялся.
+// Breadcrumb - темный текст по умолчанию.
+// --unics-text (#1F2430) дает ~4.97:1 на оранжевом хедере #F26545 (AA для
+// обычного текста) и ~14:1 на белом - читается без знания фон-класса родителя.
+// (--unics-dark #292F3B давал лишь 4.30:1 на оранжевом - провал WCAG 1.4.3 AA.)
 .breadcrumb-item,
 .breadcrumb-item.active,
 .breadcrumb-item a {
-    color: var(--unics-dark);
+    color: var(--unics-text);
 }
 .breadcrumb-item a:hover,
 .breadcrumb-item a:focus {
@@ -69,6 +68,28 @@
 .breadcrumb-item + .breadcrumb-item::before {
     color: var(--unics-dark);
     opacity: 0.55;
+}
+
+// Баннер шапки #page-header. По умолчанию Boost красит его в --unics-primary:
+// яркий оранжевый (белый текст 3.12:1 - провал) в дефолте, акцент-цвет в темах-акцентах
+// (темный текст на темном - провал), а контраст-тема перекрашивает ссылки крошек в
+// #9a3216 (на оранжевом ~2.4:1). Берем фон под контроль: всегда достаточно темный
+// --unics-header-bg + белый текст. Темная тема ставит свой темный фон сама (ниже по
+// каскаду в _accessibility), белый текст там тоже проходит.
+#page-header {
+    background-color: var(--unics-header-bg) !important;  // !important - перебиваем правило ядра Boost (#page-header = --unics-primary, выше по специфичности)
+}
+#page-header,
+#page-header h1, #page-header h2, #page-header .h1, #page-header .h2,
+#page-header a:not(.btn),
+#page-header .breadcrumb-item,
+#page-header .breadcrumb-item.active,
+#page-header .breadcrumb-item > span {
+    color: #fff !important;
+}
+#page-header .breadcrumb-item + .breadcrumb-item::before {
+    color: #fff !important;
+    opacity: 0.65;
 }
 
 // Внутри тёмного navbar (если breadcrumb там) — белый.
@@ -92,4 +113,30 @@
 // Маркер — атрибут data-region, не класс (см. message_popover.mustache:38).
 [data-region="popover-region-messages"] {
     display: none !important;
+}
+
+// Иконки УНИКС в навбаре (Сообщения + Доступность), рядом с колокольчиком.
+// Рендерятся через local_unics_render_navbar_output(). Крупная цель нажатия
+// (>=44px) и белый цвет на тёмном навбаре; ховер - акцент, как у прочих nav-link.
+.navbar .unics-navbar-actions {
+    .unics-navbar-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        color: #fff !important;
+
+        &:hover,
+        &:focus {
+            color: var(--unics-primary) !important;
+        }
+
+        .icon {
+            margin: 0;
+            font-size: 1.15rem;
+            width: auto;
+            height: auto;
+        }
+    }
 }

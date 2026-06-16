@@ -60,10 +60,15 @@ foreach ($children as $c) {
     if ($c->org_name) {
         echo '<p class="mb-1"><b>Организация:</b> ' . s($c->org_name) . '</p>';
     }
+    // Бейдж новых заметок об этом ребёнке (видимых родителю по audience).
+    $unread_notes = \local_unics\comment_manager::count_unread((int)$c->student_id, (int)$USER->id);
+    if ($unread_notes > 0) {
+        echo '<p class="mb-1"><span class="badge badge-danger">📝 ' . $unread_notes . ' новых заметок</span></p>';
+    }
     echo '</div>';
     echo '<div class="card-footer bg-white">';
     echo html_writer::link(
-        new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $c->student_id]),
+        new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $c->student_id], 'notes'),
         'Отчёт об успеваемости',
         ['class' => 'btn btn-primary btn-sm btn-block']
     );

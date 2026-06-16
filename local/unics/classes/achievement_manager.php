@@ -83,26 +83,32 @@ class achievement_manager {
     }
 
     public static function get_badge_info(): array {
+        // icon_key - SVG из pix/shop/{key}.svg (основной способ);
+        // icon (эмодзи) остается legacy-фолбэком.
         return [
             self::BADGE_DILIGENT  => [
-                'icon' => '⭐',
-                'name' => 'Старательный',
-                'desc' => 'Средний балл ≥ 85% за последние 5 тестов',
+                'icon'     => '⭐',
+                'icon_key' => 'star',
+                'name'     => 'Старательный',
+                'desc'     => 'Средний балл не ниже 85% за последние 5 тестов',
             ],
             self::BADGE_ACTIVE    => [
-                'icon' => '📚',
-                'name' => 'Активный',
-                'desc' => 'Записан на 3 и более курса',
+                'icon'     => '📚',
+                'icon_key' => 'book',
+                'name'     => 'Активный',
+                'desc'     => 'Записан на 3 и более курса',
             ],
             self::BADGE_EXCELLENT => [
-                'icon' => '🚀',
-                'name' => 'Отличник',
-                'desc' => 'Средний балл ≥ 90% по всем тестам (не менее 3)',
+                'icon'     => '🚀',
+                'icon_key' => 'rocket',
+                'name'     => 'Отличник',
+                'desc'     => 'Средний балл не ниже 90% по всем тестам (не менее 3)',
             ],
             self::BADGE_COMPLETER => [
-                'icon' => '🎓',
-                'name' => 'Завершитель',
-                'desc' => 'Сдан хотя бы один тест с результатом не менее 60%',
+                'icon'     => '🎓',
+                'icon_key' => 'medal',
+                'name'     => 'Завершитель',
+                'desc'     => 'Сдан хотя бы один тест с результатом не менее 60%',
             ],
         ];
     }

@@ -39,7 +39,8 @@ $is_teacher = in_array($unics_role, [4, 9, 5, 6]);
 $level_options    = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 $role_labels      = [
     1 => get_string('role_region_admin', 'local_unics'),
-    2 => get_string('role_district_admin', 'local_unics'),
+    10 => get_string('role_region_methodist', 'local_unics'),
+    // код 2 (district_admin) удалён в v3 [[role-model-v3-2026-06-11]]; строки мигрированы в 9.
     3 => get_string('role_org_admin', 'local_unics'),
     4 => get_string('role_methodist', 'local_unics'),
     5 => get_string('role_editingteacher', 'local_unics'),
@@ -92,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     if ($is_teacher) {
         $data['subject_categories'] = optional_param_array('subject_categories', [], PARAM_INT);
         $data['qualification']      = optional_param('qualification', '', PARAM_TEXT);
+        $data['teacher_type']       = optional_param('teacher_type', '', PARAM_ALPHA);
         $gf = optional_param('grade_from', 0, PARAM_INT);
         $gt = optional_param('grade_to', 0, PARAM_INT);
         if ($gf && $gt && $gf > $gt) {
@@ -244,6 +246,20 @@ if ($is_teacher) {
 
     echo "<div class=\"mb-2\"><label class=\"form-label\">Квалификация</label>
         <input type=\"text\" name=\"qualification\" value=\"{$qual}\" class=\"form-control\"></div>";
+
+    // Архетип педагога (D2). Мягкая характеристика, на доступ пока не влияет.
+    $ttype = (string)($profile->teacher_type ?? '');
+    echo '<div class="mb-2"><label class="form-label">'
+        . s(get_string('teacher_type', 'local_unics')) . '</label>';
+    echo '<select name="teacher_type" class="form-select">';
+    echo '<option value="">' . s(get_string('teacher_type_none', 'local_unics')) . '</option>';
+    foreach (unics_user_manager::teacher_type_options() as $code => $label) {
+        echo '<option value="' . s($code) . '"' . ($ttype === $code ? ' selected' : '') . '>'
+            . s($label) . '</option>';
+    }
+    echo '</select>';
+    echo '<div class="form-text">' . s(get_string('teacher_type_help', 'local_unics'))
+        . '</div></div>';
 
     // Диапазон классов (мягкий фильтр).
     $grade_opt = function (int $cur): string {

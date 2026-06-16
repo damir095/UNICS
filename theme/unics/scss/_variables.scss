@@ -10,8 +10,11 @@
     // Brand palette.
     --unics-primary:        #F26545;  // акцент: фоны кнопок, borders, иконки, крупный текст
     --unics-primary-hover:  #d9543a;  // hover на тех же поверхностях
-    --unics-primary-text:   #C44A2F;  // 4.6:1 на белом — WCAG AA для текста ссылок
+    --unics-primary-text:   #A93D24;  // 5.7:1 на фоне страницы #F5F6F9 - AA для ссылок/акцентного текста (#C44A2F давал лишь 4.41:1 на #F5F6F9)
     --unics-primary-deep:   #A93D24;  // 6.0:1 — близко к AAA, для текста на светло-оранжевых поверхностях
+    --unics-primary-btn:       #C44A2F;  // фон .btn-primary: белый текст = 4.6:1 (AA при любом размере)
+    --unics-primary-btn-hover: #A93D24;  // hover/focus .btn-primary: 6:1
+    --unics-header-bg:         #C44A2F;  // фон баннера #page-header: белый текст = 4.81:1 во всех светлых темах (темная тема ставит свой темный фон)
     --unics-bg:             #F5F6F9;
     --unics-surface:        #FFFFFF;
     --unics-dark:           #292F3B;

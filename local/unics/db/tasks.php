@@ -20,4 +20,13 @@ $tasks = [
         'month'      => '*',
         'dayofweek'  => '*',
     ],
+    [
+        'classname'  => 'local_unics\task\aggregate_stats',
+        'blocking'   => 0,
+        'minute'     => '30',
+        'hour'       => '3',
+        'day'        => '*',
+        'month'      => '*',
+        'dayofweek'  => '*',
+    ],
 ];

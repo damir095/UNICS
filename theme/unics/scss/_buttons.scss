@@ -6,9 +6,12 @@
 //   .btn-sm       — 36px (только для toolbar-действий, не для CTA)
 //   .unics-cta    — 60px (главные CTA на страницах для детей, см. design-refs §4)
 //
-// Цвет текста на .btn-primary: белый на оранжевом даёт ~3.2:1 — это допустимо
-// ТОЛЬКО потому что font-size кнопки ≥ 18px (наш --bs-body-font-size) и
-// font-weight 500+, что переводит в категорию "large text" по WCAG.
+// Белый текст на ярком #F26545 дает ~3.12:1 - этого мало для обычного текста
+// (WCAG 1.4.3 AA требует 4.5:1; "крупный текст" = 24px либо 18.66px bold, чему
+// кнопка 18px/500 НЕ соответствует). Поэтому фон .btn-primary - отдельная
+// переменная --unics-primary-btn (#C44A2F, 4.6:1); яркий --unics-primary
+// остается для бордюров, иконок и акцентов. Темы-акценты (_accessibility.scss)
+// перекрывают .btn-primary своим базовым цветом, тоже AA-безопасным.
 // =============================================================================
 
 .btn {
@@ -33,15 +36,27 @@
 }
 
 .btn-primary {
-    background-color: var(--unics-primary);
-    border-color: var(--unics-primary);
+    background-color: var(--unics-primary-btn);
+    border-color: var(--unics-primary-btn);
 
     &:hover,
     &:focus,
     &:active {
-        background-color: var(--unics-primary-hover);
-        border-color: var(--unics-primary-hover);
+        background-color: var(--unics-primary-btn-hover);
+        border-color: var(--unics-primary-btn-hover);
     }
+}
+
+// Текст и иконки .btn-primary всегда белые - перекрывает авто color-contrast
+// Bootstrap (он давал темный текст для яркого #F26545) и общий текст-руль
+// доступности (он затемнял лейбл-span на цветном фоне кнопки в акцент/темных
+// темах). Белый на #C44A2F = 4.81:1; на темных акцент-фонах - еще выше.
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary * {
+    color: #fff !important;
 }
 
 .btn-outline-primary {

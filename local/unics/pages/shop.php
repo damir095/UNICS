@@ -36,16 +36,14 @@ $buy_error   = '';
 if ($buy_item_id > 0 && confirm_sesskey()) {
     $result = points_manager::purchase((int)$student->id, $buy_item_id);
     if ($result === true) {
-        $item = $DB->get_record('unics_shop_items', ['id' => $buy_item_id]);
-        $buy_msg = $item ? ('✅ Куплено: ' . $item->icon_emoji . ' ' . s($item->name)) : '✅ Покупка выполнена!';
         redirect(new moodle_url('/local/unics/pages/shop.php', ['bought' => 1]));
     } else {
-        $buy_error = '❌ ' . ($result ?: 'Ошибка при покупке');
+        $buy_error = $result ?: 'Ошибка при покупке';
     }
 }
 
 if (optional_param('bought', 0, PARAM_INT)) {
-    $buy_msg = '✅ Покупка выполнена! Товар добавлен в ваши достижения.';
+    $buy_msg = 'Покупка выполнена! Товар добавлен в ваши приобретения.';
 }
 
 // ----------------------------------------------------------------
@@ -88,12 +86,9 @@ if ($buy_error) {
 
 // Баланс
 echo '<div class="card mb-4" style="border-left: 4px solid #f0a500;">';
-echo '<div class="card-body d-flex align-items-center">';
-echo '<div style="font-size:3rem;line-height:1;margin-right:var(--unics-space-5);">🪙</div>';
-echo '<div>';
+echo '<div class="card-body">';
 echo '<div style="font-size:2rem;font-weight:700;color:#f0a500;">' . number_format($balance) . '</div>';
 echo '<div class="text-muted">баллов на балансе</div>';
-echo '</div>';
 echo '</div>';
 echo '</div>';
 
@@ -109,7 +104,7 @@ echo '</div>';
 echo '</div>';
 
 // Товары магазина
-echo '<h5 class="mb-3">🛍 Доступные товары</h5>';
+echo '<h5 class="mb-3">Доступные товары</h5>';
 
 if (empty($shop_items)) {
     echo '<p class="text-muted">В магазине пока нет товаров.</p>';
@@ -123,13 +118,18 @@ if (empty($shop_items)) {
         echo '<div class="col-md-4 col-sm-6 mb-3">';
         echo '<div class="card h-100 ' . $card_class . '">';
         echo '<div class="card-body text-center">';
-        echo '<div style="font-size:3rem;line-height:1;">' . s($item->icon_emoji) . '</div>';
+        if (!empty($item->icon)) {
+            echo '<img src="' . $OUTPUT->image_url('shop/' . $item->icon, 'local_unics')
+               . '" width="64" height="64" alt="" class="mb-1">';
+        } else {
+            echo '<div style="font-size:3rem;line-height:1;">' . s($item->icon_emoji) . '</div>';
+        }
         echo '<h6 class="card-title mt-2 mb-1">' . s($item->name) . '</h6>';
         echo '<p class="text-muted small mb-2">' . s($item->description ?? '') . '</p>';
-        echo '<div class="mb-3" style="font-size:1.2rem;font-weight:600;color:#f0a500;">🪙 ' . number_format($item->cost) . ' баллов</div>';
+        echo '<div class="mb-3" style="font-size:1.2rem;font-weight:600;color:#f0a500;">' . number_format($item->cost) . ' баллов</div>';
 
         if ($already_bought) {
-            echo '<span class="badge badge-success p-2">✅ Уже куплено</span>';
+            echo '<span class="badge badge-success p-2">Уже куплено</span>';
         } elseif ($can_afford) {
             $buy_url = new moodle_url('/local/unics/pages/shop.php', [
                 'buy'     => $item->id,
@@ -141,7 +141,7 @@ if (empty($shop_items)) {
             ]);
         } else {
             $need = $item->cost - $balance;
-            echo '<button class="btn btn-outline-secondary btn-sm" disabled>Нужно ещё ' . number_format($need) . ' 🪙</button>';
+            echo '<button class="btn btn-outline-secondary btn-sm" disabled>Нужно еще ' . number_format($need) . ' баллов</button>';
         }
 
         echo '</div>';
@@ -153,18 +153,22 @@ if (empty($shop_items)) {
 
 // Мои покупки
 if (!empty($purchases)) {
-    echo '<h5 class="mt-4 mb-3">🎒 Мои приобретения</h5>';
-    echo '<div class="d-flex flex-wrap gap-2">';
+    echo '<h5 class="mt-4 mb-3">Мои приобретения</h5>';
+    echo '<div class="d-flex flex-wrap gap-2 align-items-center">';
     foreach ($purchases as $p) {
+        $pic = !empty($p->icon)
+            ? '<img src="' . $OUTPUT->image_url('shop/' . $p->icon, 'local_unics')
+              . '" width="22" height="22" alt="" class="mr-1" style="vertical-align:-5px;">'
+            : '';
         echo '<span class="badge badge-pill badge-warning p-2" style="font-size:.9rem;">'
-           . s($p->icon_emoji) . ' ' . s($p->name) . '</span>';
+           . $pic . s($p->name) . '</span>';
     }
     echo '</div>';
 }
 
 // История баллов
 if (!empty($history)) {
-    echo '<h5 class="mt-4 mb-3">📋 История баллов</h5>';
+    echo '<h5 class="mt-4 mb-3">История баллов</h5>';
     echo '<table class="table table-sm table-bordered">';
     echo '<thead class="table-light"><tr><th>Дата</th><th>Событие</th><th class="text-right">Баллы</th></tr></thead>';
     echo '<tbody>';
@@ -173,7 +177,8 @@ if (!empty($history)) {
         $color = (int)$h->points > 0 ? 'success' : 'danger';
         echo '<tr>';
         echo '<td class="text-nowrap">' . userdate($h->created_at, '%d.%m.%Y') . '</td>';
-        echo '<td>' . s($h->reason_text) . '</td>';
+        // Служебный маркер анти-дубля "[cmNNN]" в истории не показываем.
+        echo '<td>' . s(preg_replace('/\s*\[cm\d+\]\s*/u', '', $h->reason_text)) . '</td>';
         echo '<td class="text-right"><span class="badge badge-' . $color . '">'
            . $sign . (int)$h->points . '</span></td>';
         echo '</tr>';

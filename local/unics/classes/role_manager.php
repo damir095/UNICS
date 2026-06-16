@@ -573,13 +573,22 @@ class role_manager {
             ],
         ];
 
-        // Районные роли — копии региональной/организационной по правам.
+        // Районный методист — копия методиста организации по правам.
         // Разница только в скоупе (район), который хранится в unics_user_org,
-        // а не в матрице capabilities. Поэтому переиспользуем готовые наборы:
-        //   district_admin     ≈ region_admin (управленческая, без course:create);
-        //   district_methodist ≈ methodist     (создаёт курсы/УМК + manageorg).
-        $matrix['district_admin']     = $matrix['region_admin'];
+        // а не в матрице capabilities. Поэтому переиспользуем готовый набор:
+        //   district_methodist ≈ methodist (создаёт курсы/УМК + manageorg).
+        // Муниципальный администратор (district_admin) удалён в v3 [[role-model-v3-2026-06-11]] —
+        // его функции перешли муниципальному методисту.
         $matrix['district_methodist'] = $matrix['methodist'];
+
+        // Региональный методист (region_methodist) — v3 фаза 2 [[role-model-v3-2026-06-11]].
+        // Права идентичны региональному администратору (manageorg по региону, запись
+        // учеников/педагогов на курсы через enrol, отчёты, просмотр оценок; БЕЗ создания
+        // курсов и site:config). Отличие region_admin/region_methodist — организационное
+        // (admin = техобслуживание, methodist = распределение курсов/сертификаты/отчётность)
+        // и в меню; уникальная власть методиста (делегирование курсов) добавится в фазе 3.
+        // Скоуп = регион (unics_user_org.region_id), как у region_admin.
+        $matrix['region_methodist'] = $matrix['region_admin'];
 
         return $matrix;
     }
@@ -597,8 +606,8 @@ class role_manager {
             'teacher'            => 'Педагог',
             'methodist'          => 'Методист организации',
             'district_methodist' => 'Муниципальный методист',
+            'region_methodist'   => 'Региональный методист',
             'region_admin'       => 'Региональный администратор',
-            'district_admin'     => 'Муниципальный администратор',
             'student'            => 'Учащийся',
             'parent'             => 'Родитель',
         ];

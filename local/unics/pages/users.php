@@ -183,32 +183,32 @@ echo html_writer::start_tag('form', ['method' => 'get', 'class' => 'd-flex flex-
 if (count($districts_menu) > 1) {
     echo html_writer::select(
         [0 => 'Все муниципалитеты'] + $districts_menu,
-        'district', $filter_district, false, ['class' => 'form-control']
+        'district', $filter_district, false, ['class' => 'form-control', 'aria-label' => 'Муниципалитет']
     );
 }
 
 // Фильтр по организации
 echo html_writer::select(
     [0 => get_string('all_orgs', 'local_unics')] + $orgs,
-    'org', $filter_org, false, ['class' => 'form-control']
+    'org', $filter_org, false, ['class' => 'form-control', 'aria-label' => 'Организация']
 );
 
 // Фильтр по роли
 echo html_writer::select(
     [0 => get_string('all_roles', 'local_unics')] + $role_labels,
-    'role', $filter_role, false, ['class' => 'form-control']
+    'role', $filter_role, false, ['class' => 'form-control', 'aria-label' => 'Роль']
 );
 
 // Фильтр по классу (учащиеся)
 echo html_writer::select(
     [0 => 'Все классы'] + $class_menu,
-    'class', $filter_class, false, ['class' => 'form-control']
+    'class', $filter_class, false, ['class' => 'form-control', 'aria-label' => 'Класс']
 );
 
 // Фильтр по букве класса (учащиеся)
 echo html_writer::select(
     ['' => 'Все буквы'] + $letters_menu,
-    'letter', $filter_letter, false, ['class' => 'form-control']
+    'letter', $filter_letter, false, ['class' => 'form-control', 'aria-label' => 'Буква класса']
 );
 
 // Фильтр по привязкам (учащиеся без педагога / родителя / класса)
@@ -219,7 +219,7 @@ echo html_writer::select(
         'noparent'  => 'Без родителя',
         'noclass'   => 'Без класса',
     ],
-    'bind', $filter_bind, false, ['class' => 'form-control']
+    'bind', $filter_bind, false, ['class' => 'form-control', 'aria-label' => 'Привязки учащегося']
 );
 
 // Тоггл: показать архивных учащихся.
@@ -240,7 +240,7 @@ if (empty($users)) {
     echo $OUTPUT->notification(get_string('no_users', 'local_unics'), 'info');
 } else {
     $table = new html_table();
-    $table->head = ['ФИО', 'Email', 'Роль', 'Организация / территория', 'Класс', get_string('actions', 'local_unics')];
+    $table->head = ['ФИО', 'Email', 'Роль', 'Тип', 'Организация / территория', 'Класс', get_string('actions', 'local_unics')];
     $table->attributes['class'] = 'table table-striped';
 
     // POST-кнопка действия над учащимся (архив/восстановление/удаление).
@@ -265,6 +265,12 @@ if (empty($users)) {
             $fio .= ' ' . html_writer::tag('span', 'Архив', ['class' => 'badge bg-secondary']);
         }
         $role_label = $role_labels[$user->unics_role] ?? '-';
+
+        // Тип (архетип) - только у педагогов; для прочих ролей пусто (D2).
+        $type_cell = unics_user_manager::teacher_type_label($user->teacher_type ?? null);
+        if ($type_cell === '') {
+            $type_cell = '-';
+        }
 
         // Класс: только для учащихся (роль 7)
         $class_cell = '-';
@@ -302,6 +308,7 @@ if (empty($users)) {
             $fio,
             $user->email,
             $role_label,
+            $type_cell,
             $user->org_name,
             $class_cell,
             $actions_cell,

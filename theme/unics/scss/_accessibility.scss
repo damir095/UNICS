@@ -1,0 +1,455 @@
+// =============================================================================
+// УНИКС — Доступность (per-user темы)
+// Активируется классами на <html>, которые ставит local_unics_before_standard_html_head()
+// инлайн-скриптом в <head> по пользовательским предпочтениям (panel «Доступность»):
+//   .unics-a11y-dark      — тёмная схема
+//   .unics-a11y-contrast  — высокий контраст (светлая, максимальный контраст)
+//   .unics-a11y-accent-*  — выбор акцент-цвета (blue / green / purple)
+// Размер шрифта масштабируется отдельно — инлайн-стилем на <html> (см. lib.php),
+// т.к. rem считается от корня; классы тоже на <html> (add_body_class в head-callback
+// бросает coding_exception — состояние страницы уже PRINTING_HEADER).
+//
+// Жёсткое требование: все схемы держат контраст WCAG 2.2 AA. См. [[accessibility-features-design]].
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Тёмная схема
+// Переопределяем и наши --unics-* токены, и базовые поверхности ядра Moodle
+// (body / карточки / навбар / текст), чтобы основные поверхности чтения
+// (курс, тест, дашборд) выглядели цельно тёмными.
+// -----------------------------------------------------------------------------
+html.unics-a11y-dark {
+    --unics-bg:            #1a1d24;
+    --unics-surface:       #242832;
+    --unics-surface-2:     #2c313c;   // приподнятая поверхность: поля ввода, шапки таблиц
+    --unics-text:          #e8eaed;   // ~13:1 на #1a1d24 — AAA
+    --unics-text-muted:    #aab1bd;   // ~6.8:1 — AA с запасом
+    --unics-border:        #3a3f4b;
+    --unics-primary-text:  #ff8a6e;   // светлее оранжевого — ссылки на тёмном, ~5.2:1
+    --unics-primary-deep:  #ff8a6e;
+    --unics-header-bg:     var(--unics-surface);   // баннер #page-header в темной теме = темная поверхность (мое !important-правило берет цвет отсюда)
+
+    // Контекстные палитры (приглушённый фон + светлый тинт текста) для алертов,
+    // строк таблиц и бейджей. Тексты держат WCAG AA на своём фоне.
+    --unics-d-success-bg: #1e3a2a; --unics-d-success-tx: #86e6ab;
+    --unics-d-danger-bg:  #3b1e22; --unics-d-danger-tx:  #f4969e;
+    --unics-d-warning-bg: #3a331c; --unics-d-warning-tx: #ecd07e;
+    --unics-d-info-bg:    #1e333b; --unics-d-info-tx:    #8ccbe0;
+
+    background-color: var(--unics-bg);
+    color: var(--unics-text);
+
+    // !important: ядро Boost красит контейнер контента `#page.drawers .main-inner`
+    // в белый с более высокой специфичностью (id + 2 класса), чем наш префикс с
+    // .main-inner/#topofscroll — без !important он перебивает нас и даёт белый блок.
+    #page,
+    #page-wrapper,
+    #region-main,
+    #region-main-box,
+    #page-content,
+    .main-inner,
+    #topofscroll,
+    [role="main"] {
+        background-color: var(--unics-bg) !important;
+        color: var(--unics-text);
+    }
+
+    // Общий текст: без этого правила элементы с собственным тёмным цветом
+    // (ядро Moodle, .text-dark/.text-body) остаются чёрными на тёмном фоне.
+    // Без !important, чтобы не перебивать текст внутри бейджей/цветных кнопок.
+    h1, h2, h3, h4, h5, h6,
+    p, span, div, li, dt, dd, label, legend, caption, figcaption,
+    strong, b, em, blockquote, summary,
+    .h1, .h2, .h3, .h4, .h5, .h6 {
+        color: var(--unics-text);
+    }
+    // Утилиты тёмного текста и навигационные пункты → светлый текст.
+    .text-dark, .text-black, .text-body, .text-secondary,
+    .dropdown-item, .breadcrumb-item, .breadcrumb-item a,
+    .page-link, .nav-link {
+        color: var(--unics-text) !important;
+    }
+    .fa, .icon { color: inherit; }
+
+    // Карточки, блоки, всплывающие поверхности + светлые утилиты фона.
+    .card,
+    .card-body,
+    .block,
+    .list-group-item,
+    .dropdown-menu,
+    .modal-content,
+    .modal-header,
+    .modal-footer,
+    .popover,
+    .popover-body,
+    .toast,
+    .bg-white,
+    .bg-light,
+    .secondary-navigation .navigation {
+        background-color: var(--unics-surface);
+        color: var(--unics-text);
+        border-color: var(--unics-border);
+    }
+    .card-header,
+    .card-footer {
+        background-color: rgba(255, 255, 255, .04);
+        border-color: var(--unics-border);
+        color: var(--unics-text);
+    }
+
+    // Шапка / навбар / дровер.
+    .navbar,
+    #page-header,
+    .secondary-navigation,
+    [data-region="drawer"],
+    .drawercontent,
+    .drawerheader {
+        background-color: var(--unics-surface);
+        color: var(--unics-text);
+        border-color: var(--unics-border);
+    }
+    // Навбар оставляем тёмным (он и так тёмный в Boost), усиливаем границу.
+    .navbar {
+        border-bottom: 1px solid var(--unics-border);
+    }
+
+    // Аватар-инициалы: ядровый кружок имеет светлый фон (#e9ecef), а общий
+    // текст-руль красит инициалы светлым -> светлый на светлом. Текст темным.
+    .userinitials {
+        color: #1a1d24 !important;
+    }
+
+    // Outline-кнопки: их базовый светлый фон (#D2D6DC / #FFE6DC из _buttons) на
+    // темной теме даёт светлый-на-светлом. Даем темную поверхность + светлый текст;
+    // семантический цвет остаётся в бордюре.
+    .btn-outline-primary,
+    .btn-outline-secondary,
+    .btn-outline-success,
+    .btn-outline-warning,
+    .btn-outline-danger,
+    .btn-outline-info,
+    .btn-outline-dark {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+    }
+
+    // Вкладки вторичной навигации (more-nav/nav-tabs): ядро Moodle задаёт UL
+    // светлый фон #F5F6F9, родители уже тёмные -> убираем фон, показывается тёмный.
+    .nav-tabs,
+    .more-nav {
+        background-color: transparent;
+    }
+
+    // Бейдж типа активности на странице курса: светлый фон ядра -> тёмная поверхность.
+    .activitybadge {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+    }
+
+    // Плашка ограничения доступа активности (.availabilityinfo) - ядро задаёт ей
+    // светло-серый фон #e9ecef -> тёмная поверхность + светлый текст.
+    .availabilityinfo,
+    .activity-availability {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+    }
+
+    // Текст и приглушённый текст.
+    a:not(.btn) {
+        color: var(--unics-primary-text);
+    }
+    .text-muted,
+    .small,
+    small,
+    .dimmed_text {
+        color: var(--unics-text-muted) !important;
+    }
+
+    // Поля ввода.
+    .form-control,
+    .form-select,
+    .custom-select,
+    textarea,
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"] {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+        border-color: var(--unics-border);
+    }
+    .form-control::placeholder { color: #8a909c; }
+    option {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+    }
+    .input-group-text {
+        background-color: var(--unics-surface);
+        color: var(--unics-text);
+        border-color: var(--unics-border);
+    }
+
+    // Таблицы. Bootstrap 5 красит строки через --bs-table-*; иначе striped/hover
+    // дают белый фон поверх тёмной страницы.
+    .table {
+        --bs-table-bg: transparent;
+        --bs-table-color: var(--unics-text);
+        --bs-table-striped-bg: rgba(255, 255, 255, .045);
+        --bs-table-striped-color: var(--unics-text);
+        --bs-table-hover-bg: rgba(255, 255, 255, .08);
+        --bs-table-hover-color: var(--unics-text);
+        --bs-table-border-color: var(--unics-border);
+        color: var(--unics-text);
+        border-color: var(--unics-border);
+    }
+    .table th,
+    .table td {
+        border-color: var(--unics-border);
+    }
+    .table thead th,
+    .table-light,
+    .table-light th,
+    .table-light td,
+    .thead-light th {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+        border-color: var(--unics-border);
+    }
+    // Контекстные строки/ячейки (группа риска, успех и т.п.).
+    .table-success, .table-success > th, .table-success > td {
+        background-color: var(--unics-d-success-bg) !important;
+        color: var(--unics-d-success-tx) !important;
+    }
+    .table-danger, .table-danger > th, .table-danger > td {
+        background-color: var(--unics-d-danger-bg) !important;
+        color: var(--unics-d-danger-tx) !important;
+    }
+    .table-warning, .table-warning > th, .table-warning > td {
+        background-color: var(--unics-d-warning-bg) !important;
+        color: var(--unics-d-warning-tx) !important;
+    }
+    .table-info, .table-info > th, .table-info > td {
+        background-color: var(--unics-d-info-bg) !important;
+        color: var(--unics-d-info-tx) !important;
+    }
+
+    // Алерты (нотисы статистики, рекомендации по группе риска и т.п.).
+    .alert-success {
+        background-color: var(--unics-d-success-bg) !important;
+        color: var(--unics-d-success-tx) !important;
+        border-color: var(--unics-d-success-tx) !important;
+    }
+    .alert-danger {
+        background-color: var(--unics-d-danger-bg) !important;
+        color: var(--unics-d-danger-tx) !important;
+        border-color: var(--unics-d-danger-tx) !important;
+    }
+    .alert-warning {
+        background-color: var(--unics-d-warning-bg) !important;
+        color: var(--unics-d-warning-tx) !important;
+        border-color: var(--unics-d-warning-tx) !important;
+    }
+    .alert-info {
+        background-color: var(--unics-d-info-bg) !important;
+        color: var(--unics-d-info-tx) !important;
+        border-color: var(--unics-d-info-tx) !important;
+    }
+    .alert-secondary {
+        background-color: var(--unics-surface-2) !important;
+        color: var(--unics-text) !important;
+        border-color: var(--unics-border) !important;
+    }
+
+    // Бейджи: светлые/серые делаем тёмными (насыщенные success/danger/... читаемы).
+    .badge-light, .badge.bg-light, .text-bg-light {
+        background-color: var(--unics-surface-2) !important;
+        color: var(--unics-text) !important;
+    }
+    .badge-secondary, .badge.bg-secondary, .text-bg-secondary {
+        background-color: #4a525b !important;
+        color: #fff !important;
+    }
+
+    // Нейтральные кнопки перекрашиваем; цветные (.btn-primary/success/danger) — нет.
+    .btn-secondary,
+    .btn-outline-secondary,
+    .btn-light,
+    .btn-outline-dark {
+        color: var(--unics-text);
+        background-color: var(--unics-surface-2);
+        border-color: var(--unics-border);
+    }
+    .btn-secondary:hover,
+    .btn-outline-secondary:hover,
+    .btn-light:hover,
+    .btn-outline-dark:hover {
+        background-color: var(--unics-surface);
+        color: var(--unics-text);
+    }
+
+    // Разделители / границы / код.
+    hr { border-color: var(--unics-border); }
+    .border, .border-top, .border-bottom, .border-left, .border-right,
+    .border-start, .border-end { border-color: var(--unics-border) !important; }
+    code, pre, kbd {
+        background-color: var(--unics-surface-2);
+        color: #ffb199;
+    }
+    .breadcrumb { background-color: transparent; }
+
+    // Плагинные поверхности local_unics.
+    .unics-stat-card,
+    .unics-badge-card,
+    .unics-comment-card {
+        background-color: var(--unics-surface) !important;
+        color: var(--unics-text);
+    }
+    // Карта баллов имеет светлый градиент через background-image; background-color
+    // сверху его не убирает -> гасим сам градиент, иначе карта белая на тёмном.
+    .unics-points-card {
+        background-image: none !important;
+    }
+    .unics-teacher-note,
+    tr.unics-note-row td {
+        background-color: #1f2a3a !important;
+        color: var(--unics-text);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Высокий контраст (светлая схема, максимальный контраст)
+// Текст — чистый чёрный, границы тёмные, акцентный текст — глубокий вариант,
+// усиленное кольцо фокуса. Помогает при слабом зрении.
+// -----------------------------------------------------------------------------
+html.unics-a11y-contrast {
+    --unics-text:          #000000;
+    --unics-text-muted:    #1f2430;
+    --unics-border:        #000000;
+    --unics-primary-text:  #9a3216;   // ещё глубже — запас по контрасту
+    --unics-focus-ring:    0 0 0 3px rgba(0, 0, 0, .9);
+
+    color: var(--unics-text);
+
+    a:not(.btn) {
+        color: var(--unics-primary-text);
+        text-decoration: underline;   // не только цвет (WCAG 1.4.1)
+    }
+    .text-muted,
+    .dimmed_text {
+        color: var(--unics-text-muted) !important;
+    }
+    .card,
+    .block,
+    .form-control,
+    .custom-select,
+    .table th,
+    .table td {
+        border-color: var(--unics-border) !important;
+    }
+    .form-control,
+    .custom-select,
+    textarea {
+        border-width: 2px;
+    }
+    // Усиленное видимое кольцо фокуса на интерактивных элементах.
+    a:focus,
+    button:focus,
+    .btn:focus,
+    input:focus,
+    select:focus,
+    textarea:focus,
+    [tabindex]:focus {
+        outline: 3px solid #000 !important;
+        outline-offset: 2px !important;
+        box-shadow: var(--unics-focus-ring) !important;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Тёмная + высокий контраст (комбинация)
+// Если включены ОБА режима, чистый контраст задаёт чёрный текст (--unics-text:#000),
+// и т.к. блок .contrast идёт после .dark с той же специфичностью, токен побеждает —
+// получается чёрный текст на тёмном фоне. Комбинированный селектор (две точки = выше
+// специфичность) перекрывает это: высокий контраст НА ТЁМНОМ = чисто-белый текст,
+// светлые границы, белое кольцо фокуса.
+// -----------------------------------------------------------------------------
+html.unics-a11y-dark.unics-a11y-contrast {
+    --unics-text:          #ffffff;
+    --unics-text-muted:    #e0e3e8;   // светлый приглушённый — держит AA на тёмном
+    --unics-border:        #e8eaed;   // светлые границы для контраста
+    --unics-primary-text:  #ffae93;   // ярче оранжевого — ссылки видны на тёмном
+    --unics-focus-ring:    0 0 0 3px rgba(255, 255, 255, .9);
+
+    color: var(--unics-text);
+
+    a:not(.btn) {
+        color: var(--unics-primary-text);
+        text-decoration: underline;
+    }
+    .text-muted,
+    .dimmed_text,
+    .small,
+    small {
+        color: var(--unics-text-muted) !important;
+    }
+    // Границы заметнее на тёмном.
+    .card,
+    .block,
+    .form-control,
+    .form-select,
+    .custom-select,
+    .table th,
+    .table td {
+        border-color: var(--unics-border) !important;
+    }
+    // Кольцо фокуса — белое (чёрное из .contrast на тёмном не видно).
+    a:focus,
+    button:focus,
+    .btn:focus,
+    input:focus,
+    select:focus,
+    textarea:focus,
+    [tabindex]:focus {
+        outline: 3px solid #fff !important;
+        outline-offset: 2px !important;
+        box-shadow: var(--unics-focus-ring) !important;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Выбор акцент-цвета (из безопасной палитры, проверенной на WCAG AA)
+// Каждый акцент задаёт основную поверхность + текстовый и глубокий варианты,
+// и перекрашивает .btn-primary по всему Moodle.
+// -----------------------------------------------------------------------------
+@mixin unics-accent($base, $hover, $text, $deep) {
+    --unics-primary:        #{$base};
+    --unics-primary-hover:  #{$hover};
+    --unics-primary-text:   #{$text};
+    --unics-primary-deep:   #{$deep};
+    --unics-header-bg:      #{$base};  // баннер #page-header = базовый акцент (темный, белый текст проходит)
+
+    .btn-primary {
+        background-color: #{$base};
+        border-color: #{$base};
+    }
+    .btn-primary:hover,
+    .btn-primary:focus {
+        background-color: #{$hover};
+        border-color: #{$hover};
+    }
+    a:not(.btn) { color: #{$text}; }
+}
+
+// Синий.
+html.unics-a11y-accent-blue   { @include unics-accent(#1565C0, #0D47A1, #1565C0, #0D47A1); }
+// Зелёный.
+html.unics-a11y-accent-green  { @include unics-accent(#1e7e34, #18682b, #1e7e34, #145523); }
+// Фиолетовый.
+html.unics-a11y-accent-purple { @include unics-accent(#6b3fa0, #58348a, #6b3fa0, #4a2c75); }
+
+// На тёмном фоне акцентный текст нужно осветлить, иначе тёмно-синий/фиолетовый
+// проваливаются по контрасту. Перекрываем только цвет ссылок и -text токен.
+html.unics-a11y-dark.unics-a11y-accent-blue   { --unics-primary-text: #6ab0ff; a:not(.btn) { color: #6ab0ff; } }
+html.unics-a11y-dark.unics-a11y-accent-green  { --unics-primary-text: #5fcf7a; a:not(.btn) { color: #5fcf7a; } }
+html.unics-a11y-dark.unics-a11y-accent-purple { --unics-primary-text: #b18ad9; a:not(.btn) { color: #b18ad9; } }

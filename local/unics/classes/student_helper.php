@@ -116,6 +116,58 @@ class student_helper {
     }
 
     /**
+     * Массив отображаемых названий категорий по CSV ("1,3" → ['ОВЗ', 'Длительное лечение']).
+     * В отличие от format_categories возвращает МАССИВ (для срезов: учащийся попадает
+     * в каждую свою категорию отдельно). Пустой CSV → [].
+     *
+     * @param mixed $csv строка CSV / int / null (значение поля category)
+     * @return string[]
+     */
+    public static function category_names($csv): array {
+        $out = [];
+        foreach (self::parse_csv($csv) as $id) {
+            if (isset(self::CATEGORIES[$id])) {
+                $out[] = get_string(self::CATEGORIES[$id], 'local_unics');
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Массив отображаемых названий видов ОВЗ по CSV. Пустой CSV (не-ОВЗ) → [].
+     *
+     * @param mixed $csv строка CSV / int / null (значение поля ovz_type)
+     * @return string[]
+     */
+    public static function ovz_type_names($csv): array {
+        $out = [];
+        foreach (self::parse_csv($csv) as $id) {
+            if (isset(self::OVZ_TYPES[$id])) {
+                $out[] = get_string(self::OVZ_TYPES[$id], 'local_unics');
+            }
+        }
+        return $out;
+    }
+
+    /** Все названия категорий в порядке справочника (для упорядочивания срезов). */
+    public static function category_labels_in_order(): array {
+        $o = [];
+        foreach (self::CATEGORIES as $key) {
+            $o[] = get_string($key, 'local_unics');
+        }
+        return $o;
+    }
+
+    /** Все названия видов ОВЗ в порядке справочника. */
+    public static function ovz_labels_in_order(): array {
+        $o = [];
+        foreach (self::OVZ_TYPES as $key) {
+            $o[] = get_string($key, 'local_unics');
+        }
+        return $o;
+    }
+
+    /**
      * SQL-фрагмент «category содержит данный id» - для фильтров.
      * Использует FIND_IN_SET (MariaDB/MySQL).
      * Пример: WHERE {$frag} → ["FIND_IN_SET(:cat, s.category)", ['cat' => 1]]
@@ -138,14 +190,15 @@ class student_helper {
     }
 
     /**
-     * Подсчёт «активных» учащихся: не удалён в Moodle (u.deleted=0) и не
-     * архивирован (s.archived_at IS NULL). Опциональный фильтр по организации.
+     * Подсчёт «активных» учащихся: не удалён в Moodle (u.deleted=0), не
+     * архивирован (s.archived_at IS NULL) и не выпущен (s.graduated_at IS NULL).
+     * Опциональный фильтр по организации.
      *
      * @param array $filters поддерживает 'organization_id' => int
      */
     public static function count_active_students(array $filters = []): int {
         global $DB;
-        $where  = ['s.archived_at IS NULL'];
+        $where  = ['s.archived_at IS NULL', 's.graduated_at IS NULL'];
         $params = [];
         if (!empty($filters['organization_id'])) {
             $where[] = 's.organization_id = :org';

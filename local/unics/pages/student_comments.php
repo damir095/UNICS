@@ -75,50 +75,75 @@ $PAGE->set_heading('Заметки педагога');
 $PAGE->set_pagelayout('standard');
 
 // ----------------------------------------------------------------
-// Обработка POST: добавить заметку
+// Обработка POST: добавить заметку / архивировать
 // ----------------------------------------------------------------
+use local_unics\comment_manager;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
+    $action = optional_param('action', 'add', PARAM_ALPHA);
+
+    // Архивация / восстановление (автор или системный админ).
+    if ($action === 'archive' || $action === 'unarchive') {
+        $comment_id = required_param('comment_id', PARAM_INT);
+        $c = $DB->get_record('unics_comments', ['id' => $comment_id, 'student_id' => $student_id]);
+        if ($c && comment_manager::can_archive($c, (int)$USER->id)) {
+            comment_manager::set_archived($comment_id, $action === 'archive');
+        }
+        redirect($page_url);
+    }
+
+    // Добавление заметки.
     $body = trim(required_param('body', PARAM_TEXT));
+    // audience валидируем по белому списку; дефолт - семья.
+    $audience = optional_param('audience', comment_manager::AUDIENCE_FAMILY, PARAM_INT);
+    if (!array_key_exists($audience, comment_manager::audience_options())) {
+        $audience = comment_manager::AUDIENCE_FAMILY;
+    }
     if (mb_strlen($body) > 0) {
         $rec = (object)[
             'student_id'          => $student_id,
             'teacher_mdl_user_id' => $USER->id,
             'body'                => $body,
             'created_at'          => time(),
+            'audience'            => $audience,
         ];
         if ($cmid > 0) {
             $rec->cmid = $cmid;
         }
         $DB->insert_record('unics_comments', $rec);
 
-        // Уведомить учащегося о новой заметке
+        // Уведомления по audience (кумулятивно): педагоги команды (>=staff),
+        // ученик (>=student), родители (>=family). private - никого.
         try {
             require_once(__DIR__ . '/../classes/notification_manager.php');
             $teacher_name = trim($USER->lastname . ' ' . $USER->firstname);
-            $context_lbl  = $cmid > 0 && $cm_info
-                ? ($module_label ?: 'активность курса')
-                : '';
-            \local_unics\notification_manager::notify_new_comment(
-                (int)$student->mdl_user_id,
-                $teacher_name,
-                $context_lbl
-            );
+            $student_name = trim($mdl_user->lastname . ' ' . $mdl_user->firstname);
+            $context_lbl  = $cmid > 0 && $cm_info ? ($module_label ?: 'активность курса') : '';
 
-            // Уведомить родителей ученика.
-            $parent_ids = $DB->get_fieldset_select(
-                'unics_parent_student',
-                'parent_mdl_user_id',
-                'student_id = :sid',
-                ['sid' => $student_id]
-            );
-            if (!empty($parent_ids)) {
-                $student_name = trim($mdl_user->lastname . ' ' . $mdl_user->firstname);
-                \local_unics\notification_manager::notify_new_comment_parents(
-                    array_map('intval', $parent_ids),
-                    $teacher_name,
-                    $student_name,
-                    $context_lbl
-                );
+            if ($audience >= comment_manager::AUDIENCE_STAFF) {
+                foreach (comment_manager::team_teacher_userids($student_id) as $tuid) {
+                    if ($tuid !== (int)$USER->id) {
+                        \local_unics\notification_manager::send(
+                            $tuid,
+                            "Новая заметка об учащемся: {$student_name}",
+                            '<p>Педагог <strong>' . htmlspecialchars($teacher_name) . '</strong> оставил заметку об '
+                            . 'учащемся <strong>' . htmlspecialchars($student_name) . '</strong>'
+                            . ($context_lbl ? ' к «' . htmlspecialchars($context_lbl) . '»' : '') . '.</p>',
+                            \local_unics\notification_manager::TYPE_NEW_COMMENT
+                        );
+                    }
+                }
+            }
+            if ($audience >= comment_manager::AUDIENCE_STUDENT) {
+                \local_unics\notification_manager::notify_new_comment(
+                    (int)$student->mdl_user_id, $teacher_name, $context_lbl);
+            }
+            if ($audience >= comment_manager::AUDIENCE_FAMILY) {
+                $parent_ids = comment_manager::parent_userids($student_id);
+                if (!empty($parent_ids)) {
+                    \local_unics\notification_manager::notify_new_comment_parents(
+                        $parent_ids, $teacher_name, $student_name, $context_lbl);
+                }
             }
         } catch (\Throwable $e) {
             // Нефатально
@@ -128,33 +153,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 }
 
 // ----------------------------------------------------------------
-// Загружаем комментарии
+// Загружаем комментарии через сервис (видимость по audience + фильтр архива).
 // ----------------------------------------------------------------
-if ($cmid > 0) {
-    // Заметки к конкретной активности
-    $comments = $DB->get_records_sql(
-        "SELECT c.id, c.body, c.created_at,
-                u.lastname, u.firstname, u.middlename
-           FROM {unics_comments} c
-           JOIN {user} u ON u.id = c.teacher_mdl_user_id
-          WHERE c.student_id = :sid
-            AND c.cmid       = :cmid
-          ORDER BY c.created_at DESC",
-        ['sid' => $student_id, 'cmid' => $cmid]
-    );
-} else {
-    // Все заметки без привязки к активности (cmid IS NULL)
-    $comments = $DB->get_records_sql(
-        "SELECT c.id, c.body, c.created_at,
-                u.lastname, u.firstname, u.middlename
-           FROM {unics_comments} c
-           JOIN {user} u ON u.id = c.teacher_mdl_user_id
-          WHERE c.student_id = :sid
-            AND c.cmid IS NULL
-          ORDER BY c.created_at DESC",
-        ['sid' => $student_id]
-    );
-}
+$show_archived = optional_param('archived', 0, PARAM_INT);
+$comments = comment_manager::get_visible_for_student((int)$student_id, (int)$USER->id, [
+    'cmid'     => $cmid > 0 ? $cmid : null,
+    'archived' => $show_archived ? 'archived' : 'active',
+]);
+
+// Отмечаем заметки этого ученика как просмотренные (для бейджей «N новых»).
+comment_manager::mark_seen((int)$student_id, (int)$USER->id);
 
 // ----------------------------------------------------------------
 // Вывод
@@ -200,6 +208,17 @@ if ($cmid > 0) {
 $form_url = new moodle_url('/local/unics/pages/student_comments.php',
     array_filter(['student_id' => $student_id, 'cmid' => $cmid ?: null, 'sesskey' => sesskey()]));
 echo html_writer::start_tag('form', ['method' => 'post', 'action' => $form_url, 'class' => 'mb-4']);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'add']);
+
+// Селектор адресата (кому видна заметка).
+echo html_writer::start_tag('div', ['class' => 'form-group']);
+echo html_writer::tag('label', 'Кому видна заметка', ['class' => 'font-weight-bold', 'for' => 'unics-audience']);
+echo html_writer::select(comment_manager::audience_options(), 'audience', comment_manager::AUDIENCE_FAMILY, false,
+    ['class' => 'form-control', 'id' => 'unics-audience', 'style' => 'max-width:480px']);
+echo html_writer::tag('small', s(comment_manager::audience_hint(comment_manager::AUDIENCE_FAMILY)),
+    ['class' => 'form-text text-muted', 'id' => 'unics-audience-hint']);
+echo html_writer::end_tag('div');
+
 echo html_writer::start_tag('div', ['class' => 'form-group']);
 $placeholder = $cmid > 0
     ? 'Наблюдение, рекомендация или комментарий к этой активности…'
@@ -216,19 +235,54 @@ echo html_writer::end_tag('div');
 echo html_writer::tag('button', 'Сохранить заметку', ['type' => 'submit', 'class' => 'btn btn-primary']);
 echo html_writer::end_tag('form');
 
+// Живое описание выбранного варианта audience.
+$hint_map = [];
+foreach (array_keys(comment_manager::audience_options()) as $av) {
+    $hint_map[$av] = comment_manager::audience_hint($av);
+}
+$hint_json = json_encode($hint_map);
+echo "<script>(function(){var s=document.getElementById('unics-audience'),h=document.getElementById('unics-audience-hint');"
+   . "if(!s||!h)return;var m=$hint_json;s.addEventListener('change',function(){h.textContent=m[this.value]||'';});})();</script>";
+
+// Переключатель Активные / Архив.
+$toggle_url = new moodle_url('/local/unics/pages/student_comments.php',
+    array_filter(['student_id' => $student_id, 'cmid' => $cmid ?: null, 'archived' => $show_archived ? null : 1]));
+echo '<p>' . html_writer::link($toggle_url,
+    $show_archived ? '← Показать активные заметки' : 'Показать архив',
+    ['class' => 'btn btn-sm btn-outline-secondary']) . '</p>';
+
 // Список заметок
 if (empty($comments)) {
-    echo html_writer::tag('p', 'Заметок пока нет.', ['class' => 'text-muted']);
+    echo html_writer::tag('p', $show_archived ? 'В архиве заметок нет.' : 'Заметок пока нет.',
+        ['class' => 'text-muted']);
 } else {
     foreach ($comments as $cm) {
         $author = trim("{$cm->lastname} {$cm->firstname} " . ($cm->middlename ?? ''));
-        echo '<div class="card mb-3 unics-comment-card">';
+        [$abadge, $aclass] = comment_manager::audience_badge((int)$cm->audience);
+        $is_archived = !empty($cm->archived_at);
+
+        echo '<div class="card mb-3 unics-comment-card' . ($is_archived ? ' border-secondary' : '') . '">';
         echo '<div class="card-header d-flex justify-content-between align-items-center">';
-        echo '<span class="font-weight-bold">' . s($author) . '</span>';
+        echo '<span class="font-weight-bold">' . s($author)
+           . ' <span class="badge badge-' . $aclass . ' ml-1" title="'
+           . s(comment_manager::audience_hint((int)$cm->audience)) . '">' . s($abadge) . '</span>'
+           . ($is_archived ? ' <span class="badge badge-light">архив</span>' : '') . '</span>';
         echo '<small class="text-muted">' . userdate($cm->created_at, '%d.%m.%Y %H:%M') . '</small>';
         echo '</div>';
         echo '<div class="card-body py-2">';
         echo '<p class="mb-0" style="white-space:pre-wrap">' . s($cm->body) . '</p>';
+        // Кнопка архивации - автору или системному админу.
+        if (comment_manager::can_archive($cm, (int)$USER->id)) {
+            $a_url = new moodle_url('/local/unics/pages/student_comments.php',
+                array_filter(['student_id' => $student_id, 'cmid' => $cmid ?: null, 'sesskey' => sesskey()]));
+            echo '<form method="post" action="' . $a_url->out(false) . '" class="mt-2">';
+            echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action',
+                'value' => $is_archived ? 'unarchive' : 'archive']);
+            echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'comment_id', 'value' => (int)$cm->id]);
+            echo html_writer::tag('button', $is_archived ? 'Восстановить' : 'В архив',
+                ['type' => 'submit', 'class' => 'btn btn-sm btn-outline-secondary']);
+            echo '</form>';
+        }
         echo '</div>';
         echo '</div>';
     }

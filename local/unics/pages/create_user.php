@@ -31,13 +31,13 @@ if ($form->is_cancelled()) {
         }
 
         // Проверка прав на территорию: новый пользователь должен попадать в вашу зону.
-        //   роль 1 — регион; роли 2 и 9 — район; роль 8 (родитель) — скоуп через ребёнка
-        //   (поэтому при создании orgnization не проверяем); прочие — организация.
-        if ($role === 1) {
+        //   роли 1 и 10 — регион; роль 9 — муниципалитет; роль 8 (родитель) — скоуп через
+        //   ребёнка (поэтому при создании orgnization не проверяем); прочие — организация.
+        if ($role === 1 || $role === 10) {
             if (!empty($data->region_id)) {
                 local_unics_require_manage_or_scope_region((int)$data->region_id);
             }
-        } else if ($role === 2 || $role === 9) {
+        } else if ($role === 9) {
             if (!empty($data->district_id)) {
                 local_unics_require_manage_or_scope_district((int)$data->district_id);
             }

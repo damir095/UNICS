@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="local/unics/db" VERSION="20260420" COMMENT="XMLDB file for local plugin unics"
+<XMLDB PATH="local/unics/db" VERSION="20260530" COMMENT="XMLDB file for local plugin unics"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd">
   <TABLES>
@@ -79,6 +79,7 @@
         <FIELD NAME="category"         TYPE="char" LENGTH="32" NOTNULL="true"  DEFAULT="2"  SEQUENCE="false" COMMENT="CSV id-ов категорий (1=ОВЗ, 2=семейное, 3=лечение, 4=одарённые), напр. '1,3'"/>
         <FIELD NAME="ovz_type"         TYPE="char" LENGTH="32" NOTNULL="false" SEQUENCE="false" COMMENT="CSV id-ов видов ОВЗ (1=слабовидящие ... 6=иное), напр. '1,4'"/>
         <FIELD NAME="difficulty_level" TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="2"  SEQUENCE="false"/>
+        <FIELD NAME="diagnosed"        TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="0"  SEQUENCE="false" COMMENT="1 = пройдена стартовая диагностика (стартовый уровень установлен один раз)"/>
         <FIELD NAME="class_number"     TYPE="int"  LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="class_letter"     TYPE="char" LENGTH="2"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="graduated_at"     TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Дата выпуска 'YYYY-MM-DD' (заполняется при переводе из 11 класса); NULL = активный учащийся"/>
@@ -107,6 +108,7 @@
         <FIELD NAME="qualification"   TYPE="char" LENGTH="200" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="grade_from"      TYPE="int"  LENGTH="4"   NOTNULL="false" SEQUENCE="false" COMMENT="Нижняя граница диапазона классов (1..11), мягкий фильтр"/>
         <FIELD NAME="grade_to"        TYPE="int"  LENGTH="4"   NOTNULL="false" SEQUENCE="false" COMMENT="Верхняя граница диапазона классов (1..11), мягкий фильтр"/>
+        <FIELD NAME="teacher_type"    TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false" COMMENT="Архетип педагога: subject (предметник 5-11) / primary (начальные 1-4) / support (специалист сопровождения); NULL = не указан"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
@@ -141,6 +143,7 @@
         <FIELD NAME="cmid"         TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="course_modules.id"/>
         <FIELD NAME="is_final"     TYPE="int" LENGTH="2"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0" COMMENT="1 = итоговый экзамен курса (B5)"/>
         <FIELD NAME="is_milestone" TYPE="int" LENGTH="2"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0" COMMENT="1 = промежуточная контрольная точка (B4)"/>
+        <FIELD NAME="is_diagnostic" TYPE="int" LENGTH="2" NOTNULL="true"  SEQUENCE="false" DEFAULT="0" COMMENT="1 = входной диагностический тест курса (стартовый уровень)"/>
         <FIELD NAME="timecreated"  TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false" DEFAULT="0"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
@@ -326,14 +329,35 @@
         <FIELD NAME="body"                 TYPE="text"             NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="created_at"           TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="unix timestamp"/>
         <FIELD NAME="cmid"                 TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="course_modules.id - привязка к конкретной активности"/>
+        <FIELD NAME="audience"             TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="4" SEQUENCE="false" COMMENT="1=private, 2=staff, 3=student, 4=family (кумулятивная шкала видимости)"/>
+        <FIELD NAME="parent_id"            TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="корень нити (фаза 3); NULL = корневая заметка"/>
+        <FIELD NAME="archived_at"          TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="unix; NULL = активна, иначе мягкий архив"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
         <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="idx_comment_teacher" UNIQUE="false" FIELDS="teacher_mdl_user_id"/>
-        <INDEX NAME="idx_comment_cmid"    UNIQUE="false" FIELDS="cmid"/>
+        <INDEX NAME="idx_comment_teacher"  UNIQUE="false" FIELDS="teacher_mdl_user_id"/>
+        <INDEX NAME="idx_comment_cmid"     UNIQUE="false" FIELDS="cmid"/>
+        <INDEX NAME="idx_comment_audience" UNIQUE="false" FIELDS="student_id, audience, archived_at"/>
+        <INDEX NAME="idx_comment_parent"   UNIQUE="false" FIELDS="parent_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_comment_seen" COMMENT="Последний просмотр заметок учащегося зрителем (для бейджей «N новых»)">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"   TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_user_id"  TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="last_seen_at" TYPE="int" LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_comment_seen" UNIQUE="true" FIELDS="student_id, mdl_user_id"/>
       </INDEXES>
     </TABLE>
 
@@ -422,8 +446,9 @@
         <FIELD NAME="name"        TYPE="char" LENGTH="100" NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="description" TYPE="char" LENGTH="300" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="cost"        TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
-        <FIELD NAME="icon_emoji"  TYPE="char" LENGTH="10"  NOTNULL="true"  DEFAULT="🎁" SEQUENCE="false"/>
-        <FIELD NAME="item_type"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false" COMMENT="1=Титул/звание"/>
+        <FIELD NAME="icon_emoji"  TYPE="char" LENGTH="10"  NOTNULL="true"  DEFAULT="🎁" SEQUENCE="false" COMMENT="Legacy-фолбэк; основной способ - поле icon"/>
+        <FIELD NAME="icon"        TYPE="char" LENGTH="32"  NOTNULL="false" SEQUENCE="false" COMMENT="Ключ SVG-иконки из pix/shop/{icon}.svg"/>
+        <FIELD NAME="item_type"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false" COMMENT="1=Титул/звание, 2=Оформление (резерв), 3=Стикер-карточка"/>
         <FIELD NAME="is_active"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
         <FIELD NAME="sort_order"  TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="0"  SEQUENCE="false"/>
       </FIELDS>
@@ -448,6 +473,115 @@
         <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students"  REFFIELDS="id"/>
         <KEY NAME="item_id"    TYPE="foreign" FIELDS="item_id"    REFTABLE="unics_shop_items" REFFIELDS="id"/>
       </KEYS>
+    </TABLE>
+
+    <TABLE NAME="unics_learning_path" COMMENT="Индивидуальный образовательный маршрут (ИОМ) учащегося">
+      <FIELDS>
+        <FIELD NAME="id"                     TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"             TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="created_by_mdl_user_id" TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="goal"                   TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="status"                 TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false" COMMENT="1=активен, 2=завершён, 3=архив"/>
+        <FIELD NAME="created_at"             TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="updated_at"             TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_path_student_status" UNIQUE="false" FIELDS="student_id, status"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_path_step" COMMENT="Шаг ИОМ (= тема: курс + тема + опц. УМК)">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="path_id"      TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="ordinal"      TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="title"        TYPE="char" LENGTH="255" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="topic"        TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="mdl_course_id" TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="umk_id"       TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="target_level" TYPE="int"  LENGTH="2"   NOTNULL="false" SEQUENCE="false" COMMENT="план уровня 1..3"/>
+        <FIELD NAME="status"       TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false" COMMENT="1=запланирован, 2=в работе, 3=пройден"/>
+        <FIELD NAME="source"       TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false" COMMENT="1=manual, 2=ai/умк, 3=adaptive"/>
+        <FIELD NAME="planned_from" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="planned_to"   TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="note"         TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="path_id" TYPE="foreign" FIELDS="path_id" REFTABLE="unics_learning_path" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_step_path_ordinal" UNIQUE="false" FIELDS="path_id, ordinal"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_level_history" COMMENT="История изменений уровня сложности учащегося (A5, предусловие статистики)">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"  TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_user_id" TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="old_level"   TYPE="int"    LENGTH="2"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="new_level"   TYPE="int"    LENGTH="2"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="avg_score"   TYPE="number" LENGTH="5"  DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="средний балл (%), по которому принято решение"/>
+        <FIELD NAME="changed_at"  TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_levelhist_student" UNIQUE="false" FIELDS="student_id, changed_at"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_stats_student_course" COMMENT="Rollup учебной статистики (учащийся x курс), кумулятивно. Считает task aggregate_stats (A5)">
+      <FIELDS>
+        <FIELD NAME="id"                   TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"           TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_user_id"          TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_course_id"        TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="views"                TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="просмотры активностей курса (logstore)"/>
+        <FIELD NAME="time_est_min"         TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="оценка времени на курсе (минуты, аппроксимация по интервалам лога)"/>
+        <FIELD NAME="completed_activities" TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="total_activities"     TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="активностей курса с включённым completion"/>
+        <FIELD NAME="attempts"             TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="завершённых попыток тестов"/>
+        <FIELD NAME="avg_score_pct"        TYPE="number" LENGTH="5"  DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="средний балл по тестам курса (%)"/>
+        <FIELD NAME="last_active_at"       TYPE="int"    LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="ai_uses"              TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="выданных учащемуся УМК по курсу"/>
+        <FIELD NAME="computed_at"          TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_stats_student_course" UNIQUE="true"  FIELDS="student_id, mdl_course_id"/>
+        <INDEX NAME="ix_stats_course"         UNIQUE="false" FIELDS="mdl_course_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_class_conversation" COMMENT="Связка класс (организация+номер+буква) -> групповая беседа core_message (M1)">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="organization_id" TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="class_number"    TYPE="int"  LENGTH="4"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="class_letter"    TYPE="char" LENGTH="2"  NOTNULL="true"  DEFAULT="" SEQUENCE="false" COMMENT="Буква класса; пустая строка = без буквы (NULL нормализуем в '')"/>
+        <FIELD NAME="conversationid"  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="message_conversations.id (групповая беседа, component=null)"/>
+        <FIELD NAME="timecreated"     TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified"    TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"         TYPE="primary" FIELDS="id"/>
+        <KEY NAME="organization_id" TYPE="foreign" FIELDS="organization_id" REFTABLE="unics_organizations" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_class_conv" UNIQUE="true"  FIELDS="organization_id, class_number, class_letter"/>
+        <INDEX NAME="ix_conv"       UNIQUE="false" FIELDS="conversationid"/>
+      </INDEXES>
     </TABLE>
 
   </TABLES>

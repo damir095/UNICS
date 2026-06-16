@@ -124,24 +124,21 @@ $umk_list = $DB->get_records_sql(
     ['sid' => $student_id]
 );
 
-// Пакетная загрузка заметок педагога для тестов (по cmid)
-$note_map = [];
-$quiz_cmids = array_filter(array_column((array)$quiz_grades, 'cmid'));
-if (!empty($quiz_cmids)) {
-    [$in_sql, $in_params] = $DB->get_in_or_equal(array_map('intval', array_unique($quiz_cmids)));
-    $note_rows = $DB->get_records_sql(
-        "SELECT c.id, c.cmid, c.body, c.created_at, u.lastname, u.firstname
-           FROM {unics_comments} c
-           JOIN {user} u ON u.id = c.teacher_mdl_user_id
-          WHERE c.student_id = ?
-            AND c.cmid {$in_sql}
-          ORDER BY c.created_at DESC",
-        array_merge([$student_id], $in_params)
-    );
-    foreach ($note_rows as $nr) {
+// Заметки педагога - через сервис (видимость по audience для роли смотрящего).
+// Один вызов: активные видимые заметки этого ученика; делим на по-активностные и общие.
+$all_notes = \local_unics\comment_manager::get_visible_for_student(
+    (int)$student_id, (int)$USER->id, ['archived' => 'active']);
+$note_map = [];        // cmid => [заметки]
+$general_notes = [];   // заметки без cmid
+foreach ($all_notes as $nr) {
+    if (!empty($nr->cmid)) {
         $note_map[(int)$nr->cmid][] = $nr;
+    } else {
+        $general_notes[] = $nr;
     }
 }
+// Отмечаем заметки ученика как просмотренные (для бейджей «N новых»).
+\local_unics\comment_manager::mark_seen((int)$student_id, (int)$USER->id);
 
 $last5 = array_slice((array)$quiz_grades, 0, 5);
 $avg_score = 0;
@@ -224,6 +221,34 @@ echo '<div class="col-md-6"><b>Email:</b> ' . s($mdl_user->email) . '</div>';
 echo '</div>';
 echo '</div></div>';
 
+// --- Образовательный маршрут (ИОМ, A2) ---
+$path = \local_unics\path_manager::get_active_path($student_id);
+echo '<h2 class="unics-section-title mt-4">Образовательный маршрут</h2>';
+if ($path) {
+    $prog = \local_unics\path_manager::progress((int)$path->id);
+    echo '<p>Прогресс: <strong>' . $prog['done'] . '</strong> из <strong>' . $prog['total']
+       . '</strong> шагов.';
+    if ($prog['current']) {
+        echo ' Текущий шаг: <strong>' . s($prog['current']->title) . '</strong>.';
+    } else if ($prog['total'] > 0) {
+        echo ' Все шаги пройдены.';
+    }
+    echo '</p>';
+} else {
+    echo '<p class="text-muted">Маршрут пока не составлен.</p>';
+}
+echo '<div class="d-flex flex-wrap gap-2 mb-2">';
+echo html_writer::link(
+    new moodle_url('/local/unics/pages/my_path.php', ['student_id' => $student_id]),
+    'Открыть маршрут', ['class' => 'btn btn-sm btn-outline-primary']);
+if ($is_admin || $is_teacher) {
+    echo html_writer::link(
+        new moodle_url('/local/unics/pages/path_builder.php', ['student_id' => $student_id]),
+        $path ? 'Редактировать маршрут' : 'Составить маршрут',
+        ['class' => 'btn btn-sm btn-outline-secondary']);
+}
+echo '</div>';
+
 // --- График прогресса ---
 if (count($grade_history) >= 2) {
     $chart_vals   = [];
@@ -294,9 +319,11 @@ if (empty($quiz_grades)) {
             echo '<td colspan="7">';
             foreach ($notes_for_quiz as $note) {
                 $na = trim("{$note->lastname} {$note->firstname}");
+                [$abadge, $aclass] = \local_unics\comment_manager::audience_badge((int)$note->audience);
                 echo '<div class="unics-teacher-note">';
                 echo '<div class="note-meta">';
-                echo '<span class="note-author">' . s($na) . '</span>';
+                echo '<span class="note-author">' . s($na)
+                   . ' <span class="badge badge-' . $aclass . '">' . s($abadge) . '</span></span>';
                 echo '<span class="note-date">' . userdate($note->created_at, '%d.%m.%Y') . '</span>';
                 echo '</div>';
                 echo '<p class="note-body">' . s($note->body) . '</p>';
@@ -448,27 +475,21 @@ if ($is_admin || $is_teacher) {
     }
 }
 
-// Общие заметки педагога (последние 3). Видны всем связанным ролям —
-// ученику и родителю в том числе; активностные заметки видны inline выше.
-$last_comments = $DB->get_records_sql(
-    "SELECT c.body, c.created_at, u.lastname, u.firstname
-     FROM {unics_comments} c
-     JOIN {user} u ON u.id = c.teacher_mdl_user_id
-     WHERE c.student_id = :sid AND c.cmid IS NULL
-     ORDER BY c.created_at DESC",
-    ['sid' => $student_id],
-    0, 3
-);
+// Общие заметки педагога (последние 3 видимые). Видимость по audience уже
+// применена сервисом выше ($general_notes). Активностные заметки - inline.
+$last_comments = array_slice($general_notes, 0, 3);
 
-echo '<h2 class="unics-section-title mt-4">Общие заметки педагога</h2>';
+echo '<h2 class="unics-section-title mt-4" id="notes">Общие заметки педагога</h2>';
 if (empty($last_comments)) {
     echo '<p class="text-muted">Комментариев ещё нет.</p>';
 } else {
     foreach ($last_comments as $cm) {
         $author = trim("{$cm->lastname} {$cm->firstname}");
+        [$abadge, $aclass] = \local_unics\comment_manager::audience_badge((int)$cm->audience);
         echo '<div class="card mb-2">';
         echo '<div class="card-header d-flex justify-content-between">';
-        echo '<span class="font-weight-bold">' . s($author) . '</span>';
+        echo '<span class="font-weight-bold">' . s($author)
+           . ' <span class="badge badge-' . $aclass . '">' . s($abadge) . '</span></span>';
         echo '<small class="text-muted">' . userdate($cm->created_at, '%d.%m.%Y') . '</small>';
         echo '</div>';
         echo '<div class="card-body py-2">';

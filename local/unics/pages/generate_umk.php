@@ -50,7 +50,6 @@ $PAGE->set_pagelayout('admin');
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
-    $bulk_mode      = (int)optional_param('bulk_mode', 0, PARAM_INT);
     $course_id      = required_param('course_id', PARAM_INT);
     $student_ids    = optional_param_array('student_ids', [], PARAM_INT);
     $generate_audio      = optional_param('generate_audio',      0, PARAM_INT);
@@ -60,18 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $extra_prompt        = optional_param('extra_prompt',       '', PARAM_TEXT);
     $student_ids    = array_filter($student_ids);
 
-    if ($bulk_mode) {
-        // В bulk-режиме темы и заголовки берутся из секций курса.
-        $title = $topic = '';
-        $target_section = -1;
-    } else {
-        $title          = required_param('title', PARAM_TEXT);
-        $topic          = required_param('topic', PARAM_TEXT);
-        $target_section = optional_param('target_section', -1, PARAM_INT);
-    }
+    $title          = required_param('title', PARAM_TEXT);
+    $topic          = required_param('topic', PARAM_TEXT);
+    $target_section = optional_param('target_section', -1, PARAM_INT);
 
-    if (empty($course_id) || empty($student_ids)
-        || (!$bulk_mode && (empty($title) || empty($topic)))) {
+    if (empty($course_id) || empty($student_ids) || empty($title) || empty($topic)) {
         redirect(
             new moodle_url('/local/unics/pages/generate_umk.php'),
             'Заполните все поля и выберите хотя бы одного учащегося.',
@@ -98,64 +90,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $level_groups[(int)$st->difficulty_level][] = (int)$student_id;
     }
 
-    // В bulk-режиме - собираем темы из секций курса (section > 0, пропускаем «Итоговый контроль»).
-    if ($bulk_mode) {
-        $section_rows = $DB->get_records_sql(
-            "SELECT section, name
-               FROM {course_sections}
-              WHERE course = :cid AND section > 0
-              ORDER BY section ASC",
-            ['cid' => (int)$course_id]
-        );
-        $bulk_topics = [];
-        foreach ($section_rows as $sr) {
-            $name = trim((string)$sr->name);
-            if ($name === '' || mb_stripos($name, 'итогов') !== false) {
-                continue;
-            }
-            $bulk_topics[(int)$sr->section] = $name;
-        }
-        if (empty($bulk_topics)) {
-            redirect(
-                new moodle_url('/local/unics/pages/generate_umk.php'),
-                'В выбранном курсе нет тем для массовой генерации (только «Введение» / «Итоговый контроль»).',
-                null, \core\output\notification::NOTIFY_WARNING
-            );
-        }
-    } else {
-        $bulk_topics = [0 => null]; // dummy: один проход с заданными title/topic/target_section
-    }
-
     $queued = 0;
-    foreach ($bulk_topics as $sec_num => $sec_topic) {
-        $umk_title  = $bulk_mode ? $sec_topic : $title;
-        $umk_topic  = $bulk_mode ? $sec_topic : $topic;
-        $umk_tsec   = $bulk_mode ? (int)$sec_num : (int)$target_section;
-
-        foreach ($level_groups as $level => $sids) {
-            $umk_id = $DB->insert_record('unics_umk', (object)[
-                'difficulty_level' => $level,
-                'mdl_course_id'    => (int)$course_id,
-                'title'            => $umk_title,
-                'topic'            => $umk_topic,
-                'target_section'   => $umk_tsec,
-                'extra_prompt'     => $extra_prompt,
-                'status'           => 1,
-                'generated_at'     => date('Y-m-d H:i:s'),
-            ]);
-            $DB->insert_record('unics_ai_queue', (object)[
-                'umk_id'              => $umk_id,
-                'student_ids'         => json_encode(array_values($sids)),
-                'generate_text'       => 1,
-                'generate_audio'      => (int)$generate_audio,
-                'generate_quiz'       => (int)$generate_quiz,
-                'generate_assignment' => (int)$generate_assignment,
-                'generate_video'      => (int)$generate_video,
-                'status'              => 1,
-                'created_at'          => date('Y-m-d H:i:s'),
-            ]);
-            $queued++;
-        }
+    foreach ($level_groups as $level => $sids) {
+        $umk_id = $DB->insert_record('unics_umk', (object)[
+            'difficulty_level' => $level,
+            'mdl_course_id'    => (int)$course_id,
+            'title'            => $title,
+            'topic'            => $topic,
+            'target_section'   => (int)$target_section,
+            'extra_prompt'     => $extra_prompt,
+            'status'           => 1,
+            'generated_at'     => date('Y-m-d H:i:s'),
+        ]);
+        $DB->insert_record('unics_ai_queue', (object)[
+            'umk_id'              => $umk_id,
+            'student_ids'         => json_encode(array_values($sids)),
+            'generate_text'       => 1,
+            'generate_audio'      => (int)$generate_audio,
+            'generate_quiz'       => (int)$generate_quiz,
+            'generate_assignment' => (int)$generate_assignment,
+            'generate_video'      => (int)$generate_video,
+            'status'              => 1,
+            'created_at'          => date('Y-m-d H:i:s'),
+        ]);
+        $queued++;
     }
 
     $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
@@ -312,16 +270,16 @@ if ($is_methodist) {
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter_org',
         'value' => (int)$filter_org]);
 } else {
-    echo html_writer::tag('label', 'Организация:', ['class' => 'mr-1']);
+    echo html_writer::tag('label', 'Организация:', ['class' => 'mr-1', 'for' => 'menufilter_org']);
     echo html_writer::select($orgs_menu, 'filter_org', $filter_org, false,
         ['class' => 'form-control form-control-sm mr-3']);
 }
 
-echo html_writer::tag('label', 'Класс:', ['class' => 'mr-1']);
+echo html_writer::tag('label', 'Класс:', ['class' => 'mr-1', 'for' => 'menufilter_class']);
 echo html_writer::select($classes_menu, 'filter_class', $filter_class, false,
     ['class' => 'form-control form-control-sm mr-3']);
 
-echo html_writer::tag('label', 'Буква:', ['class' => 'mr-1']);
+echo html_writer::tag('label', 'Буква:', ['class' => 'mr-1', 'for' => 'menufilter_letter']);
 echo html_writer::select($letters_menu, 'filter_letter', $filter_letter, false,
     ['class' => 'form-control form-control-sm mr-3']);
 
@@ -337,29 +295,10 @@ echo html_writer::start_tag('div', ['class' => 'row']);
 // Левая колонка: параметры материала
 echo html_writer::start_tag('div', ['class' => 'col-md-5']);
 
-// Переключатель режима: одна тема vs все темы курса.
-echo '<div class="card p-3 mb-3 border-warning">';
-echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
-echo html_writer::empty_tag('input', [
-    'type' => 'checkbox', 'id' => 'bulk_mode', 'name' => 'bulk_mode',
-    'value' => '1', 'class' => 'form-check-input',
-]);
-echo html_writer::tag('label',
-    '<strong>Сгенерировать все темы курса</strong>',
-    ['for' => 'bulk_mode', 'class' => 'form-check-label']
-);
-echo html_writer::end_tag('div');
-echo html_writer::tag('small',
-    'Создаст по одному заданию на каждую секцию курса (кроме «Введение» и «Итоговый контроль»). '
-    . 'Поля «Название» / «Тема» / «Раздел» будут проигнорированы.',
-    ['class' => 'text-muted']
-);
-echo '</div>';
-
 echo html_writer::start_tag('div', ['id' => 'single-mode-fields']);
 
 echo html_writer::start_tag('div', ['class' => 'form-group']);
-echo html_writer::tag('label', 'Название материала в разделе <span class="text-danger">*</span>');
+echo html_writer::tag('label', 'Название материала в разделе <span class="text-danger">*</span>', ['for' => 'gen_title']);
 echo html_writer::empty_tag('input', [
     'type' => 'text', 'name' => 'title', 'id' => 'gen_title',
     'class' => 'form-control', 'required' => 'required',
@@ -367,7 +306,7 @@ echo html_writer::empty_tag('input', [
 echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-group']);
-echo html_writer::tag('label', 'Тема урока <span class="text-danger">*</span>');
+echo html_writer::tag('label', 'Тема урока <span class="text-danger">*</span>', ['for' => 'gen_topic']);
 echo html_writer::empty_tag('input', [
     'type' => 'text', 'name' => 'topic', 'id' => 'gen_topic',
     'class' => 'form-control', 'required' => 'required',
@@ -377,7 +316,7 @@ echo html_writer::end_tag('div');
 echo html_writer::end_tag('div'); // single-mode-fields (только title+topic)
 
 echo html_writer::start_tag('div', ['class' => 'form-group']);
-echo html_writer::tag('label', 'Курс <span class="text-danger">*</span>');
+echo html_writer::tag('label', 'Курс <span class="text-danger">*</span>', ['for' => 'course_id_select']);
 $course_opts = '';
 foreach ($courses as $c) {
     $attrs = ['value' => $c->id];
@@ -398,7 +337,7 @@ if ($preselect_course_name) {
 echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-group', 'id' => 'section-field-wrap']);
-echo html_writer::tag('label', 'Раздел <span class="text-danger">*</span>');
+echo html_writer::tag('label', 'Раздел <span class="text-danger">*</span>', ['for' => 'target_section_select']);
 echo html_writer::tag('select', html_writer::tag('option', '- создать новый раздел -', ['value' => '-1']), [
     'name' => 'target_section', 'id' => 'target_section_select', 'class' => 'form-control',
 ]);
@@ -438,28 +377,6 @@ echo html_writer::script("
     if (courseSelect.value) {
         loadSections(courseSelect.value);
     }
-
-    // Переключатель bulk-режима: скрываем поля title/topic/section и убираем required.
-    var bulkCb         = document.getElementById('bulk_mode');
-    var singleBlock    = document.getElementById('single-mode-fields');
-    var sectionWrap    = document.getElementById('section-field-wrap');
-    var titleInput     = document.getElementById('gen_title');
-    var topicInput     = document.getElementById('gen_topic');
-
-    function applyBulkMode() {
-        var on = bulkCb.checked;
-        singleBlock.style.display = on ? 'none' : '';
-        sectionWrap.style.display = on ? 'none' : '';
-        if (on) {
-            titleInput.removeAttribute('required');
-            topicInput.removeAttribute('required');
-        } else {
-            titleInput.setAttribute('required', 'required');
-            topicInput.setAttribute('required', 'required');
-        }
-    }
-    bulkCb.addEventListener('change', applyBulkMode);
-    applyBulkMode();
 })();
 ");
 

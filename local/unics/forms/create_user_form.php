@@ -73,16 +73,17 @@ class unics_create_user_form extends moodleform {
             $mform->freeze('organization_id');
         }
 
-        // Целевая ролевая модель [[role-model-rework-2026-05-23]]:
-        // 1 региональн. админ, 2 районный админ, 9 районный методист,
-        // 4 методист орг., 5 педагог создающий курсы, 6 педагог (non-editing),
-        // 7 учащийся, 8 родитель. Код 3 (org_admin) из селекта убран (legacy-маппинг
-        // сохранён в user_manager для старых записей).
+        // Целевая ролевая модель v3 [[role-model-v3-2026-06-11]]:
+        // 1 региональн. админ, 9 муниципальный методист, 4 методист орг.,
+        // 5 педагог создающий курсы, 6 педагог (non-editing), 7 учащийся, 8 родитель.
+        // Код 2 (муниципальный админ) удалён — слит в муниципального методиста (9).
+        // Код 3 (org_admin) из селекта убран (legacy-маппинг сохранён в user_manager
+        // для старых записей).
         // Список ограничен правами создателя: нельзя создать роль своего уровня или выше
         // (методист не видит админских ролей и т.д.) — см. local_unics_creatable_roles().
         $all_roles = [
             '1' => get_string('role_region_admin', 'local_unics'),
-            '2' => get_string('role_district_admin', 'local_unics'),
+            '10' => get_string('role_region_methodist', 'local_unics'),
             '9' => get_string('role_district_methodist', 'local_unics'),
             '4' => get_string('role_methodist', 'local_unics'),
             '5' => get_string('role_editingteacher', 'local_unics'),
@@ -100,12 +101,13 @@ class unics_create_user_form extends moodleform {
         $mform->addElement('select', 'unics_role', get_string('unics_role', 'local_unics'), $roles);
         $mform->addRule('unics_role', null, 'required');
 
-        // Организация не нужна управленческим/районным ролям (скоуп регион/район):
-        // регион. админ (1), районный админ (2), районный методист (9). Также не нужна
-        // родителю (8) — его скоуп выводится через ребёнка (unics_parent_student),
-        // см. scope_checker::get_user_organization (наблюдение #4, 2026-05-28).
+        // Организация не нужна ролям со скоупом регион/муниципалитет:
+        // регион. админ (1), региональный методист (10, v3 фаза 2), муниципальный
+        // методист (9). Также не нужна родителю (8) — его скоуп выводится через
+        // ребёнка (unics_parent_student), см. scope_checker::get_user_organization
+        // (наблюдение #4, 2026-05-28).
         $mform->hideIf('organization_id', 'unics_role', 'eq', '1');
-        $mform->hideIf('organization_id', 'unics_role', 'eq', '2');
+        $mform->hideIf('organization_id', 'unics_role', 'eq', '10');
         $mform->hideIf('organization_id', 'unics_role', 'eq', '9');
         $mform->hideIf('organization_id', 'unics_role', 'eq', '8');
 
@@ -132,18 +134,22 @@ class unics_create_user_form extends moodleform {
         $districts_menu = ['' => '- не выбран -'];
         foreach ($districts_raw as $d) { $districts_menu[$d->id] = $d->name; }
 
-        // Регион — территория ТОЛЬКО регионального администратора (роль 1).
+        // Регион — территория региональных ролей: администратора (1) и методиста (10).
+        // hideIf OR-комбинируется, поэтому neq-правила не сложить — скрываем по
+        // blacklist (eq для всех ролей, кроме 1 и 10).
         $mform->addElement('select', 'region_id',
-            'Регион (для регионального администратора)', $regions_menu);
+            'Регион (для региональной роли)', $regions_menu);
         $mform->setType('region_id', PARAM_INT);
-        $mform->hideIf('region_id', 'unics_role', 'neq', '1');
+        foreach (['', '9', '4', '5', '6', '7', '8'] as $r) {
+            $mform->hideIf('region_id', 'unics_role', 'eq', $r);
+        }
 
-        // Район — территория районного администратора (2) и районного методиста (9).
-        // hideIf OR-комбинируется, поэтому скрываем для всех ролей, кроме 2 и 9.
+        // Муниципалитет — территория муниципального методиста (9).
+        // hideIf OR-комбинируется, поэтому скрываем для всех ролей, кроме 9.
         $mform->addElement('select', 'district_id',
-            'Муниципалитет (для муниципального администратора / методиста)', $districts_menu);
+            'Муниципалитет (для муниципального методиста)', $districts_menu);
         $mform->setType('district_id', PARAM_INT);
-        foreach (['', '1', '4', '5', '6', '7', '8'] as $r) {
+        foreach (['', '1', '10', '2', '4', '5', '6', '7', '8'] as $r) {
             $mform->hideIf('district_id', 'unics_role', 'eq', $r);
         }
 
@@ -216,6 +222,15 @@ class unics_create_user_form extends moodleform {
         $mform->addElement('text', 'qualification', get_string('qualification', 'local_unics'));
         $mform->setType('qualification', PARAM_TEXT);
 
+        // Архетип педагога (D2 / остаток #9). Мягкая характеристика, на доступ пока не
+        // влияет. См. [[subject-binding-design]] «Три архетипа педагога».
+        $ttype_menu = ['' => get_string('teacher_type_none', 'local_unics')]
+            + unics_user_manager::teacher_type_options();
+        $mform->addElement('select', 'teacher_type',
+            get_string('teacher_type', 'local_unics'), $ttype_menu);
+        $mform->setType('teacher_type', PARAM_ALPHA);
+        $mform->addHelpButton('teacher_type', 'teacher_type', 'local_unics');
+
         // Диапазон классов — мягкий фильтр (можно не указывать).
         $grade_menu = ['' => get_string('grade_any', 'local_unics')];
         for ($g = 1; $g <= 11; $g++) {
@@ -231,12 +246,13 @@ class unics_create_user_form extends moodleform {
         $mform->setType('grade_to', PARAM_INT);
         $mform->addHelpButton('grade_range_grp', 'grade_range', 'local_unics');
 
-        // Показывать блок педагога для ролей 4 (методист орг.), 9 (районный методист),
+        // Показывать блок педагога для ролей 4 (методист орг.), 9 (муниципальный методист),
         // 5 (педагог создающий курсы), 6 (педагог non-editing).
-        // Скрыть для пустой, 1, 2 (админы), 3 (legacy), 7, 8.
-        foreach (['teacher_data', 'subject_categories', 'qualification', 'grade_range_grp'] as $el) {
+        // Скрыть для пустой, 1 (регион. админ), 10 (региональный методист), 3 (legacy), 7, 8.
+        foreach (['teacher_data', 'subject_categories', 'qualification', 'teacher_type', 'grade_range_grp'] as $el) {
             $mform->hideIf($el, 'unics_role', 'eq', '');
-            $mform->hideIf($el, 'unics_role', 'eq', '2');
+            $mform->hideIf($el, 'unics_role', 'eq', '1');
+            $mform->hideIf($el, 'unics_role', 'eq', '10');
             $mform->hideIf($el, 'unics_role', 'eq', '3');
             $mform->hideIf($el, 'unics_role', 'eq', '7');
             $mform->hideIf($el, 'unics_role', 'eq', '8');
@@ -352,7 +368,7 @@ class unics_create_user_form extends moodleform {
         $st_html .= '</div></div>';
 
         $mform->addElement('static', 'link_students', 'Учащиеся педагога', $st_html);
-        foreach (['', '1', '2', '3', '4', '7', '8', '9'] as $r) {
+        foreach (['', '1', '10', '2', '3', '4', '7', '8', '9'] as $r) {
             $mform->hideIf('link_students', 'unics_role', 'eq', $r);
         }
 
@@ -385,7 +401,7 @@ class unics_create_user_form extends moodleform {
         $tc_html .= '</div></div>';
 
         $mform->addElement('static', 'link_teachers', 'Педагоги учащегося', $tc_html);
-        foreach (['', '1', '2', '3', '4', '5', '6', '8', '9'] as $r) {
+        foreach (['', '1', '10', '2', '3', '4', '5', '6', '8', '9'] as $r) {
             $mform->hideIf('link_teachers', 'unics_role', 'eq', $r);
         }
 
@@ -416,7 +432,7 @@ class unics_create_user_form extends moodleform {
         $pa_html .= '</div></div>';
 
         $mform->addElement('static', 'link_parents', 'Родители учащегося', $pa_html);
-        foreach (['', '1', '2', '3', '4', '5', '6', '8', '9'] as $r) {
+        foreach (['', '1', '10', '2', '3', '4', '5', '6', '8', '9'] as $r) {
             $mform->hideIf('link_parents', 'unics_role', 'eq', $r);
         }
 
@@ -431,7 +447,7 @@ class unics_create_user_form extends moodleform {
         $mform->hideIf('assign_student_id', 'unics_role', 'neq', '8');
 
         // Скрываем заголовок «Привязки» для ролей без связей.
-        foreach (['', '1', '2', '3', '4', '9'] as $r) {
+        foreach (['', '1', '10', '2', '3', '4', '9'] as $r) {
             $mform->hideIf('link_data', 'unics_role', 'eq', $r);
         }
 
@@ -498,12 +514,14 @@ class unics_create_user_form extends moodleform {
 JS;
         $mform->addElement('html', $js);
 
-        // Блок данных учащегося — не для регион. админа.
+        // Блок данных учащегося — не для региональных ролей (1 админ, 10 методист).
         $mform->hideIf('student_data', 'unics_role', 'eq', '1');
+        $mform->hideIf('student_data', 'unics_role', 'eq', '10');
 
-        // Блок данных педагога — не для регион. админа.
-        foreach (['teacher_data', 'subject_categories', 'qualification', 'grade_range_grp'] as $el) {
+        // Блок данных педагога — не для региональных ролей (1 админ, 10 методист).
+        foreach (['teacher_data', 'subject_categories', 'qualification', 'teacher_type', 'grade_range_grp'] as $el) {
             $mform->hideIf($el, 'unics_role', 'eq', '1');
+            $mform->hideIf($el, 'unics_role', 'eq', '10');
         }
 
         $this->add_action_buttons(true, get_string('create_user', 'local_unics'));
@@ -562,15 +580,15 @@ JS;
         }
 
         // Территория зависит от роли:
-        //   1 (региональн. админ) — регион;
-        //   2 (районный админ), 9 (районный методист) — район;
+        //   1 (региональн. админ), 10 (региональный методист) — регион;
+        //   9 (муниципальный методист) — муниципалитет;
         //   8 (родитель) — выводится через ребёнка, поля не требуем;
         //   остальные (4,5,6,7) — организация.
-        if ($role === 1) {
+        if ($role === 1 || $role === 10) {
             if (empty($data['region_id'])) {
-                $errors['region_id'] = 'Укажите регион для регионального администратора';
+                $errors['region_id'] = 'Укажите регион для региональной роли';
             }
-        } else if ($role === 2 || $role === 9) {
+        } else if ($role === 9) {
             if (empty($data['district_id'])) {
                 $errors['district_id'] = 'Укажите муниципалитет для этой роли';
             }

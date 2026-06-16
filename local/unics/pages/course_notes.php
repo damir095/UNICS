@@ -59,26 +59,37 @@ $PAGE->set_heading('Заметки педагога в курсе');
 $PAGE->set_pagelayout('standard');
 
 // ----------------------------------------------------------------
-// Загружаем заметки, привязанные к активностям этого курса
+// Заметки активностей этого курса - через сервис (видимость по audience).
 // ----------------------------------------------------------------
-$notes = $DB->get_records_sql(
-    "SELECT c.id, c.body, c.created_at, c.cmid,
-            cm.instance AS cm_instance,
-            m.name      AS modname,
-            u.lastname, u.firstname
-       FROM {unics_comments} c
-       JOIN {user}           u  ON u.id  = c.teacher_mdl_user_id
-       JOIN {course_modules} cm ON cm.id = c.cmid
-       JOIN {modules}        m  ON m.id  = cm.module
-      WHERE c.student_id = :sid
-        AND cm.course    = :cid
-      ORDER BY c.cmid ASC, c.created_at DESC",
-    ['sid' => $student_id, 'cid' => $courseid]
-);
+$visible = \local_unics\comment_manager::get_visible_for_student(
+    (int)$student_id, (int)$USER->id, ['type' => 'activity', 'archived' => 'active']);
 
-// Разрешаем имена модулей пакетно
+// Метаданные cmid (модуль/инстанс/курс) для возвращённых заметок одним запросом.
+$cm_meta = [];
+$cmids = array_unique(array_map(static fn($n) => (int)$n->cmid, $visible));
+if ($cmids) {
+    [$in, $p] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'cm');
+    foreach ($DB->get_records_sql(
+        "SELECT cm.id, cm.instance, cm.course, m.name AS modname
+           FROM {course_modules} cm
+           JOIN {modules} m ON m.id = cm.module
+          WHERE cm.id {$in}", $p) as $r) {
+        $cm_meta[(int)$r->id] = $r;
+    }
+}
+
+// Оставляем только заметки активностей ЭТОГО курса, обогащаем modname/instance.
 $mod_names = [];
-foreach ($notes as $n) {
+$by_cm = [];
+foreach ($visible as $n) {
+    $meta = $cm_meta[(int)$n->cmid] ?? null;
+    if (!$meta || (int)$meta->course !== (int)$courseid) {
+        continue;
+    }
+    $n->modname     = $meta->modname;
+    $n->cm_instance = $meta->instance;
+    $by_cm[(int)$n->cmid][] = $n;
+
     $key = $n->modname . '_' . $n->cm_instance;
     if (!isset($mod_names[$key])) {
         $name = $DB->get_field($n->modname, 'name', ['id' => $n->cm_instance]);
@@ -86,11 +97,8 @@ foreach ($notes as $n) {
     }
 }
 
-// Группируем по cmid
-$by_cm = [];
-foreach ($notes as $n) {
-    $by_cm[$n->cmid][] = $n;
-}
+// Отмечаем заметки ученика как просмотренные (для бейджей «N новых»).
+\local_unics\comment_manager::mark_seen((int)$student_id, (int)$USER->id);
 
 // ----------------------------------------------------------------
 // Вывод
@@ -153,9 +161,11 @@ foreach ($by_cm as $cmid => $cm_notes) {
     echo '<div class="card-body py-2">';
     foreach ($cm_notes as $n) {
         $author = trim("{$n->lastname} {$n->firstname}");
+        [$abadge, $aclass] = \local_unics\comment_manager::audience_badge((int)$n->audience);
         echo '<div class="unics-teacher-note mb-2">';
         echo '<div class="note-meta">';
-        echo '<span class="note-author">' . s($author) . '</span>';
+        echo '<span class="note-author">' . s($author)
+           . ' <span class="badge badge-' . $aclass . '">' . s($abadge) . '</span></span>';
         echo '<span class="note-date">' . userdate($n->created_at, '%d.%m.%Y %H:%M') . '</span>';
         echo '</div>';
         echo '<p class="note-body">' . s($n->body) . '</p>';

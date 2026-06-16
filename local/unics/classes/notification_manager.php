@@ -158,12 +158,12 @@ class notification_manager {
         string $badge_name,
         int    $points_awarded = 0
     ): void {
-        $subject = "{$badge_icon} Новый значок: «{$badge_name}»!";
+        $subject = "Новый значок: «{$badge_name}»!";
         $body    = '<p>Поздравляем! Вы получили значок <strong>'
-                 . $badge_icon . ' ' . htmlspecialchars($badge_name) . '</strong>.</p>';
+                 . htmlspecialchars($badge_name) . '</strong>.</p>';
 
         if ($points_awarded > 0) {
-            $body .= '<p>🪙 Вам начислено <strong>' . $points_awarded . ' баллов</strong> за достижение!</p>';
+            $body .= '<p>Вам начислено <strong>' . $points_awarded . ' баллов</strong> за достижение!</p>';
         }
 
         self::send($student_mdl_user_id, $subject, $body, self::TYPE_BADGE_EARNED);
@@ -182,10 +182,10 @@ class notification_manager {
             return;
         }
 
-        $subject = "{$badge_icon} {$student_name} получил значок «{$badge_name}»!";
-        $body    = '<p>Ваш ребёнок <strong>' . htmlspecialchars($student_name) . '</strong>'
+        $subject = "{$student_name} получил значок «{$badge_name}»!";
+        $body    = '<p>Ваш ребенок <strong>' . htmlspecialchars($student_name) . '</strong>'
                  . ' получил новый значок <strong>'
-                 . $badge_icon . ' ' . htmlspecialchars($badge_name) . '</strong>.</p>'
+                 . htmlspecialchars($badge_name) . '</strong>.</p>'
                  . '<p>Поздравьте его!</p>';
 
         foreach ($parent_mdl_user_ids as $parent_uid) {

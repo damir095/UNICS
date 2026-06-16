@@ -1,6 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
+require_once(__DIR__ . '/../classes/user_manager.php');
 require_once($CFG->dirroot . '/group/lib.php');
 
 require_login();
@@ -339,7 +340,7 @@ if ($filter_org > 0) {
 $teachers = $DB->get_records_sql(
     "SELECT t.id AS teacher_id, u.id AS mdl_user_id,
             u.lastname, u.firstname, u.middlename,
-            t.subjects, uo.unics_role,
+            t.subjects, t.teacher_type, uo.unics_role,
             o.name AS org_name
      FROM {unics_teachers} t
      JOIN {user} u ON u.id = t.mdl_user_id
@@ -625,13 +626,18 @@ $table->head = [
         html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'check_all']) . ' Все',
         ['for' => 'check_all']
     ),
-    'Педагог', 'Роль', 'Предметы', 'Организация', 'Статус', 'Группы в курсе'
+    'Педагог', 'Роль', 'Тип', 'Предметы', 'Организация', 'Статус', 'Группы в курсе'
 ];
 $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($teachers as $t) {
     $fio  = htmlspecialchars(trim("{$t->lastname} {$t->firstname} " . ($t->middlename ?? '')));
     $role = $unics_role_labels[$t->unics_role] ?? '-';
+
+    $ttype_label = unics_user_manager::teacher_type_label($t->teacher_type ?? null);
+    $ttype_cell  = $ttype_label !== ''
+        ? htmlspecialchars($ttype_label)
+        : html_writer::tag('span', '-', ['class' => 'text-muted']);
 
     $is_enrolled  = isset($enrolled_users[$t->teacher_id]);
     $status_badge = $is_enrolled
@@ -655,6 +661,7 @@ foreach ($teachers as $t) {
         $checkbox,
         html_writer::tag('strong', $fio),
         $role,
+        $ttype_cell,
         htmlspecialchars($t->subjects ?? '-'),
         htmlspecialchars($t->org_name ?? '-'),
         $status_badge,

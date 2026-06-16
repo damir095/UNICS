@@ -18,6 +18,9 @@ class points_manager {
     const POINTS_LEVEL_UP  = 100;
     const POINTS_QUIZ_PASS = 10;
 
+    // Порог «тест сдан» для начисления баллов, % от максимума
+    const QUIZ_PASS_PCT = 60;
+
     /**
      * Начислить баллы учащемуся. Возвращает новый баланс.
      */
@@ -111,7 +114,7 @@ class points_manager {
 
         // Каждый товар можно купить только один раз
         if ($DB->record_exists('unics_purchases', ['student_id' => $student_id, 'item_id' => $item_id])) {
-            return 'Товар уже приобретён';
+            return 'Товар уже приобретен';
         }
 
         if (!self::spend($student_id, (int)$item->cost, 'Покупка: ' . $item->name)) {
@@ -133,7 +136,7 @@ class points_manager {
     public static function get_purchases(int $student_id): array {
         global $DB;
         return array_values($DB->get_records_sql(
-            "SELECT p.id, p.purchased_at, s.name, s.icon_emoji, s.description
+            "SELECT p.id, p.item_id, p.purchased_at, s.name, s.icon, s.icon_emoji, s.item_type, s.description
                FROM {unics_purchases} p
                JOIN {unics_shop_items} s ON s.id = p.item_id
               WHERE p.student_id = :sid
@@ -148,7 +151,7 @@ class points_manager {
     public static function get_active_title(int $student_id): ?object {
         global $DB;
         return $DB->get_record_sql(
-            "SELECT s.name, s.icon_emoji
+            "SELECT s.name, s.icon, s.icon_emoji
                FROM {unics_purchases} p
                JOIN {unics_shop_items} s ON s.id = p.item_id
               WHERE p.student_id = :sid AND s.item_type = 1

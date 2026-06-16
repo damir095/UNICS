@@ -84,6 +84,8 @@ function theme_unics_get_extra_scss($theme): string {
         '_layout',
         '_login',
         '_unics-pages',
+        '_accessibility',  // per-user темы (dark/contrast/accent) — должен идти ПОСЛЕ остальных,
+                           // чтобы перекрывать базовые правила по cascade order.
     ];
 
     $scssdir = $CFG->dirroot . '/theme/unics/scss/';

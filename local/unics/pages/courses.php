@@ -1,8 +1,10 @@
 <?php
-// Управление курсами организации: архивирование = скрытие (course.visible).
+// Управление курсами ПО КАТЕГОРИИ (предмету): архивирование = скрытие (course.visible).
 // Решение 2026-05-26 (#5/#6): «архив» = тоггл visible, hard-delete НЕ делаем.
-// Права: системный админ (local/unics:manage) ИЛИ методист/районный админ
-// (local/unics:manageorg) в пределах своего скоупа.
+// 2026-06-15: ось фильтра переведена с организации на КАТЕГОРИЮ курсов (предмет) -
+// курсы общие и организованы по предметным категориям ([[subject-binding-design]]).
+// Права: системный админ (local/unics:manage) — все категории; методист/районный/
+// региональный (local/unics:manageorg) — категории организаций своего скоупа.
 
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
@@ -22,18 +24,39 @@ if (!$is_admin_user && !$is_manageorg) {
     require_capability('local/unics:manage', $sys_ctx);
 }
 
-$org_id = optional_param('org_id', 0, PARAM_INT);
+// ---------------------------------------------------------------------------
+// Доступные категории (предметы) по роли/скоупу.
+// Админ — все категории курсов; не-админ — категории организаций своего скоупа.
+// ---------------------------------------------------------------------------
+$cats = []; // catid => подпись (имя + счётчик курсов)
+if ($is_admin_user) {
+    foreach ($DB->get_records('course_categories', null, 'name ASC',
+        'id, name, coursecount') as $r) {
+        $cats[(int)$r->id] = $r->name . ' (' . (int)$r->coursecount . ')';
+    }
+} else {
+    [$ofw, $ofp] = scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $rows = $DB->get_records_sql(
+        "SELECT DISTINCT o.mdl_category_id AS catid
+           FROM {unics_organizations} o
+          WHERE o.is_active = 1 AND o.mdl_category_id IS NOT NULL AND ({$ofw})", $ofp);
+    $catids = array_filter(array_map(fn($r) => (int)$r->catid, $rows));
+    if ($catids) {
+        [$cin, $cp] = $DB->get_in_or_equal($catids, SQL_PARAMS_NAMED, 'c');
+        foreach ($DB->get_records_select('course_categories', "id $cin", $cp,
+            'name ASC', 'id, name, coursecount') as $r) {
+            $cats[(int)$r->id] = $r->name . ' (' . (int)$r->coursecount . ')';
+        }
+    }
+}
 
-// Скоуп: если он зафиксирован на одну организацию — выбор не показываем.
-$scope = $is_admin_user
-    ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
-    : scope_checker::get_user_scope((int)$USER->id);
-$fixed_org = (!$is_admin_user && !empty($scope['organization_id']));
-if ($fixed_org) {
-    $org_id = (int)$scope['organization_id'];
-} else if (!$is_admin_user && $org_id > 0
-    && !scope_checker::user_can_access_org((int)$USER->id, $org_id)) {
-    $org_id = 0; // организация вне скоупа — сбрасываем
+$cat_id = optional_param('cat_id', 0, PARAM_INT);
+// Если скоуп даёт ровно одну категорию — фиксируем её, селектор не показываем.
+$fixed_cat = (!$is_admin_user && count($cats) === 1);
+if ($fixed_cat) {
+    $cat_id = (int)array_key_first($cats);
+} else if ($cat_id > 0 && !isset($cats[$cat_id])) {
+    $cat_id = 0; // категория вне доступа — сбрасываем
 }
 
 // ---------------------------------------------------------------------------
@@ -49,14 +72,10 @@ if ($action === 'toggle_visibility' && confirm_sesskey()) {
         throw new moodle_exception('cannotedit', 'error'); // главная страница — не курс
     }
 
-    // Организация-владелец курса = та, чья категория совпадает с course.category.
-    $owner_org = $DB->get_record('unics_organizations',
-        ['mdl_category_id' => $course->category], 'id, name', IGNORE_MULTIPLE);
-
-    // Scope-проверка: не-админ может трогать только курсы орг своего скоупа.
+    // Доступ: админ — любой курс; не-админ — только курсы доступных ему категорий.
     if (!$is_admin_user) {
         require_capability('local/unics:manageorg', $sys_ctx);
-        if (!$owner_org || !scope_checker::user_can_access_org((int)$USER->id, (int)$owner_org->id)) {
+        if (!isset($cats[(int)$course->category])) {
             throw new moodle_exception('nopermissions', 'error', '',
                 'управление видимостью этого курса');
         }
@@ -66,52 +85,46 @@ if ($action === 'toggle_visibility' && confirm_sesskey()) {
     $newshow = empty($course->visible);          // был скрыт → показать; был виден → скрыть
     course_change_visibility($course->id, $newshow);
 
-    $redir = new moodle_url('/local/unics/pages/courses.php', ['org_id' => $org_id]);
+    $redir = new moodle_url('/local/unics/pages/courses.php', ['cat_id' => $cat_id]);
     redirect($redir,
         $newshow ? 'Курс снова показан учащимся.' : 'Курс скрыт (архивирован). Статистика сохранена.',
         null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
 $PAGE->set_context($sys_ctx);
-$PAGE->set_url(new moodle_url('/local/unics/pages/courses.php', ['org_id' => $org_id]));
-$PAGE->set_title('Курсы организации');
-$PAGE->set_heading('Курсы организации');
+$PAGE->set_url(new moodle_url('/local/unics/pages/courses.php', ['cat_id' => $cat_id]));
+$PAGE->set_title('Курсы (по категории)');
+$PAGE->set_heading('Курсы (по категории)');
 $PAGE->set_pagelayout('admin');
-
-// Список организаций для селектора — по скоупу.
-$orgs = [];
-if ($is_admin_user) {
-    foreach ($DB->get_records_select('unics_organizations', 'is_active = 1',
-        null, 'name ASC', 'id, name') as $r) {
-        $orgs[(int)$r->id] = $r->name;
-    }
-} else {
-    [$ofw, $ofp] = scope_checker::org_filter_sql((int)$USER->id, 'o');
-    foreach ($DB->get_records_sql(
-        "SELECT o.id, o.name FROM {unics_organizations} o
-          WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp) as $r) {
-        $orgs[(int)$r->id] = $r->name;
-    }
-}
 
 echo $OUTPUT->header();
 echo local_unics_dashboard_button();
 
 echo html_writer::tag('p',
     'Архивирование курса = скрытие от учащихся (как «скрыть курс» в Moodle). '
-    . 'Оценки, материалы и статистика при этом сохраняются. Жёсткого удаления здесь нет.',
+    . 'Оценки, материалы и статистика при этом сохраняются. Жёсткого удаления здесь нет. '
+    . 'Курсы сгруппированы по категории (предмету).',
     ['class' => 'text-muted']);
 
-// Селектор организации (если скоуп не зафиксирован на одну орг).
-if (!$fixed_org) {
+if (empty($cats)) {
+    echo $OUTPUT->notification(
+        'Нет доступных категорий курсов. Категория задаётся организации '
+        . '(mdl_category_id) или существует как предмет в каталоге курсов.',
+        \core\output\notification::NOTIFY_INFO);
+    echo $OUTPUT->footer();
+    exit;
+}
+
+// Селектор категории (если скоуп не зафиксирован на одну).
+if (!$fixed_cat) {
     echo '<form method="get" class="row g-2 align-items-end mb-4">';
     echo '<div class="col-auto">';
-    echo html_writer::tag('label', 'Организация', ['class' => 'fw-bold d-block mb-1', 'for' => 'org_id']);
-    echo '<select name="org_id" id="org_id" class="form-control" style="max-width:400px" onchange="this.form.submit()">';
-    echo '<option value="0">- Выберите организацию -</option>';
-    foreach ($orgs as $oid => $olabel) {
-        $sel = ($oid == $org_id) ? ' selected' : '';
-        echo '<option value="' . $oid . '"' . $sel . '>' . s($olabel) . '</option>';
+    echo html_writer::tag('label', 'Категория (предмет)', ['class' => 'fw-bold d-block mb-1', 'for' => 'cat_id']);
+    echo '<select name="cat_id" id="cat_id" class="form-control" style="max-width:400px" onchange="this.form.submit()">';
+    echo '<option value="0">- Выберите категорию -</option>';
+    foreach ($cats as $cid => $clabel) {
+        $sel = ($cid == $cat_id) ? ' selected' : '';
+        echo '<option value="' . $cid . '"' . $sel . '>' . s($clabel) . '</option>';
     }
     echo '</select>';
     echo '</div>';
@@ -119,34 +132,19 @@ if (!$fixed_org) {
     echo '</form>';
 }
 
-if ($org_id <= 0) {
+if ($cat_id <= 0) {
     echo $OUTPUT->footer();
     exit;
 }
 
-// Организация выбрана — проверяем доступ ещё раз и грузим её категорию.
-if (!$is_admin_user && !scope_checker::user_can_access_org((int)$USER->id, $org_id)) {
-    throw new moodle_exception('nopermissions', 'error', '', 'просмотр курсов этой организации');
-}
-$org = $DB->get_record('unics_organizations', ['id' => $org_id],
-    'id, name, mdl_category_id', MUST_EXIST);
+$catname = $DB->get_field('course_categories', 'name', ['id' => $cat_id]);
+echo $OUTPUT->heading(s($catname ?: ('Категория #' . $cat_id)), 4);
 
-echo $OUTPUT->heading(s($org->name), 4);
-
-if (empty($org->mdl_category_id)) {
-    echo $OUTPUT->notification(
-        'У организации не задана категория курсов (mdl_category_id). '
-        . 'Курсы привязываются к категории при создании через «Шаблоны курсов».',
-        \core\output\notification::NOTIFY_WARNING);
-    echo $OUTPUT->footer();
-    exit;
-}
-
-$courses = $DB->get_records('course', ['category' => $org->mdl_category_id],
+$courses = $DB->get_records('course', ['category' => $cat_id],
     'visible DESC, fullname ASC', 'id, fullname, shortname, visible');
 
 if (!$courses) {
-    echo $OUTPUT->notification('В категории этой организации пока нет курсов.',
+    echo $OUTPUT->notification('В этой категории пока нет курсов.',
         \core\output\notification::NOTIFY_INFO);
     echo $OUTPUT->footer();
     exit;
@@ -174,7 +172,7 @@ foreach ($courses as $c) {
     $toggle = '<form method="post" class="d-inline" ' . $confirm . '>'
         . '<input type="hidden" name="action"   value="toggle_visibility">'
         . '<input type="hidden" name="courseid" value="' . $c->id . '">'
-        . '<input type="hidden" name="org_id"   value="' . $org_id . '">'
+        . '<input type="hidden" name="cat_id"   value="' . $cat_id . '">'
         . '<input type="hidden" name="sesskey"  value="' . sesskey() . '">'
         . '<button type="submit" class="btn btn-sm ' . $btn_class . '">' . $btn_label . '</button>'
         . '</form>';
