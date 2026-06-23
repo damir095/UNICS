@@ -70,6 +70,21 @@ class irt_client {
         return $data['items'];
     }
 
+    /**
+     * @param array $skills список ['element_id'=>int,'depth'=>int,'score'=>float,'band'=>int,
+     *                       'theta'=>?float,'theta_se'=>?float,'attempts_n'=>int]
+     * @return array|null список рекомендаций ['element_id'=>int,'kind'=>string,'priority'=>float,
+     *                   'reason_code'=>string] или null при сбое
+     */
+    public static function recommend(array $skills, int $top_n): ?array {
+        $data = self::post('/recommend',
+            ['model' => 'content_v1', 'top_n' => $top_n, 'skills' => array_values($skills)]);
+        if (!$data || !isset($data['recommendations']) || !is_array($data['recommendations'])) {
+            return null;
+        }
+        return $data['recommendations'];
+    }
+
     public static function health(): bool {
         try {
             $curl = new \curl(['ignoresecurity' => true]);

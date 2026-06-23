@@ -27,6 +27,14 @@ class mastery_manager {
         return new rolling_avg_estimator();
     }
 
+    /** Текущий рекомендатель. ML-фаза подменяет реализацию шва здесь по флагу. */
+    private static function recommender(): \local_unics\adaptive\recommender {
+        if ((int)get_config('local_unics', 'adaptive_recommender_ml') === 1) {
+            return new \local_unics\adaptive\service_recommender();
+        }
+        return new \local_unics\adaptive\rule_recommender();
+    }
+
     /**
      * Реакция на оцененную попытку теста. Идемпотентность не гарантируется (повторный
      * вызов на тот же грейд = еще одна «попытка» в EWMA) - вызывать один раз на событие
@@ -85,7 +93,7 @@ class mastery_manager {
         $days = (int)get_config('local_unics', 'adaptive_autoapply_days');
         $auto_after = $days > 0 ? time() + $days * 86400 : null;
         try {
-            $cands = (new \local_unics\adaptive\rule_recommender())->recommend($student_id);
+            $cands = self::recommender()->recommend($student_id);
             foreach ($cands as $c) {
                 suggestion_service::create(
                     $student_id,
