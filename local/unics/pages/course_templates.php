@@ -7,16 +7,17 @@ local_unics_require_not_student();
 
 $ctx                = context_system::instance();
 $is_admin_user      = has_capability('local/unics:manage', $ctx);
-$is_methodist       = !$is_admin_user && local_unics_is_methodist();
 // unics_role 5 — «педагог, создающий курсы». Подтверждено наблюдением 2026-05-28:
 // две раздельные роли (5 = editingteacher = создаёт курсы, 6 = teacher = только ведёт)
 // именно для того, чтобы editingteacher имел доступ к шаблонам.
-$is_editingteacher  = !$is_admin_user && !$is_methodist
+// Методист курсы НЕ создаёт (G5 [[role-capability-audit-2026-06-17]], встречи 10-11.06):
+// страница создаёт курс программно, поэтому гард тут - единственная защита от прямого URL.
+$is_editingteacher  = !$is_admin_user
     && local_unics_user_has_role((int)$USER->id, ['editingteacher']);
 
-if (!$is_admin_user && !$is_methodist && !$is_editingteacher) {
+if (!$is_admin_user && !$is_editingteacher) {
     redirect(new moodle_url('/local/unics/pages/dashboard.php'),
-        'Создание курсов доступно только педагогу, создающему курсы, методисту и администратору.',
+        'Создание курсов доступно только педагогу, создающему курсы, и администратору.',
         null, \core\output\notification::NOTIFY_WARNING);
 }
 

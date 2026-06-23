@@ -504,6 +504,7 @@
         <FIELD NAME="mdl_course_id" TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="umk_id"       TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="target_level" TYPE="int"  LENGTH="2"   NOTNULL="false" SEQUENCE="false" COMMENT="план уровня 1..3"/>
+        <FIELD NAME="element_id"   TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="навык-причина adaptive-шага (source=3); FK codifier_element"/>
         <FIELD NAME="status"       TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false" COMMENT="1=запланирован, 2=в работе, 3=пройден"/>
         <FIELD NAME="source"       TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false" COMMENT="1=manual, 2=ai/умк, 3=adaptive"/>
         <FIELD NAME="planned_from" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
@@ -513,6 +514,7 @@
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="path_id" TYPE="foreign" FIELDS="path_id" REFTABLE="unics_learning_path" REFFIELDS="id"/>
+        <KEY NAME="element_id" TYPE="foreign" FIELDS="element_id" REFTABLE="unics_codifier_element" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
         <INDEX NAME="ix_step_path_ordinal" UNIQUE="false" FIELDS="path_id, ordinal"/>
@@ -581,6 +583,177 @@
       <INDEXES>
         <INDEX NAME="uq_class_conv" UNIQUE="true"  FIELDS="organization_id, class_number, class_letter"/>
         <INDEX NAME="ix_conv"       UNIQUE="false" FIELDS="conversationid"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_codifier" COMMENT="Шапка кодификатора: один на дисциплину (категорию курсов)">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="mdl_category_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="description" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="created_by_mdl_user_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_codifier_category" UNIQUE="false" FIELDS="mdl_category_id, status"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_codifier_element" COMMENT="Дерево элементов содержания (self-ref, материализованный path)">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="codifier_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="parent_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="code" TYPE="char" LENGTH="40" NOTNULL="true" DEFAULT="" SEQUENCE="false"/>
+        <FIELD NAME="title" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="ordinal" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="path" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="codifier_id" TYPE="foreign" FIELDS="codifier_id" REFTABLE="unics_codifier" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_element_tree" UNIQUE="false" FIELDS="codifier_id, parent_id, ordinal"/>
+        <INDEX NAME="ix_element_path" UNIQUE="false" FIELDS="codifier_id, path"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_codifier_link" COMMENT="m2m элемент-контент, полиморфная (cmid/questionid)">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="element_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="target_type" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="target_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="weight" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="created_by_mdl_user_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="element_id" TYPE="foreign" FIELDS="element_id" REFTABLE="unics_codifier_element" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_codifier_link" UNIQUE="true" FIELDS="element_id, target_type, target_id"/>
+        <INDEX NAME="ix_link_target" UNIQUE="false" FIELDS="target_type, target_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_course_delegation" COMMENT="Делегирование курса скоупу (муниципалитет/организация) - кому методист может назначать учеников (роли v3 фаза 3)">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="scope_type" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="district | org"/>
+        <FIELD NAME="scope_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="id муниципалитета или организации"/>
+        <FIELD NAME="usercreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_delegation" UNIQUE="true" FIELDS="courseid, scope_type, scope_id"/>
+        <INDEX NAME="ix_delegation_scope" UNIQUE="false" FIELDS="scope_type, scope_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_skill_mastery" COMMENT="Владение навыком (элементом кодификатора) учащимся - ядро адаптива S1">
+      <FIELDS>
+        <FIELD NAME="id"                TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"        TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="element_id"        TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="score"             TYPE="number" LENGTH="5"  DECIMALS="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0-100; скользящее взвешенное среднее (в ML-фазе = проекция theta)"/>
+        <FIELD NAME="band"              TYPE="int"    LENGTH="2"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="0=недостаточно данных,1=пробел,2=средне,3=освоено"/>
+        <FIELD NAME="attempts_n"        TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="last_score"        TYPE="number" LENGTH="5"  DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="% последней попытки по навыку"/>
+        <FIELD NAME="last_attempt_cmid" TYPE="int"    LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="updated_at"        TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="theta"             TYPE="number" LENGTH="7" DECIMALS="4" NOTNULL="false" SEQUENCE="false" COMMENT="IRT-способность (ML-фаза); NULL для rolling_avg"/>
+        <FIELD NAME="theta_se"          TYPE="number" LENGTH="7" DECIMALS="4" NOTNULL="false" SEQUENCE="false" COMMENT="Стандартная ошибка theta"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students"         REFFIELDS="id"/>
+        <KEY NAME="element_id" TYPE="foreign" FIELDS="element_id" REFTABLE="unics_codifier_element" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_mastery_student_element" UNIQUE="true"  FIELDS="student_id, element_id"/>
+        <INDEX NAME="ix_mastery_element_band"    UNIQUE="false" FIELDS="element_id, band"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_item_irt" COMMENT="Параметры заданий IRT (Rasch b); item_ref = questionbankentryid">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="item_ref"     TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="questionbankentryid"/>
+        <FIELD NAME="element_id"   TYPE="int"    LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="model"        TYPE="char"   LENGTH="20" NOTNULL="true"  DEFAULT="rasch" SEQUENCE="false"/>
+        <FIELD NAME="a"            TYPE="number" LENGTH="6"  DECIMALS="4" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="b"            TYPE="number" LENGTH="6"  DECIMALS="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="c"            TYPE="number" LENGTH="6"  DECIMALS="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="calibrated_n" TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="updated_at"   TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_item_irt_ref" UNIQUE="true" FIELDS="item_ref"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_mastery_history" COMMENT="Append-only лог смен владения навыком (per-skill аналог unics_level_history; разметка для ML)">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"   TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="element_id"   TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="old_score"    TYPE="number" LENGTH="5"  DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="NULL = навык впервые зафиксирован"/>
+        <FIELD NAME="new_score"    TYPE="number" LENGTH="5"  DECIMALS="2" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="old_band"     TYPE="int"    LENGTH="2"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="new_band"     TYPE="int"    LENGTH="2"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="trigger_cmid" TYPE="int"    LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="changed_at"   TYPE="int"    LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students"         REFFIELDS="id"/>
+        <KEY NAME="element_id" TYPE="foreign" FIELDS="element_id" REFTABLE="unics_codifier_element" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_masthist_student" UNIQUE="false" FIELDS="student_id, changed_at"/>
+        <INDEX NAME="ix_masthist_element" UNIQUE="false" FIELDS="element_id, changed_at"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_adaptive_suggestion" COMMENT="Очередь гибридного гейта педагога (S1=схема+CRUD; рекомендатель/применение=S2)">
+      <FIELDS>
+        <FIELD NAME="id"               TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="student_id"       TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="element_id"       TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="NULL для kind=смена уровня (глобально)"/>
+        <FIELD NAME="kind"             TYPE="int"  LENGTH="2"  NOTNULL="true"  SEQUENCE="false" COMMENT="1=смена уровня,2=ремедиация,3=продвижение"/>
+        <FIELD NAME="payload"          TYPE="text"             NOTNULL="false" SEQUENCE="false" COMMENT="JSON: target_level / данные будущего path_step"/>
+        <FIELD NAME="status"           TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="0=ожидает,1=принято,2=отклонено,3=авто-применено"/>
+        <FIELD NAME="auto_apply_after" TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="ts гибрида «авто через N дней»"/>
+        <FIELD NAME="created_at"       TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="decided_by"       TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="mdl_user_id педагога"/>
+        <FIELD NAME="decided_at"       TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="rationale"        TYPE="text"             NOTNULL="false" SEQUENCE="false" COMMENT="кэш LLM-пояснения «почему этот шаг» (S3)"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="student_id" TYPE="foreign" FIELDS="student_id" REFTABLE="unics_students" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_sugg_student_status" UNIQUE="false" FIELDS="student_id, status"/>
+        <INDEX NAME="ix_sugg_open"           UNIQUE="false" FIELDS="status, auto_apply_after"/>
       </INDEXES>
     </TABLE>
 

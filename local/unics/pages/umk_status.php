@@ -19,6 +19,9 @@ $PAGE->set_title('История генерации УМК - УНИКС');
 $PAGE->set_heading('История генерации материалов');
 $PAGE->set_pagelayout('admin');
 
+$page    = optional_param('page', 0, PARAM_INT);
+$perpage = 25;
+
 // Ручной запуск обработки очереди (для отладки)
 $run_now = optional_param('run_now', 0, PARAM_INT);
 if ($run_now && confirm_sesskey()) {
@@ -130,22 +133,12 @@ if ($publish_id && confirm_sesskey()) {
             continue;
         }
         try {
-            \local_unics\points_manager::award(
-                (int)$student->id,
-                \local_unics\points_manager::POINTS_UMK_READY,
-                \local_unics\points_manager::REASON_UMK_READY,
-                'Готов УМК «' . mb_substr($umk->title, 0, 50) . '»'
-            );
-        } catch (\Throwable $ep) {
-            debugging('УМК publish: баллы не начислены: ' . $ep->getMessage());
-        }
-        try {
             \local_unics\notification_manager::notify_umk_ready(
                 (int)$student->mdl_user_id,
                 $umk->title,
                 $course_name,
                 (int)$umk->difficulty_level,
-                \local_unics\points_manager::POINTS_UMK_READY
+                0
             );
         } catch (\Throwable $en) {
             debugging('УМК publish: уведомление не отправлено: ' . $en->getMessage());
@@ -197,16 +190,19 @@ $status_labels = [
     5 => '<span class="badge badge-dark">Отменён</span>',
 ];
 
+$total = (int)$DB->count_records('unics_umk');
 $records = $DB->get_records_sql(
     "SELECT u.id, u.title, u.topic, u.difficulty_level, u.status, u.generated_at, u.published_at, u.mdl_course_id,
-            q.error_message, q.processed_at,
+            (SELECT q.error_message FROM {unics_ai_queue} q
+              WHERE q.umk_id = u.id ORDER BY q.id DESC LIMIT 1) AS error_message,
+            (SELECT q.processed_at FROM {unics_ai_queue} q
+              WHERE q.umk_id = u.id ORDER BY q.id DESC LIMIT 1) AS processed_at,
             c.fullname AS course_name,
             (SELECT COUNT(*) FROM {unics_umk_students} us WHERE us.umk_id = u.id) AS student_count
      FROM {unics_umk} u
-     LEFT JOIN {course} c          ON c.id    = u.mdl_course_id
-     LEFT JOIN {unics_ai_queue} q  ON q.umk_id = u.id
-     ORDER BY u.generated_at DESC
-     LIMIT 50"
+     LEFT JOIN {course} c ON c.id = u.mdl_course_id
+     ORDER BY u.generated_at DESC",
+    [], $page * $perpage, $perpage
 );
 
 echo $OUTPUT->header();
@@ -236,7 +232,7 @@ if (empty($records)) {
     $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 
     $table = new html_table();
-    $table->head = ['Материал', 'Тема', 'Уровень', 'Учащихся', 'Курс', 'Статус', 'Дата', ''];
+    $table->head = ['Тема', 'Уровень', 'Учащихся', 'Курс', 'Статус', 'Дата', ''];
     $table->attributes['class'] = 'table table-striped table-sm';
 
     foreach ($records as $r) {
@@ -286,7 +282,6 @@ if (empty($records)) {
         }
 
         $table->data[] = [
-            s($r->title),
             s($r->topic),
             $lvl_label,
             (int)$r->student_count,
@@ -298,6 +293,8 @@ if (empty($records)) {
     }
 
     echo html_writer::table($table);
+    echo local_unics_render_paging_bar(
+        $total, $page, $perpage, new moodle_url('/local/unics/pages/umk_status.php'));
 }
 
 echo $OUTPUT->footer();

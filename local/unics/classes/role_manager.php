@@ -374,48 +374,55 @@ class role_manager {
             ],
 
             // ------------------------------------------------------------
-            // Методист (methodist) — создаёт курсы/шаблоны + пишет в свой скоуп (новое: manageorg)
+            // Методист (methodist) — НЕ создаёт и НЕ редактирует курсы/контент.
+            // Решение встреч 10-11.06 (G5-аудит 2026-06-17, [[role-capability-audit-2026-06-17]]):
+            // «методист ничего не разрабатывает, всё выставляется от педагога, который создаёт
+            // курсы; этими курсами пользуются организации». Методист добавляет детей в свою
+            // организацию и записывает их на делегированные курсы (manageorg + enrol по
+            // делегированию), видит участников/оценки/отчёты. Создание курсов, редактирование
+            // содержимого, бэкап/восстановление и банк вопросов перенесены в prevent.
             // ------------------------------------------------------------
             'methodist' => [
                 'allow' => array_merge(
-                    $caps_common, $caps_course_edit, $caps_add_activities, $caps_content_tools,
-                    $caps_view_participants, $caps_messaging,
+                    $caps_common, $caps_view_participants, $caps_messaging,
                     [
                         'local/unics:viewstudents',
-                        // Новое (этап 1 пункта #11, встреча 2026-05-20):
-                        // даёт право писать (создавать ученика, назначать педагога) в рамках
-                        // скоупа методиста (район/орг через unics_user_org). Каждая страница,
-                        // использующая manageorg, обязана проверять, что target входит в скоуп.
+                        // Даёт право писать (создавать ученика, назначать педагога, записывать
+                        // на делегированные курсы) в рамках скоупа методиста (район/орг через
+                        // unics_user_org). Каждая страница, использующая manageorg, обязана
+                        // проверять, что target входит в скоуп. enrol/manual:enrol методист
+                        // получает из архетипа editingteacher (запись на курс программная).
                         'local/unics:manageorg',
-                        'moodle/course:create', 'moodle/course:delete',
-                        'moodle/course:viewhiddenactivities', 'moodle/course:viewhiddensections',
+                        // Просмотр курсов/категорий и записи — без редактирования.
                         'moodle/course:viewhiddencourses', 'moodle/course:viewhiddenuserfields',
                         'moodle/course:viewsuspendedusers', 'moodle/course:viewscales',
                         'moodle/course:enrolconfig', 'moodle/course:enrolreview',
-                        'moodle/course:visibility', 'moodle/course:changefullname',
-                        'moodle/course:changeshortname', 'moodle/course:changesummary',
-                        'moodle/course:tag', 'moodle/course:renameroles',
-                        'moodle/course:creategroupconversations', 'moodle/course:managegroups',
                         'moodle/category:viewcourselist', 'moodle/category:viewhiddencategories',
-                        'moodle/backup:backupcourse', 'moodle/backup:backupsection',
-                        'moodle/backup:backupactivity', 'moodle/backup:configure',
-                        'moodle/backup:downloadfile', 'moodle/restore:configure',
-                        'moodle/restore:restorecourse', 'moodle/restore:restoresection',
-                        'moodle/restore:restoreactivity', 'moodle/restore:uploadfile',
-                        'moodle/question:add', 'moodle/question:editall', 'moodle/question:viewall',
-                        'moodle/question:useall', 'moodle/question:managecategory',
+                        // Просмотр оценок и отчётов (мониторинг учеников организации).
                         'moodle/grade:viewall', 'moodle/grade:view',
                         'gradereport/grader:view', 'gradereport/user:view', 'gradereport/overview:view',
-                        'mod/forum:addnews', 'mod/forum:addinstance',
-                        'mod/wiki:managewiki',
-                        'tool/recyclebin:viewitems', 'tool/recyclebin:restoreitems', 'tool/recyclebin:deleteitems',
-                        'moodle/filter:manage', 'moodle/site:manageblocks', 'moodle/block:edit', 'moodle/block:view',
                         'moodle/site:viewreports', 'report/outline:view', 'report/progress:view', 'report/completion:view',
+                        'moodle/block:view',
                     ]
                 ),
                 'prevent' => array_merge(
-                    $caps_grading,
+                    // Запрет на построение/редактирование курсов и контента:
+                    //   caps_course_edit  — настройки курса, разделы, файлы, бэкап/восстановление;
+                    //   caps_add_activities — добавление модулей;
+                    //   caps_content_tools — банк контента/H5P/банк вопросов (свои)/редактор.
+                    $caps_grading, $caps_course_edit, $caps_add_activities, $caps_content_tools,
                     [
+                        // Создание/удаление курсов и правка карточки курса.
+                        'moodle/course:create', 'moodle/course:delete',
+                        'moodle/course:visibility', 'moodle/course:changefullname',
+                        'moodle/course:changeshortname', 'moodle/course:changesummary',
+                        'moodle/course:renameroles', 'moodle/course:creategroupconversations',
+                        // Банк вопросов (общий) и контент-инструменты модулей.
+                        'moodle/question:editall', 'moodle/question:viewall', 'moodle/question:useall',
+                        'mod/forum:addnews', 'mod/wiki:managewiki',
+                        'tool/recyclebin:viewitems', 'tool/recyclebin:restoreitems', 'tool/recyclebin:deleteitems',
+                        'moodle/filter:manage', 'moodle/site:manageblocks', 'moodle/block:edit',
+                        // Прежние системные запреты.
                         'moodle/site:accessallgroups', 'moodle/site:config',
                         'moodle/user:create', 'moodle/user:delete', 'moodle/user:update',
                         'moodle/role:manage',
@@ -576,7 +583,8 @@ class role_manager {
         // Районный методист — копия методиста организации по правам.
         // Разница только в скоупе (район), который хранится в unics_user_org,
         // а не в матрице capabilities. Поэтому переиспользуем готовый набор:
-        //   district_methodist ≈ methodist (создаёт курсы/УМК + manageorg).
+        //   district_methodist ≈ methodist (manageorg + запись на делегированные курсы,
+        //   БЕЗ создания/редактирования курсов — G5 [[role-capability-audit-2026-06-17]]).
         // Муниципальный администратор (district_admin) удалён в v3 [[role-model-v3-2026-06-11]] —
         // его функции перешли муниципальному методисту.
         $matrix['district_methodist'] = $matrix['methodist'];

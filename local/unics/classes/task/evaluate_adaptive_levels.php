@@ -18,7 +18,7 @@ class evaluate_adaptive_levels extends \core\task\scheduled_task {
         $skipped  = 0;
 
         foreach ($students as $student) {
-            $new_level = \local_unics\adaptive_engine::evaluate_student((int)$student->id);
+            $new_level = \local_unics\adaptive_engine::gate_level_change((int)$student->id);
             if ($new_level !== null) {
                 $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
                 $old_label   = $level_names[$student->difficulty_level] ?? $student->difficulty_level;

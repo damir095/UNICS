@@ -139,7 +139,8 @@ foreach ($steps as $i => $s) {
             s($course_names[(int)$s->mdl_course_id]));
     }
     if (!empty($s->target_level)) {
-        $meta[] = 'Цель уровня: ' . s($levels[(int)$s->target_level] ?? '-');
+        $meta[] = ($is_own ? 'Уровень: ' : 'Цель уровня: ')
+            . s($levels[(int)$s->target_level] ?? '-');
     }
     if ($meta) {
         echo '<p class="mt-2 mb-1 text-muted">' . implode(' · ', $meta) . '</p>';

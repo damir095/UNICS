@@ -1037,5 +1037,246 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026061501, 'local', 'unics');
     }
 
+    if ($oldversion < 2026061700) {
+        // Кодификатор v1 [[codifier-design]]: дерево элементов содержания + полиморфная
+        // привязка контента + сквозная аналитика. Три таблицы.
+
+        // --- unics_codifier (шапка: 1 на дисциплину) ---
+        $table = new xmldb_table('unics_codifier');
+        $table->add_field('id',                     XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('mdl_category_id',        XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, null);
+        $table->add_field('name',                   XMLDB_TYPE_CHAR,    '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('description',            XMLDB_TYPE_TEXT,    null,  null, null, null, null);
+        $table->add_field('status',                 XMLDB_TYPE_INTEGER, '2',   null, XMLDB_NOTNULL, null, '1');
+        $table->add_field('created_by_mdl_user_id', XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timecreated',            XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified',           XMLDB_TYPE_INTEGER, '10',  null, null, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('ix_codifier_category', XMLDB_INDEX_NOTUNIQUE, ['mdl_category_id', 'status']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_codifier_element (дерево self-ref) ---
+        $table = new xmldb_table('unics_codifier_element');
+        $table->add_field('id',           XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('codifier_id',  XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, null);
+        $table->add_field('parent_id',    XMLDB_TYPE_INTEGER, '10',  null, null, null, null);
+        $table->add_field('code',         XMLDB_TYPE_CHAR,    '40',  null, XMLDB_NOTNULL, null, '');
+        $table->add_field('title',        XMLDB_TYPE_CHAR,    '510', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('ordinal',      XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('path',         XMLDB_TYPE_CHAR,    '255', null, null, null, null);
+        $table->add_field('timecreated',  XMLDB_TYPE_INTEGER, '10',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10',  null, null, null, null);
+        $table->add_key('primary',     XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('codifier_id', XMLDB_KEY_FOREIGN, ['codifier_id'], 'unics_codifier', ['id']);
+        $table->add_index('ix_element_tree', XMLDB_INDEX_NOTUNIQUE, ['codifier_id', 'parent_id', 'ordinal']);
+        $table->add_index('ix_element_path', XMLDB_INDEX_NOTUNIQUE, ['codifier_id', 'path']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_codifier_link (m2m, полиморфная) ---
+        $table = new xmldb_table('unics_codifier_link');
+        $table->add_field('id',                     XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('element_id',             XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('target_type',            XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '1');
+        $table->add_field('target_id',              XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('weight',                 XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('created_by_mdl_user_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timecreated',            XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('element_id', XMLDB_KEY_FOREIGN, ['element_id'], 'unics_codifier_element', ['id']);
+        $table->add_index('uq_codifier_link', XMLDB_INDEX_UNIQUE,    ['element_id', 'target_type', 'target_id']);
+        $table->add_index('ix_link_target',   XMLDB_INDEX_NOTUNIQUE, ['target_type', 'target_id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026061700, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026061701) {
+        // title элемента кодификатора - в TEXT: описания элементов содержания ФИПИ
+        // бывают длиннее 500 символов (напр. развёрнутые формулировки по информатике).
+        $table = new xmldb_table('unics_codifier_element');
+        $field = new xmldb_field('title', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null, 'code');
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->change_field_type($table, $field);
+        }
+        upgrade_plugin_savepoint(true, 2026061701, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026061702) {
+        // Роли v3 фаза 3 [[role-model-v3-2026-06-11]]: делегирование курсов скоупу
+        // (муниципалитет/организация). Методист видит для назначения только
+        // делегированные его подчинению курсы; региональные роли - все.
+        $table = new xmldb_table('unics_course_delegation');
+        $table->add_field('id',          XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('courseid',    XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('scope_type',  XMLDB_TYPE_CHAR,    '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('scope_id',    XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('usercreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('uq_delegation',       XMLDB_INDEX_UNIQUE,    ['courseid', 'scope_type', 'scope_id']);
+        $table->add_index('ix_delegation_scope', XMLDB_INDEX_NOTUNIQUE, ['scope_type', 'scope_id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026061702, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026061703) {
+        // G5 - фиксы прав ролей по аудиту [[role-capability-audit-2026-06-17]].
+        require_once(__DIR__ . '/../classes/role_manager.php');
+
+        // A. Методист (methodist) и муниципальный методист (district_methodist, наследует
+        //    methodist) больше НЕ создают и НЕ редактируют курсы: контент-строительные
+        //    capability перенесены из allow в prevent в role_manager::get_matrix().
+        //    Переприменяем матрицу - prevent перезаписывает прежние ALLOW в role_capabilities.
+        try {
+            \local_unics\role_manager::apply_matrix();
+            \local_unics\role_manager::apply_role_names();
+        } catch (\Throwable $e) {
+            debugging('local_unics G5: apply_matrix() failed during upgrade: ' . $e->getMessage(),
+                DEBUG_DEVELOPER);
+        }
+
+        // B. Удаляем осиротевшие мощные Moodle-роли municipal_admin и org_admin.
+        //    Обе с архетипом manager и local/unics:manage=ALLOW (полная власть над плагином),
+        //    но никому не назначены (district_admin слит в district_methodist в v3 фазе 1).
+        //    Безопасность: удаляем только если назначений 0 - иначе оставляем и логируем,
+        //    чтобы не лишить пользователей роли по ошибке. delete_role снимает остаточные
+        //    capability и contextlevels.
+        foreach (['municipal_admin', 'org_admin'] as $orphan) {
+            $role = $DB->get_record('role', ['shortname' => $orphan], 'id');
+            if (!$role) {
+                continue;
+            }
+            $assigned = $DB->count_records('role_assignments', ['roleid' => $role->id]);
+            if ($assigned > 0) {
+                debugging("local_unics G5: роль {$orphan} имеет {$assigned} назначений - "
+                    . 'удаление пропущено (требуется ручная проверка).', DEBUG_DEVELOPER);
+                mtrace("local_unics G5: роль {$orphan} НЕ удалена - есть назначения ({$assigned}).");
+                continue;
+            }
+            delete_role($role->id);
+            mtrace("local_unics G5: осиротевшая Moodle-роль {$orphan} удалена.");
+        }
+
+        upgrade_plugin_savepoint(true, 2026061703, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026062002) {
+        // ИИ-адаптив S1 [[adaptive-ai-design]] / [[adaptive-s1-plan]]: владение по навыкам.
+        // Три таблицы + element_id у шага ИОМ.
+
+        // --- unics_skill_mastery (ядро: строка на пару ученик+элемент) ---
+        $table = new xmldb_table('unics_skill_mastery');
+        $table->add_field('id',                XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('student_id',        XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, null, null);
+        $table->add_field('element_id',        XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, null, null);
+        $table->add_field('score',             XMLDB_TYPE_NUMBER,  '5, 2', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('band',              XMLDB_TYPE_INTEGER, '2',    null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('attempts_n',        XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('last_score',        XMLDB_TYPE_NUMBER,  '5, 2', null, null, null, null);
+        $table->add_field('last_attempt_cmid', XMLDB_TYPE_INTEGER, '10',   null, null, null, null);
+        $table->add_field('updated_at',        XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_key('element_id', XMLDB_KEY_FOREIGN, ['element_id'], 'unics_codifier_element', ['id']);
+        $table->add_index('uq_mastery_student_element', XMLDB_INDEX_UNIQUE,    ['student_id', 'element_id']);
+        $table->add_index('ix_mastery_element_band',    XMLDB_INDEX_NOTUNIQUE, ['element_id', 'band']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_mastery_history (append-only лог смен) ---
+        $table = new xmldb_table('unics_mastery_history');
+        $table->add_field('id',           XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('student_id',   XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, null, null);
+        $table->add_field('element_id',   XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, null, null);
+        $table->add_field('old_score',    XMLDB_TYPE_NUMBER,  '5, 2', null, null, null, null);
+        $table->add_field('new_score',    XMLDB_TYPE_NUMBER,  '5, 2', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('old_band',     XMLDB_TYPE_INTEGER, '2',    null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('new_band',     XMLDB_TYPE_INTEGER, '2',    null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('trigger_cmid', XMLDB_TYPE_INTEGER, '10',   null, null, null, null);
+        $table->add_field('changed_at',   XMLDB_TYPE_INTEGER, '10',   null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_key('element_id', XMLDB_KEY_FOREIGN, ['element_id'], 'unics_codifier_element', ['id']);
+        $table->add_index('ix_masthist_student', XMLDB_INDEX_NOTUNIQUE, ['student_id', 'changed_at']);
+        $table->add_index('ix_masthist_element', XMLDB_INDEX_NOTUNIQUE, ['element_id', 'changed_at']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_adaptive_suggestion (очередь гейта; CRUD в S1, применение в S2) ---
+        $table = new xmldb_table('unics_adaptive_suggestion');
+        $table->add_field('id',               XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('student_id',       XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('element_id',       XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('kind',             XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, null);
+        $table->add_field('payload',          XMLDB_TYPE_TEXT,    null, null, null, null, null);
+        $table->add_field('status',           XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('auto_apply_after', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('created_at',       XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('decided_by',       XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('decided_at',       XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('rationale',        XMLDB_TYPE_TEXT,    null, null, null, null, null);
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_index('ix_sugg_student_status', XMLDB_INDEX_NOTUNIQUE, ['student_id', 'status']);
+        $table->add_index('ix_sugg_open',           XMLDB_INDEX_NOTUNIQUE, ['status', 'auto_apply_after']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // --- unics_path_step += element_id (навык-причина adaptive-шага) ---
+        // Только поле; soft-FK (индекс) объявлен в install.xml для свежих установок,
+        // на живом стенде он не обязателен (в S1 по element_id шага не запрашиваем).
+        $table = new xmldb_table('unics_path_step');
+        $field = new xmldb_field('element_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'target_level');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026062002, 'local', 'unics');
+    }
+
+    if ($oldversion < 2026062200) {
+        // unics_item_irt - параметры заданий IRT (Rasch b).
+        $table = new xmldb_table('unics_item_irt');
+        $table->add_field('id',           XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('item_ref',     XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('element_id',   XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('model',        XMLDB_TYPE_CHAR,    '20', null, XMLDB_NOTNULL, null, 'rasch');
+        $table->add_field('a',            XMLDB_TYPE_NUMBER, '6, 4', null, XMLDB_NOTNULL, null, '1');
+        $table->add_field('b',            XMLDB_TYPE_NUMBER, '6, 4', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('c',            XMLDB_TYPE_NUMBER, '6, 4', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('calibrated_n', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('updated_at',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('uq_item_irt_ref', XMLDB_INDEX_UNIQUE, ['item_ref']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // theta/theta_se в unics_skill_mastery (nullable; rolling_avg-строки не затронуты).
+        $table = new xmldb_table('unics_skill_mastery');
+        $field = new xmldb_field('theta', XMLDB_TYPE_NUMBER, '7, 4', null, null, null, null, 'updated_at');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        $field = new xmldb_field('theta_se', XMLDB_TYPE_NUMBER, '7, 4', null, null, null, null, 'theta');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026062200, 'local', 'unics');
+    }
+
     return true;
 }

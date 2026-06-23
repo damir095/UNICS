@@ -70,6 +70,13 @@ if ($hassiteconfig) {
         'local/unics:viewstudents'
     ));
 
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_adaptive_suggestions',
+        'Адаптивные предложения',
+        new moodle_url('/local/unics/pages/adaptive_suggestions.php'),
+        'local/unics:viewstudents'
+    ));
+
     // Подраздел «Отчёты»
     $ADMIN->add('local_unics_cat', new admin_category('local_unics_reports_cat', 'Отчёты'));
 
@@ -167,5 +174,54 @@ if ($hassiteconfig) {
         . 'обрабатывается на внешнем сервере - убедитесь, что это допустимо политикой '
         . 'обработки персональных данных. По умолчанию выключено.',
         0
+    ));
+
+    // Настройки адаптивного обучения (S2).
+    $adaptive = new admin_settingpage('local_unics_adaptive', 'Адаптивное обучение');
+    $ADMIN->add('local_unics_cat', $adaptive);
+
+    $adaptive->add(new admin_setting_configtext(
+        'local_unics/adaptive_autoapply_days',
+        'Авто-применение предложений (дней)',
+        'Через сколько дней не рассмотренное педагогом адаптивное предложение (смена уровня, '
+        . 'ремедиация, продвижение) применяется автоматически. 0 - применять сразу, без ожидания '
+        . 'педагога (полный авто-режим). По умолчанию 7.',
+        '7', PARAM_INT
+    ));
+
+    $adaptive->add(new admin_setting_configcheckbox(
+        'local_unics/adaptive_ai_explanations',
+        'ИИ-обоснования предложений (GigaChat)',
+        'Если включено, фоновая задача генерирует через GigaChat короткое обоснование «почему этот '
+        . 'шаг» для адаптивных предложений (показывается педагогу). Требует настроенного API-ключа ИИ. '
+        . 'ВНИМАНИЕ: при включении данные о навыке и результатах учащегося отправляются во внешний '
+        . 'сервис (Sber GigaChat). По умолчанию ВЫКЛЮЧЕНО (действует заморозка ИИ-функций).',
+        0
+    ));
+
+    $adaptive->add(new admin_setting_heading(
+        'local_unics/irt_heading', 'ML-микросервис (IRT)', ''
+    ));
+    $adaptive->add(new admin_setting_configcheckbox(
+        'local_unics/adaptive_irt_enabled',
+        'Включить IRT-оценщик (Python-сервис)',
+        'Если включено, владение навыком оценивается внешним Python-микросервисом (модель Раша) по '
+        . 'ответам на привязанные к кодификатору вопросы. По сети уходят только числовые признаки (без '
+        . 'персональных данных). При недоступности сервиса система откатывается на встроенный расчет. '
+        . 'По умолчанию выключено.',
+        0
+    ));
+    $adaptive->add(new admin_setting_configtext(
+        'local_unics/irt_service_url',
+        'URL микросервиса IRT',
+        'Базовый адрес Python-сервиса, например http://127.0.0.1:8000.',
+        'http://127.0.0.1:8000', PARAM_URL
+    ));
+    $adaptive->add(new admin_setting_configpasswordunmask(
+        'local_unics/irt_service_token',
+        'Токен микросервиса IRT',
+        'Общий секрет (заголовок X-UNICS-Token). Должен совпадать с переменной окружения '
+        . 'UNICS_IRT_TOKEN сервиса. Можно оставить пустым для локальной разработки.',
+        ''
     ));
 }

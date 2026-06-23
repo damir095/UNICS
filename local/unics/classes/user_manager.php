@@ -146,28 +146,42 @@ class unics_user_manager {
     }
 
     /**
-     * Получить список пользователей организации с фильтрами
+     * Сборка WHERE + параметров для списка пользователей (DRY для get_users/count_users).
+     *
+     * @return array [string $where, array $params]
      */
-    public static function get_users(int $org_id = 0, int $unics_role = 0,
-                                     string $extra_where = '', array $extra_params = []): array {
-        global $DB;
-
+    protected static function users_where(int $org_id, int $unics_role,
+                                          string $extra_where, array $extra_params): array {
         $where  = '1=1';
         $params = [];
 
         if ($org_id > 0) {
-            $where   .= ' AND uo.organization_id = :org_id';
+            $where .= ' AND uo.organization_id = :org_id';
             $params['org_id'] = $org_id;
         }
         if ($unics_role > 0) {
-            $where   .= ' AND uo.unics_role = :unics_role';
+            $where .= ' AND uo.unics_role = :unics_role';
             $params['unics_role'] = $unics_role;
         }
         // Доп. фильтр по скоупу (для районного/регионального админа/методиста на users.php).
         if ($extra_where !== '') {
-            $where  .= ' AND (' . $extra_where . ')';
+            $where .= ' AND (' . $extra_where . ')';
             $params += $extra_params;
         }
+
+        return [$where, $params];
+    }
+
+    /**
+     * Получить список пользователей организации с фильтрами.
+     * Лимит для серверной пагинации (0 = все).
+     */
+    public static function get_users(int $org_id = 0, int $unics_role = 0,
+                                     string $extra_where = '', array $extra_params = [],
+                                     int $limitfrom = 0, int $limitnum = 0): array {
+        global $DB;
+
+        [$where, $params] = self::users_where($org_id, $unics_role, $extra_where, $extra_params);
 
         // LEFT JOIN на организацию: управленческие роли (региональн./районный админ,
         // районный методист) не привязаны к организации — у них заполнен region_id/district_id.
@@ -187,7 +201,29 @@ class unics_user_manager {
                 WHERE $where AND u.deleted = 0
                 ORDER BY u.lastname, u.firstname";
 
-        return $DB->get_records_sql($sql, $params);
+        return $DB->get_records_sql($sql, $params, $limitfrom, $limitnum);
+    }
+
+    /**
+     * Число пользователей с теми же фильтрами, что get_users (для пагинации).
+     */
+    public static function count_users(int $org_id = 0, int $unics_role = 0,
+                                       string $extra_where = '', array $extra_params = []): int {
+        global $DB;
+
+        [$where, $params] = self::users_where($org_id, $unics_role, $extra_where, $extra_params);
+
+        $sql = "SELECT COUNT(DISTINCT u.id)
+                FROM {user} u
+                JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
+                LEFT JOIN {unics_organizations} o ON o.id = uo.organization_id
+                LEFT JOIN {unics_districts}     d ON d.id = uo.district_id
+                LEFT JOIN {unics_regions}      rg ON rg.id = uo.region_id
+                LEFT JOIN {unics_students}      s ON s.mdl_user_id = u.id
+                LEFT JOIN {unics_teachers}      t ON t.mdl_user_id = u.id
+                WHERE $where AND u.deleted = 0";
+
+        return (int)$DB->count_records_sql($sql, $params);
     }
 
     /**

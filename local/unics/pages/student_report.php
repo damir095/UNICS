@@ -55,10 +55,13 @@ if (!$access) {
     throw new moodle_exception('accessdenied', 'error');
 }
 
+$is_own_view = ($USER->id == $student->mdl_user_id);
+
 $PAGE->set_context($ctx);
 $PAGE->set_url(new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $student_id]));
-$PAGE->set_title('Отчёт по учащемуся');
-$PAGE->set_heading('Отчёт по учащемуся');
+$report_title = $is_own_view ? 'Мои результаты' : 'Отчёт по учащемуся';
+$PAGE->set_title($report_title);
+$PAGE->set_heading($report_title);
 $PAGE->set_pagelayout('standard');
 
 // ----------------------------------------------------------------
@@ -158,8 +161,6 @@ $categories   = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => '
 $levels       = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 $umk_statuses = [1 => 'В очереди', 2 => 'Обрабатывается', 3 => 'Готов', 4 => 'Ошибка'];
 
-$is_own_view = ($USER->id == $student->mdl_user_id);
-
 echo $OUTPUT->header();
 echo local_unics_dashboard_button();
 
@@ -190,6 +191,11 @@ if ($is_admin) {
         ['class' => 'btn btn-outline-info btn-sm']
     );
 }
+echo ' ' . html_writer::link(
+    new moodle_url('/local/unics/pages/codifier_report.php', ['student_id' => $student_id]),
+    'Элементы содержания',
+    ['class' => 'btn btn-outline-primary btn-sm']
+);
 echo '</div>';
 
 // Карточка учащегося
@@ -217,13 +223,16 @@ echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge b
 echo '</div>';
 echo '<div class="row mt-2">';
 echo '<div class="col-md-6"><b>Организация:</b> ' . s($org->name ?? '-') . '</div>';
-echo '<div class="col-md-6"><b>Email:</b> ' . s($mdl_user->email) . '</div>';
+if (!$is_own_view) {
+    echo '<div class="col-md-6"><b>Email:</b> ' . s($mdl_user->email) . '</div>';
+}
 echo '</div>';
 echo '</div></div>';
 
 // --- Образовательный маршрут (ИОМ, A2) ---
 $path = \local_unics\path_manager::get_active_path($student_id);
-echo '<h2 class="unics-section-title mt-4">Образовательный маршрут</h2>';
+echo '<h2 class="unics-section-title mt-4">' .
+    ($is_own_view ? 'Мой маршрут' : 'Образовательный маршрут') . '</h2>';
 if ($path) {
     $prog = \local_unics\path_manager::progress((int)$path->id);
     echo '<p>Прогресс: <strong>' . $prog['done'] . '</strong> из <strong>' . $prog['total']
@@ -263,7 +272,8 @@ if (count($grade_history) >= 2) {
     $chart->add_series($series);
     $chart->set_labels($chart_labels);
 
-    echo '<h2 class="unics-section-title mt-4">Динамика успеваемости</h2>';
+    echo '<h2 class="unics-section-title mt-4">' .
+        ($is_own_view ? 'Мой прогресс' : 'Динамика успеваемости') . '</h2>';
     // Без фиксированной высоты: Moodle .chart-area тянется до высоты canvas, и
     // фикс. height обрезал бы box, из-за чего график вылезал на след. секцию.
     // Контейнер обнимает график по высоте, margin-bottom даёт отступ.

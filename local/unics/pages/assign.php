@@ -108,6 +108,11 @@ $filter_class  = optional_param('filter_class',  0, PARAM_INT);
 // Буква класса — кириллица (А–Ж), поэтому PARAM_TEXT, не PARAM_ALPHA. Паттерн из users.php.
 $filter_letter = optional_param('filter_letter', '', PARAM_TEXT);
 
+// Пагинация двух таблиц-пар (свои pagevar, чтобы не сталкивались).
+$ts_page = optional_param('tspage', 0, PARAM_INT);
+$ps_page = optional_param('pspage', 0, PARAM_INT);
+$perpage = 25;
+
 // Если у пользователя скоуп = одна организация, форсим фильтр на неё.
 if (!$is_admin_user && $methodist_org_id) {
     $filter_org = $methodist_org_id;
@@ -235,6 +240,16 @@ if ($is_admin_user) {
     $ps_extra = $ts_extra;
 }
 
+$ts_total = (int)$DB->count_records_sql(
+    "SELECT COUNT(ts.id)
+     FROM {unics_teacher_student} ts
+     JOIN {unics_teachers} t  ON t.id  = ts.teacher_id
+     JOIN {user} u_t          ON u_t.id = t.mdl_user_id
+     JOIN {unics_students} s  ON s.id  = ts.student_id
+     JOIN {user} u_s          ON u_s.id = s.mdl_user_id
+     WHERE 1=1 {$ts_extra}",
+    $extra_params
+);
 $ts_pairs = $DB->get_records_sql(
     "SELECT ts.id, u_t.lastname AS t_last, u_t.firstname AS t_first,
             u_s.lastname AS s_last, u_s.firstname AS s_first,
@@ -246,9 +261,18 @@ $ts_pairs = $DB->get_records_sql(
      JOIN {user} u_s          ON u_s.id = s.mdl_user_id
      WHERE 1=1 {$ts_extra}
      ORDER BY u_t.lastname, u_s.lastname",
-    $extra_params
+    $extra_params, $ts_page * $perpage, $perpage
 );
 
+$ps_total = (int)$DB->count_records_sql(
+    "SELECT COUNT(ps.id)
+     FROM {unics_parent_student} ps
+     JOIN {user} u_p           ON u_p.id = ps.parent_mdl_user_id
+     JOIN {unics_students} s   ON s.id   = ps.student_id
+     JOIN {user} u_s           ON u_s.id = s.mdl_user_id
+     WHERE 1=1 {$ps_extra}",
+    $extra_params
+);
 $ps_pairs = $DB->get_records_sql(
     "SELECT ps.id, u_p.lastname AS p_last, u_p.firstname AS p_first,
             u_s.lastname AS s_last, u_s.firstname AS s_first
@@ -258,7 +282,7 @@ $ps_pairs = $DB->get_records_sql(
      JOIN {user} u_s           ON u_s.id = s.mdl_user_id
      WHERE 1=1 {$ps_extra}
      ORDER BY u_p.lastname, u_s.lastname",
-    $extra_params
+    $extra_params, $ps_page * $perpage, $perpage
 );
 
 // ----------------------------------------------------------------
@@ -409,6 +433,13 @@ if (!empty($ts_pairs)) {
         ];
     }
     echo html_writer::table($table);
+    echo local_unics_render_paging_bar($ts_total, $ts_page, $perpage,
+        new moodle_url('/local/unics/pages/assign.php', [
+            'filter_org'    => $filter_org,
+            'filter_class'  => $filter_class,
+            'filter_letter' => $filter_letter,
+            'pspage'        => $ps_page,
+        ]), 'tspage');
 } else {
     echo html_writer::tag('p', 'Привязок нет', ['class' => 'text-muted mb-4']);
 }
@@ -442,6 +473,13 @@ if (!empty($ps_pairs)) {
         ];
     }
     echo html_writer::table($table);
+    echo local_unics_render_paging_bar($ps_total, $ps_page, $perpage,
+        new moodle_url('/local/unics/pages/assign.php', [
+            'filter_org'    => $filter_org,
+            'filter_class'  => $filter_class,
+            'filter_letter' => $filter_letter,
+            'tspage'        => $ts_page,
+        ]), 'pspage');
 } else {
     echo html_writer::tag('p', 'Привязок нет', ['class' => 'text-muted']);
 }

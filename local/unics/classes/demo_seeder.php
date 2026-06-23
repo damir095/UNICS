@@ -21,6 +21,100 @@ class demo_seeder {
         return $course;
     }
 
+    /**
+     * Демо-кодификатор «География (демо)» для дисциплины демо-курса 21 + привязка его
+     * оценочных активностей к элементам содержания (идемпотентно). Нужен, чтобы сквозная
+     * аналитика «% по элементам» показывала данные на стенде. [[codifier-design]].
+     */
+    public static function seed_codifier(int $course_id = 21): void {
+        global $DB, $USER;
+
+        $catid = (int)$DB->get_field('course', 'category', ['id' => $course_id]);
+        if (!$catid) {
+            return;
+        }
+        if (codifier_manager::get_codifier_for_category($catid)) {
+            return; // уже создан
+        }
+        $by = $USER->id ?: 2;
+
+        $cid = codifier_manager::create_codifier($catid, 'География (демо)', $by);
+        $r1 = codifier_manager::add_element($cid, null, '1', 'Природные ресурсы и хозяйство');
+        $e_neft = codifier_manager::add_element($cid, $r1, '1.1', 'Нефть и нефтепродукты');
+        $r2 = codifier_manager::add_element($cid, null, '2', 'Страноведение');
+        $e_parts = codifier_manager::add_element($cid, $r2, '2.1', 'Части света');
+
+        // Привязка оценочных активностей курса по совпадению имени (устойчивее cmid).
+        $bind = function (int $element_id, string $namelike) use ($DB, $course_id, $by) {
+            $cmid = (int)$DB->get_field_sql(
+                "SELECT cm.id
+                   FROM {course_modules} cm
+                   JOIN {modules} m ON m.id = cm.module
+                   JOIN {grade_items} gi
+                     ON gi.itemtype = 'mod' AND gi.itemmodule = m.name AND gi.iteminstance = cm.instance
+                  WHERE cm.course = :cid AND " . $DB->sql_like('gi.itemname', ':nm') . "
+                  ORDER BY cm.id",
+                ['cid' => $course_id, 'nm' => $namelike . '%'], IGNORE_MULTIPLE);
+            if ($cmid) {
+                codifier_link_manager::link_activity($element_id, $cmid, $by);
+            }
+        };
+        // «Нефть - тест» / «Нефть - задание» -> 1.1; «Части света ...» -> 2.1.
+        foreach (['Нефть - тест', 'Нефть - задание'] as $nm) {
+            $bind($e_neft, $nm);
+        }
+        foreach (['Части света - тест', 'Части света - задание'] as $nm) {
+            $bind($e_parts, $nm);
+        }
+    }
+
+    /**
+     * Демо: тегировать конкретные вопросы тестов курса к элементам существующего
+     * кодификатора «География (демо)» (идемпотентно). Нужно, чтобы per-question mastery
+     * и пробелы по элементам показывали данные. Работает поверх уже созданного кодификатора
+     * (в отличие от seed_codifier, который выходит, если кодификатор есть). [[codifier-phase2-design]].
+     */
+    public static function seed_codifier_questions(int $course_id = 21): void {
+        global $DB, $USER;
+
+        $catid = (int)$DB->get_field('course', 'category', ['id' => $course_id]);
+        if (!$catid) {
+            return;
+        }
+        $codifier = codifier_manager::get_codifier_for_category($catid);
+        if (!$codifier) {
+            return; // кодификатора нет - сперва seed_codifier
+        }
+        $by = $USER->id ?: 2;
+
+        // Первый листовой элемент дерева как мишень (есть на демо: 1.1 «Нефть и нефтепродукты»).
+        $tree = codifier_manager::get_tree($codifier->id);
+        $target = null;
+        foreach ($tree as $e) {
+            if (($e->depth ?? 0) >= 1) { // не корневой раздел
+                $target = (int)$e->id;
+                break;
+            }
+        }
+        if (!$target) {
+            return;
+        }
+
+        // Первые до 3 конкретных вопросов тестов курса -> мишень (идемпотентно через link_question).
+        $beids = $DB->get_fieldset_sql(
+            "SELECT DISTINCT qr.questionbankentryid
+               FROM {quiz} qz
+               JOIN {quiz_slots} qs ON qs.quizid = qz.id
+               JOIN {question_references} qr
+                    ON qr.component = 'mod_quiz' AND qr.questionarea = 'slot' AND qr.itemid = qs.id
+              WHERE qz.course = :cid
+           ORDER BY qr.questionbankentryid",
+            ['cid' => $course_id]);
+        foreach (array_slice($beids, 0, 3) as $beid) {
+            codifier_link_manager::link_question($target, (int)$beid, $by);
+        }
+    }
+
     // ------------------------------------------------------------------
 
     private function fill_course(int $course_id): void {

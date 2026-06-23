@@ -112,9 +112,12 @@ if (!$show_archived) {
     $extra[] = 's.archived_at IS NULL';
 }
 
+$page    = optional_param('page', 0, PARAM_INT);
+$perpage = 25;
+
 if ($is_full_admin) {
     $where = implode(' AND ', $extra);
-    $users = unics_user_manager::get_users($filter_org, $filter_role, $where, $extra_params);
+    $query_params = $extra_params;
     $orgs  = unics_user_manager::get_organizations_menu();
 } else {
     // Скоуп-фильтр: только пользователи района/региона/организации смотрящего.
@@ -122,8 +125,7 @@ if ($is_full_admin) {
     [$scope_where, $scope_params] =
         \local_unics\scope_checker::user_list_filter_sql((int)$USER->id, 'uo', 'o');
     $where = implode(' AND ', array_merge([$scope_where], $extra));
-    $users = unics_user_manager::get_users($filter_org, $filter_role, $where,
-        $extra_params + $scope_params);
+    $query_params = $extra_params + $scope_params;
 
     // Выпадающий список организаций — тоже по скоупу.
     [$ofw, $ofp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
@@ -133,6 +135,20 @@ if ($is_full_admin) {
     $orgs = [];
     foreach ($orgs_rows as $o) { $orgs[$o->id] = $o->name; }
 }
+
+$total = unics_user_manager::count_users($filter_org, $filter_role, $where, $query_params);
+$users = unics_user_manager::get_users($filter_org, $filter_role, $where, $query_params,
+    $page * $perpage, $perpage);
+
+$baseurl = new moodle_url('/local/unics/pages/users.php', [
+    'role'          => $filter_role,
+    'org'           => $filter_org,
+    'district'      => $filter_district,
+    'class'         => $filter_class,
+    'letter'        => $filter_letter,
+    'bind'          => $filter_bind,
+    'show_archived' => $show_archived,
+]);
 
 // Меню для фильтров «Район / Класс / Буква».
 $districts_menu = \local_unics\scope_checker::accessible_districts_menu((int)$USER->id, $is_full_admin);
@@ -240,7 +256,7 @@ if (empty($users)) {
     echo $OUTPUT->notification(get_string('no_users', 'local_unics'), 'info');
 } else {
     $table = new html_table();
-    $table->head = ['ФИО', 'Email', 'Роль', 'Тип', 'Организация / территория', 'Класс', get_string('actions', 'local_unics')];
+    $table->head = ['ФИО', 'Логин', 'Роль', 'Тип', 'Организация / территория', 'Класс', get_string('actions', 'local_unics')];
     $table->attributes['class'] = 'table table-striped';
 
     // POST-кнопка действия над учащимся (архив/восстановление/удаление).
@@ -306,7 +322,7 @@ if (empty($users)) {
 
         $table->data[] = [
             $fio,
-            $user->email,
+            s($user->username),
             $role_label,
             $type_cell,
             $user->org_name,
@@ -316,6 +332,7 @@ if (empty($users)) {
     }
 
     echo html_writer::table($table);
+    echo local_unics_render_paging_bar($total, $page, $perpage, $baseurl);
 }
 
 echo $OUTPUT->footer();

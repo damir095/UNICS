@@ -15,6 +15,7 @@ class notification_manager {
     const TYPE_UMK_REVIEW   = 8;  // педагогу: УМК сгенерирован, ждёт проверки/публикации
     const TYPE_RETAKE       = 9;  // педагогу: учащийся провалил итоговый — нужна пересдача
     const TYPE_TOPIC_RETRY  = 10; // педагогу + учащемуся: провален тест темы, нужно повторить тему (B2)
+    const TYPE_ADAPTIVE_SUGGESTION = 11; // педагогу: адаптивное предложение ждёт решения (S2)
 
     // ----------------------------------------------------------------
     // Уведомление учащемуся: УМК готов
@@ -36,7 +37,7 @@ class notification_manager {
                  . '<p>Войдите в курс, чтобы приступить к изучению.</p>';
 
         if ($points_awarded > 0) {
-            $body .= '<p>🪙 Вам начислено <strong>' . $points_awarded . ' баллов</strong> за новый материал!</p>';
+            $body .= '<p>Вам начислено <strong>' . $points_awarded . ' баллов</strong> за новый материал!</p>';
         }
 
         self::send($student_mdl_user_id, $subject, $body, self::TYPE_UMK_READY);
@@ -98,10 +99,9 @@ class notification_manager {
     ): void {
         $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
         $direction   = $new_level > $old_level ? 'повышен' : 'понижен';
-        $icon        = $new_level > $old_level ? '📈' : '📉';
         $type        = $new_level > $old_level ? self::TYPE_LEVEL_UP : self::TYPE_LEVEL_DOWN;
 
-        $subject = "{$icon} Ваш уровень сложности {$direction}";
+        $subject = "Ваш уровень сложности {$direction}";
         $body    = '<p>Ваш уровень обучения <strong>' . $direction . '</strong> '
                  . 'на основе ваших результатов:</p>'
                  . '<p>' . ($level_names[$old_level] ?? $old_level) . ' → '
@@ -109,7 +109,7 @@ class notification_manager {
                  . '<p>Средний балл по последним тестам: <strong>' . round($avg, 1) . '%</strong>.</p>';
 
         if ($points_awarded > 0) {
-            $body .= '<p>🪙 Вам начислено <strong>' . $points_awarded . ' баллов</strong>!</p>';
+            $body .= '<p>Вам начислено <strong>' . $points_awarded . ' баллов</strong>!</p>';
         }
 
         self::send($student_mdl_user_id, $subject, $body, $type);
@@ -130,10 +130,9 @@ class notification_manager {
 
         $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
         $direction   = $new_level > $old_level ? 'повышен' : 'понижен';
-        $icon        = $new_level > $old_level ? '📈' : '📉';
         $type        = $new_level > $old_level ? self::TYPE_LEVEL_UP : self::TYPE_LEVEL_DOWN;
 
-        $subject = "{$icon} Уровень учащегося {$direction}: {$student_name}";
+        $subject = "Уровень учащегося {$direction}: {$student_name}";
         $body    = '<p>Уровень вашего ребёнка <strong>' . htmlspecialchars($student_name) . '</strong>'
                  . ' автоматически <strong>' . $direction . '</strong>:</p>'
                  . '<p>' . ($level_names[$old_level] ?? $old_level) . ' → '
@@ -331,6 +330,23 @@ class notification_manager {
                  . ' так вы лучше усвоите материал.</p>';
 
         self::send($student_mdl_user_id, $subject, $body, self::TYPE_TOPIC_RETRY);
+    }
+
+    // ----------------------------------------------------------------
+    // Уведомление педагогу: адаптивное предложение ждёт решения (S2)
+    // ----------------------------------------------------------------
+    public static function notify_adaptive_suggestion(
+        int    $teacher_mdl_user_id,
+        string $student_name,
+        string $kind_label
+    ): void {
+        $subject = "Адаптивное предложение: {$student_name}";
+        $body    = '<p>Для учащегося <strong>' . htmlspecialchars($student_name) . '</strong>'
+                 . ' сформировано предложение: <strong>' . htmlspecialchars($kind_label) . '</strong>.</p>'
+                 . '<p>Откройте портал УНИКС, чтобы рассмотреть и принять или отклонить.'
+                 . ' Если не рассмотреть, предложение применится автоматически по истечении срока.</p>';
+
+        self::send($teacher_mdl_user_id, $subject, $body, self::TYPE_ADAPTIVE_SUGGESTION);
     }
 
     // ----------------------------------------------------------------

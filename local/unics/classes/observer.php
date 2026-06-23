@@ -72,7 +72,9 @@ class observer {
                 if ($is_diagnostic) {
                     adaptive_engine::diagnose_student((int)$student->id, $cmid);
                 } else {
-                    adaptive_engine::evaluate_student((int)$student->id);
+                    // S1: per-skill пересчет владения + глобальный rollup внутри on_attempt
+                    // (заменяет прямой evaluate_student; диагностику по-прежнему ведет diagnose).
+                    mastery_manager::on_attempt($cmid, $userid, (int)$event->objectid);
                 }
             }
         } catch (\Throwable $e) {

@@ -190,6 +190,57 @@ if (count($by_region) > 1) {
     local_unics_render_slice('По региону', 'Регион', $by_region);
 }
 
+// ==================== ПО ЭЛЕМЕНТАМ СОДЕРЖАНИЯ (КОДИФИКАТОР) ====================
+echo html_writer::tag('h4', 'По элементам содержания', ['class' => 'mt-4']);
+$codifiers_all = $DB->get_records('unics_codifier',
+    ['status' => \local_unics\codifier_manager::STATUS_ACTIVE], 'name ASC', 'id, name');
+if (!$codifiers_all) {
+    echo html_writer::tag('p', 'Кодификаторы ещё не созданы.', ['class' => 'text-muted']);
+} else {
+    $codifier_id = optional_param('codifier_id', 0, PARAM_INT);
+    echo html_writer::start_div('mb-2');
+    foreach ($codifiers_all as $cf) {
+        $cls = $cf->id == $codifier_id ? 'btn-primary' : 'btn-outline-primary';
+        echo html_writer::link(new moodle_url($PAGE->url, ['codifier_id' => $cf->id]),
+            s($cf->name), ['class' => "btn btn-sm $cls mr-2 mb-2"]);
+    }
+    echo html_writer::end_div();
+
+    if ($codifier_id && isset($codifiers_all[$codifier_id])) {
+        // Когорта в текущем скоупе (org_ids уже посчитан выше).
+        if ($org_ids === null) {
+            $userids = $DB->get_fieldset_select('unics_students', 'DISTINCT mdl_user_id', 'archived_at IS NULL');
+        } else if ($org_ids) {
+            list($insql, $inparams) = $DB->get_in_or_equal($org_ids, SQL_PARAMS_NAMED);
+            $userids = $DB->get_fieldset_select('unics_students', 'DISTINCT mdl_user_id',
+                "archived_at IS NULL AND organization_id $insql", $inparams);
+        } else {
+            $userids = [];
+        }
+        $prog = \local_unics\codifier_analytics::cohort_element_progress(
+            array_map('intval', $userids), $codifier_id);
+        if (!$prog) {
+            echo html_writer::tag('p', 'В этом кодификаторе нет элементов.', ['class' => 'text-muted']);
+        } else {
+            $t = new html_table();
+            $t->attributes['class'] = 'table table-striped table-hover';
+            $t->head = ['Элемент содержания', 'Средний %', 'Оценок (пар)'];
+            foreach ($prog as $r) {
+                $indent = str_repeat('&nbsp;&nbsp;&nbsp;', (int)$r->depth);
+                $t->data[] = [
+                    $indent . ($r->code !== '' ? s($r->code) . ' ' : '') . s($r->title),
+                    $r->pct === null ? '-' : $r->pct . '%',
+                    $r->pct === null ? '-' : (int)$r->n,
+                ];
+            }
+            echo html_writer::table($t);
+        }
+    } else {
+        echo html_writer::tag('p', 'Выберите дисциплину, чтобы увидеть средние по элементам содержания.',
+            ['class' => 'text-muted']);
+    }
+}
+
 echo html_writer::tag('p',
     'Время на курсе - оценка по интервалам между событиями журнала (Moodle не хранит точное '
     . 'время на странице). Завершаемость считается по активностям с включённым отслеживанием.',

@@ -17,6 +17,11 @@ $my_scope         = $is_admin_user
     : \local_unics\scope_checker::get_user_scope((int)$USER->id);
 $methodist_org_id = $my_scope['organization_id'] ?? 0;
 
+// Делегирование курсов (роли v3 фаза 3, [[role-model-v3-2026-06-11]]): муниципальный
+// методист / методист организации записывает учеников только на делегированные ему
+// курсы. NULL = фильтр не применяется (региональные роли, педагог-создатель, админ).
+$deleg_course_ids = \local_unics\delegation_manager::get_delegated_course_ids_for_user((int)$USER->id);
+
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_students.php'));
 $PAGE->set_title('Запись учащихся на курс - УНИКС');
@@ -38,6 +43,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         redirect(
             new moodle_url('/local/unics/pages/enrol_students.php'),
             'Выберите курс и хотя бы одного учащегося.',
+            null, \core\output\notification::NOTIFY_WARNING
+        );
+    }
+
+    // Защита: курс должен быть делегирован (для методиста). Региональные роли/админ - $deleg_course_ids = null.
+    if ($deleg_course_ids !== null && !in_array((int)$course_id, $deleg_course_ids, true)) {
+        redirect(
+            new moodle_url('/local/unics/pages/enrol_students.php'),
+            'Этот курс вам не делегирован.',
             null, \core\output\notification::NOTIFY_WARNING
         );
     }
@@ -143,6 +157,11 @@ if (!$is_admin_user && $methodist_org_id) {
 
 // Курсы
 $courses_raw  = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
+// Фильтр делегирования: методисту показываем только делегированные курсы.
+if ($deleg_course_ids !== null) {
+    $allow = array_fill_keys($deleg_course_ids, true);
+    $courses_raw = array_filter($courses_raw, fn($c) => isset($allow[(int)$c->id]));
+}
 $courses_menu = [0 => '- выберите курс -'];
 foreach ($courses_raw as $c) {
     $courses_menu[$c->id] = $c->fullname;

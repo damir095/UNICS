@@ -160,6 +160,67 @@ class gap_manager {
     }
 
     /**
+     * Пробелы учащегося, сгруппированные по ЭЛЕМЕНТУ кодификатора (через вопрос-привязки).
+     * Берёт последнюю завершённую попытку каждого теста (как student_gaps). Ошибочный
+     * вопрос попадает в каждый привязанный элемент; непривязанные - в группу «Без элемента»
+     * (ключ 0). Вопрос может фигурировать в нескольких элементах (это пробел в каждом).
+     *
+     * @return array<int,object> ключ = element_id (или 0); поля: element_id, code, title,
+     *         wrong_count, questions(array {qname, response, state})
+     */
+    public static function student_gaps_by_element(int $userid): array {
+        global $DB;
+
+        $rows = $DB->get_recordset_sql(
+            "SELECT qat.id AS qatid, q.name AS qname, qat.responsesummary, qas.state,
+                    l.element_id, e.code, e.title
+               FROM {quiz_attempts} quiza
+               JOIN {question_attempts} qat ON qat.questionusageid = quiza.uniqueid
+               JOIN {question} q ON q.id = qat.questionid
+               JOIN {question_versions} qv ON qv.questionid = qat.questionid
+          LEFT JOIN {unics_codifier_link} l
+                    ON l.target_type = :tq AND l.target_id = qv.questionbankentryid
+          LEFT JOIN {unics_codifier_element} e ON e.id = l.element_id
+               JOIN {question_attempt_steps} qas ON qas.id = (
+                       SELECT s.id FROM {question_attempt_steps} s
+                        WHERE s.questionattemptid = qat.id
+                     ORDER BY s.sequencenumber DESC
+                        LIMIT 1)
+              WHERE quiza.userid = :uid AND quiza.state = 'finished'
+                AND quiza.attempt = (
+                    SELECT MAX(a2.attempt) FROM {quiz_attempts} a2
+                     WHERE a2.quiz = quiza.quiz AND a2.userid = quiza.userid
+                       AND a2.state = 'finished')
+           ORDER BY e.path",
+            ['tq' => codifier_link_manager::TYPE_QUESTION, 'uid' => $userid]);
+
+        $out = [];
+        foreach ($rows as $r) {
+            if (!self::is_gap_state((string)$r->state)) {
+                continue;
+            }
+            $key = $r->element_id ? (int)$r->element_id : 0;
+            if (!isset($out[$key])) {
+                $out[$key] = (object)[
+                    'element_id'  => $key,
+                    'code'        => $key ? (string)$r->code : '',
+                    'title'       => $key ? (string)$r->title : 'Без элемента',
+                    'wrong_count' => 0,
+                    'questions'   => [],
+                ];
+            }
+            $out[$key]->wrong_count++;
+            $out[$key]->questions[] = (object)[
+                'qname'    => $r->qname,
+                'response' => $r->responsesummary,
+                'state'    => (string)$r->state,
+            ];
+        }
+        $rows->close();
+        return $out;
+    }
+
+    /**
      * HTML-бейдж состояния ошибочного вопроса: «неверно» / «частично».
      */
     public static function state_html(string $state): string {

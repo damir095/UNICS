@@ -154,6 +154,10 @@ class adaptive_engine {
      *   - avg < 50% по последним 5 тестам → уровень - 1 (min 1)
      *   - Минимум 3 теста - иначе данных недостаточно
      *
+     * Это МГНОВЕННОЕ применение (вычисление + apply_level). Используется явным ручным
+     * пересчётом педагога (pages/course_levels.php). Автоматические пути (observer ->
+     * mastery_manager, ночная задача) идут через gate_level_change (гибридный гейт S2).
+     *
      * @return int|null Новый уровень если изменился, null если не изменился или данных мало.
      */
     public static function evaluate_student(int $student_id): ?int {
@@ -197,25 +201,44 @@ class adaptive_engine {
             return null;
         }
 
+        return self::apply_level($student_id, $new_lvl, $avg);
+    }
+
+    /**
+     * Применить новый уровень учащемуся: difficulty_level + история + поле профиля +
+     * уведомления (ученик/родители/педагоги) + баллы за повышение. Чистое применение,
+     * БЕЗ вычисления и БЕЗ гейта - используется и evaluate_student (мгновенно), и
+     * suggestion_service::apply (по approve / авто через N).
+     *
+     * @return int|null новый уровень, либо null если ученика нет или new == cur
+     */
+    public static function apply_level(int $student_id, int $new_lvl, ?float $avg): ?int {
+        global $DB;
+
+        $student = $DB->get_record('unics_students', ['id' => $student_id]);
+        if (!$student) {
+            return null;
+        }
+        $cur_lvl = (int)$student->difficulty_level;
+        if ($new_lvl === $cur_lvl) {
+            return null;
+        }
+
         $DB->set_field('unics_students', 'difficulty_level', $new_lvl, ['id' => $student_id]);
 
-        // A5: фиксируем изменение уровня в истории (предусловие статистики).
-        // Единственная точка мутации difficulty_level - значит и единственная точка записи истории.
         try {
             $DB->insert_record('unics_level_history', (object)[
                 'student_id'  => $student_id,
                 'mdl_user_id' => (int)$student->mdl_user_id,
                 'old_level'   => $cur_lvl,
                 'new_level'   => $new_lvl,
-                'avg_score'   => round($avg, 2),
+                'avg_score'   => $avg !== null ? round($avg, 2) : null,
                 'changed_at'  => time(),
             ]);
         } catch (\Throwable $e) {
-            // История нефатальна - не валим адаптацию из-за неё.
             debugging('local_unics: запись unics_level_history не удалась: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
 
-        // Обновляем Moodle profile field
         require_once(dirname(__DIR__) . '/classes/user_manager.php');
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $new_lvl);
 
@@ -224,7 +247,6 @@ class adaptive_engine {
         $mdl_user    = $DB->get_record('user', ['id' => $student->mdl_user_id]);
         $sname       = $mdl_user ? fullname($mdl_user) : 'Учащийся #' . $student_id;
 
-        // Педагоги учащегося
         $teachers = $DB->get_records_sql(
             "SELECT t.mdl_user_id
                FROM {unics_teacher_student} ts
@@ -232,70 +254,83 @@ class adaptive_engine {
               WHERE ts.student_id = :sid",
             ['sid' => $student_id]
         );
-
-        // Родители учащегося
         $parents     = $DB->get_records('unics_parent_student', ['student_id' => $student_id], '', 'parent_mdl_user_id');
         $parent_uids = array_column((array)$parents, 'parent_mdl_user_id');
 
         try {
             require_once(dirname(__DIR__) . '/classes/notification_manager.php');
-
-            // Уведомить учащегося
             $points_awarded = $new_lvl > $cur_lvl ? points_manager::POINTS_LEVEL_UP : 0;
             notification_manager::notify_level_changed_student(
-                (int)$student->mdl_user_id,
-                $cur_lvl,
-                $new_lvl,
-                $avg,
-                $points_awarded
-            );
-
-            // Уведомить родителей
+                (int)$student->mdl_user_id, $cur_lvl, $new_lvl, $avg !== null ? $avg : 0, $points_awarded);
             if (!empty($parent_uids)) {
-                notification_manager::notify_level_changed_parents(
-                    $parent_uids,
-                    $sname,
-                    $cur_lvl,
-                    $new_lvl
-                );
+                notification_manager::notify_level_changed_parents($parent_uids, $sname, $cur_lvl, $new_lvl);
             }
-
-            // Уведомить педагогов (старый тип TYPE_LOW_SCORE использован - используем напрямую send)
             $subject = "Уровень сложности изменён: {$sname}";
             $body    = '<p>Уровень учащегося <strong>' . htmlspecialchars($sname) . '</strong> '
-                     . 'автоматически <strong>' . $direction . '</strong>: '
+                     . '<strong>' . $direction . '</strong>: '
                      . ($level_names[$cur_lvl] ?? $cur_lvl) . ' → '
-                     . '<strong>' . ($level_names[$new_lvl] ?? $new_lvl) . '</strong></p>'
-                     . '<p>Средний балл по последним ' . count($grades) . ' тестам: '
-                     . round($avg, 1) . '%</p>';
-
+                     . '<strong>' . ($level_names[$new_lvl] ?? $new_lvl) . '</strong></p>';
             foreach ($teachers as $tl) {
-                notification_manager::send(
-                    (int)$tl->mdl_user_id,
-                    $subject,
-                    $body,
-                    $new_lvl > $cur_lvl ? notification_manager::TYPE_LEVEL_UP : notification_manager::TYPE_LEVEL_DOWN
-                );
+                notification_manager::send((int)$tl->mdl_user_id, $subject, $body,
+                    $new_lvl > $cur_lvl ? notification_manager::TYPE_LEVEL_UP : notification_manager::TYPE_LEVEL_DOWN);
             }
         } catch (\Throwable $e) {
-            // Уведомления нефатальны
+            // Уведомления нефатальны.
         }
 
-        // Начислить баллы за повышение уровня
         if ($new_lvl > $cur_lvl) {
             try {
                 require_once(dirname(__DIR__) . '/classes/points_manager.php');
-                points_manager::award(
-                    $student_id,
-                    points_manager::POINTS_LEVEL_UP,
+                points_manager::award($student_id, points_manager::POINTS_LEVEL_UP,
                     points_manager::REASON_LEVEL_UP,
-                    'Повышение уровня до «' . ($level_names[$new_lvl] ?? $new_lvl) . '»'
-                );
+                    'Повышение уровня до «' . ($level_names[$new_lvl] ?? $new_lvl) . '»');
             } catch (\Throwable $e) {
-                // Нефатально
+                // Нефатально.
             }
         }
 
         return $new_lvl;
+    }
+
+    /**
+     * Чистое решение гейта по предпросчитанным данным (БД не трогает - тестируемо).
+     *
+     * @return array{action:string, target:?int} action: 'none'|'apply'|'suggest'
+     */
+    public static function gate_decision(int $cur, ?int $proposed, ?float $avg, int $autoapply_days): array {
+        if ($proposed === null || $proposed === $cur) {
+            return ['action' => 'none', 'target' => null];
+        }
+        return ['action' => $autoapply_days <= 0 ? 'apply' : 'suggest', 'target' => $proposed];
+    }
+
+    /**
+     * Гейт глобальной смены уровня (автоматический путь: observer/ночная задача).
+     * preview -> gate_decision -> применить (N=0) ИЛИ создать предложение педагогу.
+     * Дедуп смены уровня - один открытый suggestion(kind=level_change) на ученика
+     * (element_id NULL) обеспечивает suggestion_service::create.
+     *
+     * @return int|null применённый уровень, либо null (создано предложение / нет изменения)
+     */
+    public static function gate_level_change(int $student_id): ?int {
+        $p = self::preview_student($student_id);
+        $days = (int)get_config('local_unics', 'adaptive_autoapply_days');
+        $decision = self::gate_decision((int)$p['cur'], $p['proposed'], $p['avg'], $days);
+
+        if ($decision['action'] === 'apply') {
+            return self::apply_level($student_id, (int)$decision['target'], $p['avg']);
+        }
+        if ($decision['action'] === 'suggest') {
+            $auto_after = $days > 0 ? time() + $days * 86400 : null;
+            suggestion_service::create(
+                $student_id,
+                suggestion_service::KIND_LEVEL_CHANGE,
+                null,
+                json_encode(['target_level' => (int)$decision['target'], 'avg' => $p['avg']]),
+                $auto_after,
+                null
+            );
+        }
+        return null;
     }
 }

@@ -171,6 +171,7 @@ class path_manager {
             'mdl_course_id' => !empty($data['mdl_course_id']) ? (int)$data['mdl_course_id'] : null,
             'umk_id'        => !empty($data['umk_id']) ? (int)$data['umk_id'] : null,
             'target_level'  => !empty($data['target_level']) ? (int)$data['target_level'] : null,
+            'element_id'    => !empty($data['element_id']) ? (int)$data['element_id'] : null,
             'status'        => (int)($data['status'] ?? self::STEP_PLANNED),
             'source'        => (int)($data['source'] ?? self::SOURCE_MANUAL),
             'planned_from'  => !empty($data['planned_from']) ? (int)$data['planned_from'] : null,
@@ -213,6 +214,50 @@ class path_manager {
             'title'         => 'Повторить: ' . $topic,
             'topic'         => $topic,
             'mdl_course_id' => $course_id,
+            'target_level'  => $target_level,
+            'status'        => self::STEP_PLANNED,
+            'source'        => self::SOURCE_ADAPTIVE,
+            'note'          => $note,
+        ]);
+    }
+
+    /**
+     * S2: авто-шаг ИОМ по навыку (элементу кодификатора) - ремедиация/продвижение.
+     * Курс/тема выводятся из привязок навыка (codifier_link -> cmid -> course). Дедуп:
+     * один незавершённый шаг по этому element_id в активном маршруте.
+     *
+     * @return int|null id шага, либо null (нет навыка / уже есть открытый шаг)
+     */
+    public static function add_adaptive_skill_step(int $student_id, int $created_by, int $element_id,
+                                                   ?int $target_level, ?string $note): ?int {
+        global $DB;
+        $el = $DB->get_record('unics_codifier_element', ['id' => $element_id], 'id, title');
+        if (!$el) {
+            return null;
+        }
+        $title = trim((string)$el->title);
+        $path = self::get_or_create_path($student_id, $created_by);
+
+        // Дедуп по навыку.
+        $existing = $DB->get_records('unics_path_step', ['path_id' => $path->id, 'element_id' => $element_id]);
+        foreach ($existing as $s) {
+            if ((int)$s->status !== self::STEP_DONE) {
+                return null;
+            }
+        }
+
+        // Курс из любой привязанной активности навыка (вкл. поддерево).
+        $course_id = null;
+        $cmids = codifier_link_manager::get_activities_for_element($element_id, true);
+        if ($cmids) {
+            $course_id = (int)$DB->get_field('course_modules', 'course', ['id' => reset($cmids)]) ?: null;
+        }
+
+        return self::add_step($path->id, [
+            'title'         => 'Повторить навык: ' . mb_substr($title, 0, 200),
+            'topic'         => mb_substr($title, 0, 255),
+            'mdl_course_id' => $course_id,
+            'element_id'    => $element_id,
             'target_level'  => $target_level,
             'status'        => self::STEP_PLANNED,
             'source'        => self::SOURCE_ADAPTIVE,

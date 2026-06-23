@@ -28,7 +28,8 @@ define(['core/toast', 'core/str'], function(Toast, Str) {
         Toast.add(notif.subject, {
             type: notif.type || 'info',
             autohide: true,
-            delay: 6000
+            delay: 6000,
+            closeButton: true
         });
     }
 

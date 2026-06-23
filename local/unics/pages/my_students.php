@@ -29,6 +29,9 @@ $filter_level    = optional_param('f_level',  0, PARAM_INT);
 $filter_district = optional_param('f_dist',   0, PARAM_INT);
 $filter_letter   = optional_param('f_letter', '', PARAM_TEXT); // буква класса (кириллица)
 
+$page    = optional_param('page', 0, PARAM_INT);
+$perpage = 25;
+
 // Определяем режим доступа.
 // manageorg-роли (методист орг./района, региональн./районный админ) видят учащихся
 // своего скоупа (регион/район/орг через unics_user_org). Проверку manageorg делаем
@@ -51,6 +54,7 @@ if ($is_admin && !$teacher_record) {
 }
 
 $students = [];
+$total    = 0;
 if ($mode === 'admin' || $mode === 'scoped') {
     $where  = $scope_where;
     $params = $scope_params;
@@ -60,6 +64,14 @@ if ($mode === 'admin' || $mode === 'scoped') {
     if ($filter_district > 0) { $where .= ' AND o.district_id = :fdist';       $params['fdist']  = $filter_district; }
     if ($filter_letter !== '') { $where .= ' AND s.class_letter = :fletter';   $params['fletter'] = $filter_letter; }
 
+    $total = (int)$DB->count_records_sql(
+        "SELECT COUNT(s.id)
+           FROM {unics_students} s
+           JOIN {user} u ON u.id = s.mdl_user_id
+           JOIN {unics_organizations} o ON o.id = s.organization_id
+          WHERE ({$where}) AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL",
+        $params
+    );
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
                 s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
@@ -70,10 +82,19 @@ if ($mode === 'admin' || $mode === 'scoped') {
          JOIN {unics_organizations} o ON o.id = s.organization_id
          WHERE ({$where}) AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL
          ORDER BY u.lastname, u.firstname",
-        $params
+        $params, $page * $perpage, $perpage
     );
 } elseif ($mode === 'teacher') {
     // Педагог - только привязанные учащиеся.
+    $total = (int)$DB->count_records_sql(
+        "SELECT COUNT(s.id)
+           FROM {unics_teacher_student} ts
+           JOIN {unics_students} s ON s.id = ts.student_id
+           JOIN {user} u ON u.id = s.mdl_user_id
+           JOIN {unics_organizations} o ON o.id = s.organization_id
+          WHERE ts.teacher_id = :teacher_id AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL",
+        ['teacher_id' => $teacher_record->id]
+    );
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
                 s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
@@ -85,7 +106,7 @@ if ($mode === 'admin' || $mode === 'scoped') {
          JOIN {unics_organizations} o ON o.id = s.organization_id
          WHERE ts.teacher_id = :teacher_id AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL
          ORDER BY u.lastname, u.firstname",
-        ['teacher_id' => $teacher_record->id]
+        ['teacher_id' => $teacher_record->id], $page * $perpage, $perpage
     );
 }
 
@@ -206,6 +227,11 @@ foreach ($students as $s) {
         'Отчёт',
         ['class' => 'btn btn-sm btn-outline-primary']
     );
+    $report_link .= ' ' . html_writer::link(
+        new moodle_url('/local/unics/pages/codifier_report.php', ['student_id' => $s->student_id]),
+        'Элементы',
+        ['class' => 'btn btn-sm btn-outline-secondary']
+    );
 
     $table->data[] = [
         html_writer::tag('strong', htmlspecialchars($fio)),
@@ -219,5 +245,14 @@ foreach ($students as $s) {
 }
 
 echo html_writer::table($table);
+
+$baseurl = new moodle_url('/local/unics/pages/my_students.php', [
+    'f_org'    => $filter_org,
+    'f_class'  => $filter_class,
+    'f_level'  => $filter_level,
+    'f_dist'   => $filter_district,
+    'f_letter' => $filter_letter,
+]);
+echo local_unics_render_paging_bar($total, $page, $perpage, $baseurl);
 
 echo $OUTPUT->footer();
