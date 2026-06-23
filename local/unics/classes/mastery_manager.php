@@ -109,8 +109,10 @@ class mastery_manager {
     }
 
     /**
-     * Карта владения ученика: [element_id => object{score, band, attempts_n, last_score, updated_at}].
-     * Один запрос. Источник колонки «Владение» в codifier_report.
+     * Карта владения ученика:
+     * [element_id => object{score, band, attempts_n, last_score, updated_at, theta, theta_se}].
+     * Один запрос. Источник колонки «Владение» в codifier_report. theta/theta_se - nullable
+     * (заполнены только для IRT-строк; rolling_avg-строки и старые записи = null).
      */
     public static function get_student_mastery_map(int $student_id): array {
         global $DB;
@@ -123,6 +125,8 @@ class mastery_manager {
                 'attempts_n' => (int)$r->attempts_n,
                 'last_score' => $r->last_score !== null ? (float)$r->last_score : null,
                 'updated_at' => (int)$r->updated_at,
+                'theta'      => $r->theta !== null ? (float)$r->theta : null,
+                'theta_se'   => $r->theta_se !== null ? (float)$r->theta_se : null,
             ];
         }
         return $out;

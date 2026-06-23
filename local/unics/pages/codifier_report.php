@@ -23,6 +23,7 @@ $ctx = context_system::instance();
 $is_admin     = has_capability('local/unics:manage', $ctx);
 $is_teacher   = has_capability('local/unics:viewstudents', $ctx);
 $is_methodist = $is_teacher && !$is_admin && local_unics_is_methodist();
+$is_staff = $is_admin || $is_teacher; // theta показываем только персоналу (не ребенку/родителю)
 
 $student = $DB->get_record('unics_students', ['id' => $student_id], '*', MUST_EXIST);
 $mdl_user = $DB->get_record('user', ['id' => $student->mdl_user_id, 'deleted' => 0], '*', MUST_EXIST);
@@ -130,6 +131,7 @@ if (!$is_own_view) {
 $head .= html_writer::tag('th', 'Владение');
 echo html_writer::tag('thead', html_writer::tag('tr', $head));
 echo html_writer::start_tag('tbody');
+$any_theta = false;
 
 foreach ($rows as $r) {
     $indent = (int)$r->depth * 24;
@@ -171,12 +173,25 @@ foreach ($rows as $r) {
             $mattrs['title'] = 'балл ' . round($m->score) . '%, попыток ' . (int)$m->attempts_n;
         }
         $masterycell = html_writer::tag('span', $mtext, $mattrs);
+        // IRT-способность (theta +- SE) - только персоналу и только когда посчитана.
+        if ($is_staff && $m->theta !== null) {
+            $any_theta = true;
+            $masterycell .= html_writer::tag('div',
+                'θ ' . round((float)$m->theta, 2) . ' ± ' . round((float)($m->theta_se ?? 0), 2),
+                ['class' => 'text-muted small']);
+        }
     }
     $cells .= html_writer::tag('td', $masterycell);
     echo html_writer::tag('tr', $cells);
 }
 echo html_writer::end_tag('tbody');
 echo html_writer::end_tag('table');
+
+if ($is_staff && $any_theta) {
+    echo html_writer::tag('p',
+        'θ - IRT-оценка способности по навыку (0 - средний уровень), ± - стандартная ошибка (неопределенность оценки).',
+        ['class' => 'text-muted small']);
+}
 
 // Пробелы по элементам содержания (последняя завершённая попытка каждого теста).
 $gaps = gap_manager::student_gaps_by_element((int)$student->mdl_user_id);
