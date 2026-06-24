@@ -71,21 +71,28 @@ if (!$element_id) {
     exit;
 }
 
-// Старт / возобновление. action=begin («начать заново») сбрасывает активную сессию и стартует новую,
-// иначе при активной сессии создались бы две (active_session потом упал бы на двойной записи).
+// Сессия: активная (возобновление) | begin (новая) | последняя завершенная (показ результата) | первый раз (старт).
 $session = cat_session_manager::active_session($student_id, $element_id);
 if ($session && $action === 'begin') {
     cat_session_manager::abandon((int)$session->id);
     $session = null;
 }
 if (!$session) {
-    try {
-        $session = cat_session_manager::start($student_id, $element_id);
-    } catch (moodle_exception $e) {
-        echo $OUTPUT->notification($e->getMessage(), 'error');
-        echo html_writer::link(new moodle_url('/local/unics/pages/cat.php'), '< К выбору темы');
-        echo $OUTPUT->footer();
-        exit;
+    // Нет активной: при явном «начать заново» стартуем новую; иначе показываем результат прошлой
+    // завершенной сессии (если есть), а в первый раз - стартуем новую.
+    $finished = ($action === 'begin') ? null
+        : cat_session_manager::latest_finished($student_id, $element_id);
+    if ($finished) {
+        $session = $finished;
+    } else {
+        try {
+            $session = cat_session_manager::start($student_id, $element_id);
+        } catch (moodle_exception $e) {
+            echo $OUTPUT->notification($e->getMessage(), 'error');
+            echo html_writer::link(new moodle_url('/local/unics/pages/cat.php'), '< К выбору темы');
+            echo $OUTPUT->footer();
+            exit;
+        }
     }
 }
 
@@ -127,6 +134,12 @@ if ($slot !== null) {
         echo html_writer::tag('p', 'Результат: ' . html_writer::tag('span', s($label),
             ['class' => 'badge badge-' . $cls]));
     }
+    echo html_writer::start_tag('form', ['method' => 'post', 'style' => 'display:inline-block; margin-right:8px;',
+        'action' => (new moodle_url('/local/unics/pages/cat.php',
+            ['element' => $element_id, 'action' => 'restart']))->out(false)]);
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
+    echo html_writer::tag('button', 'Пройти заново', ['type' => 'submit', 'class' => 'btn btn-primary mt-2']);
+    echo html_writer::end_tag('form');
     echo html_writer::link(new moodle_url('/local/unics/pages/cat.php'),
         'Пройти другую тему', ['class' => 'btn btn-secondary mt-2']);
 }

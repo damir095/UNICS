@@ -45,6 +45,15 @@ class cat_session_manager {
              'status' => self::STATUS_ACTIVE]) ?: null;
     }
 
+    /** Последняя завершенная сессия по (ученик, элемент) или null. */
+    public static function latest_finished(int $student_id, int $element_id): ?object {
+        global $DB;
+        $rows = $DB->get_records('unics_cat_session',
+            ['student_id' => $student_id, 'element_id' => $element_id, 'status' => self::STATUS_FINISHED],
+            'finished_at DESC', '*', 0, 1);
+        return $rows ? reset($rows) : null;
+    }
+
     /** Калиброванный банк элемента (+поддерево): [item_ref => ['a'=>,'b'=>]]. */
     private static function bank(int $element_id): array {
         $entries = codifier_link_manager::get_questions_for_element($element_id, true);
