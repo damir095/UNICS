@@ -602,6 +602,15 @@ function local_unics_extend_navigation(global_navigation $nav) {
             null,
             'local_unics_my_path'
         );
+        if ((int)get_config('local_unics', 'adaptive_cat_enabled') === 1) {
+            $branch->add(
+                'Адаптивная проверка',
+                new moodle_url('/local/unics/pages/cat.php'),
+                navigation_node::TYPE_CUSTOM,
+                null,
+                'local_unics_cat_page'
+            );
+        }
 
         // Ссылки «Заметки педагога» для активного курса
         if ($PAGE->context instanceof context_course) {
