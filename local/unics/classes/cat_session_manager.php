@@ -150,7 +150,9 @@ class cat_session_manager {
 
         $quba = \question_engine::make_questions_usage_by_activity('local_unics',
             \context_system::instance());
-        $quba->set_preferred_behaviour('immediatefeedback');
+        // deferredfeedback: ядро НЕ рисует свою кнопку «Проверить» (мы грейдим сами через
+        // finish_question), поэтому на странице остается только наша кнопка «Ответить».
+        $quba->set_preferred_behaviour('deferredfeedback');
         \question_engine::save_questions_usage_by_activity($quba);
 
         $now = time();
