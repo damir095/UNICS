@@ -24,20 +24,42 @@ class item_irt_manager {
         return $out;
     }
 
-    /** Upsert параметра задания (по item_ref). */
-    public static function upsert(int $item_ref, ?int $element_id, float $b, int $n): void {
+    /** Параметры a и b по списку bankentry-id: [item_ref => ['a'=>float,'b'=>float]]. */
+    public static function get_ab_for_entries(array $entryids): array {
+        global $DB;
+        if (!$entryids) {
+            return [];
+        }
+        [$insql, $params] = $DB->get_in_or_equal($entryids, SQL_PARAMS_NAMED);
+        $rows = $DB->get_records_select('unics_item_irt', "item_ref $insql", $params, '',
+            'id, item_ref, a, b');
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int)$r->item_ref] = ['a' => (float)$r->a, 'b' => (float)$r->b];
+        }
+        return $out;
+    }
+
+    /** Upsert параметра задания (по item_ref). $a !== null -> пишем дискриминацию и model='2pl'. */
+    public static function upsert(int $item_ref, ?int $element_id, float $b, int $n, ?float $a = null): void {
         global $DB;
         $now = time();
+        $model = $a !== null ? '2pl' : 'rasch';
         $existing = $DB->get_record('unics_item_irt', ['item_ref' => $item_ref]);
         if ($existing) {
-            $DB->update_record('unics_item_irt', (object)[
-                'id' => $existing->id, 'element_id' => $element_id,
+            $rec = (object)[
+                'id' => $existing->id, 'element_id' => $element_id, 'model' => $model,
                 'b' => round($b, 4), 'calibrated_n' => $n, 'updated_at' => $now,
-            ]);
+            ];
+            if ($a !== null) {
+                $rec->a = round($a, 4);
+            }
+            $DB->update_record('unics_item_irt', $rec);
         } else {
             $DB->insert_record('unics_item_irt', (object)[
-                'item_ref' => $item_ref, 'element_id' => $element_id, 'model' => 'rasch',
-                'a' => 1, 'b' => round($b, 4), 'c' => 0, 'calibrated_n' => $n, 'updated_at' => $now,
+                'item_ref' => $item_ref, 'element_id' => $element_id, 'model' => $model,
+                'a' => $a !== null ? round($a, 4) : 1, 'b' => round($b, 4), 'c' => 0,
+                'calibrated_n' => $n, 'updated_at' => $now,
             ]);
         }
     }
@@ -82,7 +104,8 @@ class item_irt_manager {
         $count = 0;
         foreach ($items as $it) {
             $ref = (int)$it['item_ref'];
-            self::upsert($ref, $elementof[$ref] ?? null, (float)$it['difficulty'], (int)$it['n']);
+            $a = isset($it['discrimination']) ? (float)$it['discrimination'] : null;
+            self::upsert($ref, $elementof[$ref] ?? null, (float)$it['difficulty'], (int)$it['n'], $a);
             $count++;
         }
         return $count;

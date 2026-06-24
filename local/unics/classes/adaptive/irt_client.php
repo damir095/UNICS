@@ -48,9 +48,9 @@ class irt_client {
         }
     }
 
-    /** @param array $responses список ['difficulty'=>float,'correct'=>0|1] */
+    /** @param array $responses список ['discrimination'=>float,'difficulty'=>float,'correct'=>0|1] */
     public static function estimate(array $responses, ?float $prior_theta, ?float $prior_se): ?array {
-        $payload = ['model' => 'rasch', 'responses' => array_values($responses), 'prior' => null];
+        $payload = ['model' => '2pl', 'responses' => array_values($responses), 'prior' => null];
         if ($prior_theta !== null && $prior_se !== null) {
             $payload['prior'] = ['theta' => $prior_theta, 'se' => $prior_se];
         }
@@ -63,7 +63,7 @@ class irt_client {
 
     /** @param array $responses список ['student_ref'=>int,'item_ref'=>int,'correct'=>0|1] */
     public static function calibrate(array $responses): ?array {
-        $data = self::post('/calibrate', ['model' => 'rasch', 'responses' => array_values($responses)]);
+        $data = self::post('/calibrate', ['model' => '2pl', 'responses' => array_values($responses)]);
         if (!$data || !isset($data['items']) || !is_array($data['items'])) {
             return null;
         }
@@ -83,6 +83,37 @@ class irt_client {
             return null;
         }
         return $data['recommendations'];
+    }
+
+    /**
+     * @param array $responses список ['a'=>float,'b'=>float,'correct'=>0|1] (выданные)
+     * @param array $candidates список ['item_ref'=>int,'a'=>float,'b'=>float] (не выданные)
+     * @return array|null ['theta'=>float,'se'=>float,'next_item_ref'=>?int,'stop'=>bool,'reason'=>string]
+     */
+    public static function cat_next(array $responses, array $candidates, float $se_threshold,
+            int $min_items, int $max_items, ?float $prior_theta = null, ?float $prior_se = null): ?array {
+        $payload = [
+            'responses' => array_values($responses),
+            'candidates' => array_values($candidates),
+            'se_threshold' => $se_threshold,
+            'min_items' => $min_items,
+            'max_items' => $max_items,
+            'prior' => null,
+        ];
+        if ($prior_theta !== null && $prior_se !== null) {
+            $payload['prior'] = ['theta' => $prior_theta, 'se' => $prior_se];
+        }
+        $data = self::post('/cat/next', $payload);
+        if (!$data || !array_key_exists('stop', $data) || !isset($data['theta'], $data['se'])) {
+            return null;
+        }
+        return [
+            'theta' => (float)$data['theta'],
+            'se' => (float)$data['se'],
+            'next_item_ref' => isset($data['next_item_ref']) ? (int)$data['next_item_ref'] : null,
+            'stop' => (bool)$data['stop'],
+            'reason' => (string)($data['reason'] ?? ''),
+        ];
     }
 
     public static function health(): bool {
