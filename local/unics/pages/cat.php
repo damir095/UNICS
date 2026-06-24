@@ -63,7 +63,7 @@ if (!$element_id) {
             $url = new moodle_url('/local/unics/pages/cat.php', ['element' => $e['element_id']]);
             echo html_writer::tag('li',
                 html_writer::link($url, s($e['code'] . ' ' . $e['title'])
-                    . ' (' . $e['n'] . ' вопр.)'));
+                    . ' (' . (int)$e['n'] . ' вопр.)'));
         }
         echo html_writer::end_tag('ul');
     }
@@ -71,9 +71,14 @@ if (!$element_id) {
     exit;
 }
 
-// Старт / возобновление.
+// Старт / возобновление. action=begin («начать заново») сбрасывает активную сессию и стартует новую,
+// иначе при активной сессии создались бы две (active_session потом упал бы на двойной записи).
 $session = cat_session_manager::active_session($student_id, $element_id);
-if (!$session || $action === 'begin') {
+if ($session && $action === 'begin') {
+    cat_session_manager::abandon((int)$session->id);
+    $session = null;
+}
+if (!$session) {
     try {
         $session = cat_session_manager::start($student_id, $element_id);
     } catch (moodle_exception $e) {
