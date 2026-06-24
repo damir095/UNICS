@@ -159,11 +159,6 @@ class mastery_manager {
             ]);
             self::log_history($student_id, $element_id, -1.0, $score, 0, $band, 0, $now);
         }
-        try {
-            adaptive_engine::gate_level_change($student_id);
-        } catch (\Throwable $e) {
-            debugging('local_unics CAT rollup: ' . $e->getMessage(), DEBUG_DEVELOPER);
-        }
     }
 
     /**

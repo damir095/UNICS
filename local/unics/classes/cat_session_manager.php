@@ -32,8 +32,9 @@ class cat_session_manager {
             ['tq' => codifier_link_manager::TYPE_QUESTION]);
         $out = [];
         foreach ($rows as $r) {
-            $out[] = ['element_id' => (int)$r->element_id, 'code' => $r->code,
-                'title' => $r->title, 'n' => (int)$r->n];
+            $eid = (int)$r->element_id;
+            $out[] = ['element_id' => $eid, 'code' => $r->code,
+                'title' => $r->title, 'n' => count(self::bank($eid))];
         }
         return $out;
     }
@@ -161,7 +162,11 @@ class cat_session_manager {
         ];
         $session->id = (int)$DB->insert_record('unics_cat_session', $session);
 
-        self::add_item($quba, (int)$res['next_item_ref']);
+        $slot = self::add_item($quba, (int)$res['next_item_ref']);
+        if ($slot === null) {
+            self::abandon((int)$session->id);
+            throw new \moodle_exception('cat_service_down', 'local_unics');
+        }
         // Запомнить, какой item на каком слоте (через лог не пишем до ответа - храним в qa).
         return $session;
     }

@@ -4,7 +4,7 @@ namespace local_unics;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Доступ к параметрам заданий unics_item_irt (Rasch b) + офлайн-калибровка через сервис.
+ * Доступ к параметрам заданий unics_item_irt (2PL: дискриминация a и сложность b) + офлайн-калибровка через сервис.
  * item_ref = questionbankentryid (та же сущность, что в unics_codifier_link).
  */
 class item_irt_manager {
