@@ -1278,5 +1278,46 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026062200, 'local', 'unics');
     }
 
+    if ($oldversion < 2026062400) {
+        // unics_cat_session - сессия адаптивной проверки (CAT) по одному навыку.
+        $table = new xmldb_table('unics_cat_session');
+        $table->add_field('id',                 XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('student_id',         XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('element_id',         XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('qubaid',             XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('status',             XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('theta',              XMLDB_TYPE_NUMBER, '7, 4', null, null, null, null);
+        $table->add_field('theta_se',           XMLDB_TYPE_NUMBER, '7, 4', null, null, null, null);
+        $table->add_field('items_administered', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('started_at',         XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('finished_at',        XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_key('primary',    XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_key('element_id', XMLDB_KEY_FOREIGN, ['element_id'], 'unics_codifier_element', ['id']);
+        $table->add_index('ix_cat_student_status', XMLDB_INDEX_NOTUNIQUE, ['student_id', 'status']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // unics_cat_step - лог шагов сессии (append-only): траектория theta + размеченные данные для ML.
+        $table = new xmldb_table('unics_cat_step');
+        $table->add_field('id',          XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('session_id',  XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('slot',        XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('item_ref',    XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('correct',     XMLDB_TYPE_INTEGER, '2',  null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('theta_after', XMLDB_TYPE_NUMBER, '7, 4', null, null, null, null);
+        $table->add_field('se_after',    XMLDB_TYPE_NUMBER, '7, 4', null, null, null, null);
+        $table->add_field('created_at',  XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary',     XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('session_id',  XMLDB_KEY_FOREIGN, ['session_id'], 'unics_cat_session', ['id']);
+        $table->add_index('ix_catstep_session', XMLDB_INDEX_NOTUNIQUE, ['session_id', 'created_at']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026062400, 'local', 'unics');
+    }
+
     return true;
 }
