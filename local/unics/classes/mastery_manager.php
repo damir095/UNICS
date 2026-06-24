@@ -117,6 +117,56 @@ class mastery_manager {
     }
 
     /**
+     * Записать итог CAT-сессии как владение навыком (advisory): score = проекция theta,
+     * полоса по числу выданных вопросов; пишет skill_mastery + историю + глобальный rollup.
+     * НЕ генерирует предложения (CAT v1 advisory; обычные попытки это делают сами).
+     */
+    public static function record_cat_mastery(int $student_id, int $element_id, float $theta,
+                                              float $se, int $items): void {
+        global $DB;
+        $score = \local_unics\adaptive\irt_estimator::project($theta);
+        $band = \local_unics\adaptive\rolling_avg_estimator::band_for($score, max(1, $items));
+        $now = time();
+        $row = self::current_mastery($student_id, $element_id);
+        if ($row) {
+            $changed = (abs((float)$row->score - $score) > 0.001) || ((int)$row->band !== $band);
+            $DB->update_record('unics_skill_mastery', (object)[
+                'id'         => $row->id,
+                'score'      => $score,
+                'band'       => $band,
+                'attempts_n' => (int)$row->attempts_n + 1,
+                'last_score' => $score,
+                'updated_at' => $now,
+                'theta'      => round($theta, 4),
+                'theta_se'   => round($se, 4),
+            ]);
+            if ($changed) {
+                self::log_history($student_id, $element_id, (float)$row->score, $score,
+                    (int)$row->band, $band, 0, $now);
+            }
+        } else {
+            $DB->insert_record('unics_skill_mastery', (object)[
+                'student_id'        => $student_id,
+                'element_id'        => $element_id,
+                'score'             => $score,
+                'band'              => $band,
+                'attempts_n'        => 1,
+                'last_score'        => $score,
+                'last_attempt_cmid' => null,
+                'updated_at'        => $now,
+                'theta'             => round($theta, 4),
+                'theta_se'          => round($se, 4),
+            ]);
+            self::log_history($student_id, $element_id, -1.0, $score, 0, $band, 0, $now);
+        }
+        try {
+            adaptive_engine::gate_level_change($student_id);
+        } catch (\Throwable $e) {
+            debugging('local_unics CAT rollup: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+    }
+
+    /**
      * Карта владения ученика:
      * [element_id => object{score, band, attempts_n, last_score, updated_at, theta, theta_se}].
      * Один запрос. Источник колонки «Владение» в codifier_report. theta/theta_se - nullable
