@@ -128,7 +128,9 @@ $head = html_writer::tag('th', 'Элемент содержания')
 if (!$is_own_view) {
     $head .= html_writer::tag('th', 'Оценок');
 }
-$head .= html_writer::tag('th', 'Владение');
+if (!$is_own_view) {
+    $head .= html_writer::tag('th', 'Владение');
+}
 echo html_writer::tag('thead', html_writer::tag('tr', $head));
 echo html_writer::start_tag('tbody');
 $any_theta = false;
@@ -154,34 +156,42 @@ foreach ($rows as $r) {
             $cls = 'danger';
             $word = 'нужно повторить';
         }
-        $badge = $is_own_view
-            ? html_writer::tag('span', $word, ['class' => "badge badge-$cls"])
-            : html_writer::tag('span', $p . '%', ['class' => "badge badge-$cls"]);
+        $label = $is_own_view ? $word : ($p . '%');
+        $pint  = (int)round($p);
+        // aria-valuetext несет подпись по аудитории (ребенку - слово, сотруднику - %),
+        // чтобы скринридер не озвучивал число ребенку; aria-label = имя элемента.
+        $badge = html_writer::tag('div', $label, ['class' => 'mb-1'])
+            . html_writer::tag('div',
+                html_writer::tag('div', '', ['class' => 'unics-meter__fill',
+                    'style' => 'width:' . $pint . '%;']),
+                ['class' => "unics-meter is-$cls", 'role' => 'progressbar',
+                 'aria-valuenow' => $pint, 'aria-valuemin' => 0, 'aria-valuemax' => 100,
+                 'aria-valuetext' => $label, 'aria-label' => $r->title]);
     }
 
     $cells = html_writer::tag('td', $name) . html_writer::tag('td', $badge);
     if (!$is_own_view) {
         $cells .= html_writer::tag('td', $r->pct === null ? '-' : (int)$r->n);
     }
-    $m = $mastery[(int)$r->id] ?? null;
-    if ($m === null) {
-        $masterycell = html_writer::tag('span', '-', ['class' => 'text-muted']);
-    } else {
-        [$mtext, $mcls] = mastery_manager::band_label((int)$m->band, $is_own_view);
-        $mattrs = ['class' => "badge badge-$mcls"];
-        if (!$is_own_view) {
-            $mattrs['title'] = 'балл ' . round($m->score) . '%, попыток ' . (int)$m->attempts_n;
+    if (!$is_own_view) {
+        $m = $mastery[(int)$r->id] ?? null;
+        if ($m === null) {
+            $masterycell = html_writer::tag('span', '-', ['class' => 'text-muted']);
+        } else {
+            [$mtext, $mcls] = mastery_manager::band_label((int)$m->band, $is_own_view);
+            $mattrs = ['class' => "badge badge-$mcls",
+                'title' => 'балл ' . round($m->score) . '%, попыток ' . (int)$m->attempts_n];
+            $masterycell = html_writer::tag('span', $mtext, $mattrs);
+            // IRT-способность (theta +- SE) - только персоналу и только когда посчитана.
+            if ($is_staff && $m->theta !== null) {
+                $any_theta = true;
+                $masterycell .= html_writer::tag('div',
+                    'θ ' . round((float)$m->theta, 2) . ' ± ' . round((float)($m->theta_se ?? 0), 2),
+                    ['class' => 'text-muted small']);
+            }
         }
-        $masterycell = html_writer::tag('span', $mtext, $mattrs);
-        // IRT-способность (theta +- SE) - только персоналу и только когда посчитана.
-        if ($is_staff && $m->theta !== null) {
-            $any_theta = true;
-            $masterycell .= html_writer::tag('div',
-                'θ ' . round((float)$m->theta, 2) . ' ± ' . round((float)($m->theta_se ?? 0), 2),
-                ['class' => 'text-muted small']);
-        }
+        $cells .= html_writer::tag('td', $masterycell);
     }
-    $cells .= html_writer::tag('td', $masterycell);
     echo html_writer::tag('tr', $cells);
 }
 echo html_writer::end_tag('tbody');
@@ -196,17 +206,23 @@ if ($is_staff && $any_theta) {
 // Пробелы по элементам содержания (последняя завершённая попытка каждого теста).
 $gaps = gap_manager::student_gaps_by_element((int)$student->mdl_user_id);
 if ($gaps) {
-    echo html_writer::tag('h4', 'Пробелы по элементам', ['class' => 'mt-4']);
+    echo html_writer::tag('h4', $is_own_view ? 'Стоит повторить' : 'Пробелы по элементам',
+        ['class' => 'mt-4']);
     if ($is_own_view) {
         echo html_writer::tag('p', 'Темы, где есть ошибки в последних работах - стоит повторить.',
             ['class' => 'text-muted']);
     }
     foreach ($gaps as $bucket) {
-        $title = ($bucket->code !== '' ? s($bucket->code) . ' ' : '') . s($bucket->title);
-        echo html_writer::tag('h5',
-            $title . ' ' . html_writer::tag('span', 'ошибок: ' . (int)$bucket->wrong_count,
-                ['class' => 'badge badge-light']),
-            ['class' => 'mt-3']);
+        $title = ((!$is_own_view && $bucket->code !== '') ? s($bucket->code) . ' ' : '')
+            . s($bucket->title);
+        if ($is_own_view) {
+            echo html_writer::tag('h5', $title, ['class' => 'mt-3']);
+        } else {
+            echo html_writer::tag('h5',
+                $title . ' ' . html_writer::tag('span', 'ошибок: ' . (int)$bucket->wrong_count,
+                    ['class' => 'badge badge-light']),
+                ['class' => 'mt-3']);
+        }
         if (!$is_own_view) {
             echo html_writer::start_tag('ul');
             foreach ($bucket->questions as $q) {

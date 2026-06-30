@@ -40,6 +40,11 @@ $PAGE->set_title('Сводный отчёт по организации');
 $PAGE->set_heading('Сводный отчёт по организации');
 $PAGE->set_pagelayout('admin');
 
+// Ранняя выгрузка статистики орг (Excel/CSV/ODS) - до любого вывода. $org_id уже в скоупе (выше).
+if ($org_id) {
+    local_unics_export_student_stats([(int)$org_id], 'unics-otchet-org-' . $org_id);
+}
+
 // Список организаций для селектора — по скоупу.
 if ($is_admin_user) {
     $orgs = unics_organization_manager::get_organizations_grouped();
@@ -92,6 +97,7 @@ if (!$org) {
 }
 
 echo '<h5 class="mb-3">' . s($org->name) . '</h5>';
+echo local_unics_export_buttons($PAGE->url);
 
 $students = $DB->get_records_sql(
     "SELECT s.id AS student_id, s.mdl_user_id,

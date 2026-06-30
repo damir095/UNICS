@@ -46,6 +46,9 @@ if (optional_param('action', '', PARAM_ALPHA) === 'rebuild' && confirm_sesskey()
         null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
+// Ранняя выгрузка (Excel/CSV/ODS) общим хелпером - до любого вывода.
+local_unics_export_student_stats($org_ids, 'unics-statistika');
+
 $rows = \local_unics\stats_manager::get_student_rows($org_ids);
 
 echo $OUTPUT->header();
@@ -68,6 +71,9 @@ if (empty($rows)) {
     echo $OUTPUT->footer();
     return;
 }
+
+// Кнопки выгрузки (показываем только при наличии данных).
+echo local_unics_export_buttons($PAGE->url);
 
 // ==================== ИТОГО ====================
 $totals = \local_unics\stats_manager::totals($rows);
@@ -105,10 +111,29 @@ echo html_writer::end_div();
  * @param array  $aggs    [label => agg] (уже в нужном порядке)
  */
 function local_unics_render_slice(string $title, string $colhead, array $aggs): void {
+    global $OUTPUT;
     echo html_writer::tag('h4', s($title), ['class' => 'mt-4']);
     if (empty($aggs)) {
         echo html_writer::tag('p', 'Нет данных для этого среза.', ['class' => 'text-muted']);
         return;
+    }
+    // Бар-чарт среднего балла по группам. Грейсфул: рисуем только при >= 2 групп и хотя бы
+    // одном непустом балле, иначе плоский/пустой чарт на тонких данных. null -> 0.
+    $chart_labels = [];
+    $chart_values = [];
+    $has_score = false;
+    foreach ($aggs as $label => $a) {
+        $chart_labels[] = (string)$label;
+        $chart_values[] = $a->avg_score === null ? 0 : (float)$a->avg_score;
+        if ($a->avg_score !== null) {
+            $has_score = true;
+        }
+    }
+    if (count($aggs) >= 2 && $has_score) {
+        $chart = new \core\chart_bar();
+        $chart->add_series(new \core\chart_series('Средний балл, %', $chart_values));
+        $chart->set_labels($chart_labels);
+        echo $OUTPUT->render_chart($chart, false);
     }
     $t = new html_table();
     $t->attributes['class'] = 'table table-striped table-hover';

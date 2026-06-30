@@ -11,6 +11,7 @@ require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 
 use local_unics\codifier_manager;
+use local_unics\codifier_analytics;
 
 require_login();
 local_unics_require_not_student();
@@ -166,6 +167,33 @@ echo html_writer::end_tag('form');
 // Дерево.
 $tree = codifier_manager::get_tree($codifier->id);
 
+// Готовность банка к CAT по элементам (read-only индикатор). [[cat-readiness-indicator-design]]
+$readiness = [];
+foreach (codifier_analytics::element_bank_readiness((int)$codifier->id) as $rr) {
+    $readiness[(int)$rr->id] = $rr;
+}
+$readycell = function (?object $rr) {
+    if ($rr === null) {
+        return html_writer::tag('td', '-', ['class' => 'text-muted']);
+    }
+    $map = [
+        'no_tags'   => ['нет тегов', 'light'],
+        'low_calib' => ['мало калибровки', 'warning'],
+        'ready'     => ['CAT-готов', 'success'],
+    ];
+    list($text, $cls) = $map[$rr->verdict] ?? ['нет тегов', 'light'];
+    $badge = html_writer::tag('span', $text, ['class' => "badge badge-$cls"]);
+    if ($rr->verdict === 'no_tags') {
+        $counts = html_writer::tag('div', '-', ['class' => 'text-muted small']);
+    } else {
+        $counts = html_writer::tag('div',
+            'тегов ' . (int)$rr->tagged_n . ' / калибр. ' . (int)$rr->calibrated_n
+            . ' / 2PL ' . (int)$rr->ready_2pl_n,
+            ['class' => 'text-muted small']);
+    }
+    return html_writer::tag('td', $badge . $counts);
+};
+
 // Хелпер: инлайн-форма добавления элемента.
 $add_form = function (?int $parent_id) use ($baseurl) {
     $action = $parent_id ? 'addchild' : 'addroot';
@@ -188,6 +216,7 @@ $add_form = function (?int $parent_id) use ($baseurl) {
 echo html_writer::start_tag('table', ['class' => 'table table-sm table-hover']);
 echo html_writer::tag('thead', html_writer::tag('tr',
     html_writer::tag('th', 'Код') . html_writer::tag('th', 'Элемент содержания') .
+    html_writer::tag('th', 'Готовность к CAT') .
     html_writer::tag('th', 'Действия', ['style' => 'width:340px;'])));
 echo html_writer::start_tag('tbody');
 
@@ -208,7 +237,7 @@ foreach ($tree as $e) {
         $cell .= html_writer::tag('button', 'Сохранить', ['type' => 'submit', 'class' => 'btn btn-sm btn-primary']);
         $cell .= ' ' . html_writer::link($baseurl, 'Отмена', ['class' => 'btn btn-sm btn-link']);
         $cell .= html_writer::end_tag('form');
-        echo html_writer::tag('tr', html_writer::tag('td', '', ['colspan' => 3, 'style' => "padding-left:{$indent}px;"]) . $cell);
+        echo html_writer::tag('tr', html_writer::tag('td', $cell, ['colspan' => 4, 'style' => "padding-left:{$indent}px;"]));
         continue;
     }
 
@@ -243,11 +272,13 @@ foreach ($tree as $e) {
     $delf .= html_writer::end_tag('form');
     $actions .= $delf;
 
-    echo html_writer::tag('tr', $code . $title . html_writer::tag('td', $actions));
+    echo html_writer::tag('tr', $code . $title
+        . $readycell($readiness[(int)$e->id] ?? null)
+        . html_writer::tag('td', $actions));
 
     // Инлайн-форма добавления подраздела под этим элементом.
     if ($addto == $e->id) {
-        echo html_writer::tag('tr', html_writer::tag('td', $add_form((int)$e->id), ['colspan' => 3]));
+        echo html_writer::tag('tr', html_writer::tag('td', $add_form((int)$e->id), ['colspan' => 4]));
     }
 }
 

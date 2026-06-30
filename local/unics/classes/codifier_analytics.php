@@ -250,4 +250,99 @@ class codifier_analytics {
         }
         return $out;
     }
+
+    /**
+     * Готовность банка к CAT по элементам кодификатора (read-only индикатор).
+     * На каждый элемент: сколько вопросов поддерева протегировано (type=2), сколько из
+     * них калибровано (есть строка в unics_item_irt) и сколько 2PL (model='2pl'), плюс
+     * вердикт по настройке cat_min_items. Роллап по поддереву через path, как
+     * cohort_element_progress. [[cat-readiness-indicator-design]]. Read-only.
+     *
+     * @return array<int,object> {id,code,title,parent_id,path,depth,tagged_n,calibrated_n,ready_2pl_n,verdict}
+     *         verdict in {'no_tags','low_calib','ready'}.
+     */
+    public static function element_bank_readiness(int $codifier_id): array {
+        global $DB;
+        $ordered = codifier_manager::get_tree($codifier_id);
+        if (!$ordered) {
+            return [];
+        }
+        $elements = [];
+        foreach ($ordered as $e) {
+            $elements[(int)$e->id] = $e;
+        }
+        $elementIds = array_keys($elements);
+
+        // Direct-счётчики на элемент: тегированные вопросы (type=2) + калибровка из item_irt.
+        list($insql, $params) = $DB->get_in_or_equal($elementIds, SQL_PARAMS_NAMED);
+        $params['tq'] = codifier_link_manager::TYPE_QUESTION;
+        $rows = $DB->get_records_sql(
+            "SELECT l.id AS linkid, l.element_id,
+                    CASE WHEN i.id IS NULL THEN 0 ELSE 1 END AS calibrated,
+                    CASE WHEN i.model = '2pl' THEN 1 ELSE 0 END AS is2pl
+               FROM {unics_codifier_link} l
+               LEFT JOIN {unics_item_irt} i ON i.item_ref = l.target_id
+              WHERE l.target_type = :tq AND l.element_id $insql",
+            $params);
+
+        $directTagged = [];
+        $directCalib  = [];
+        $direct2pl    = [];
+        foreach ($elementIds as $eid) {
+            $directTagged[$eid] = 0;
+            $directCalib[$eid]  = 0;
+            $direct2pl[$eid]    = 0;
+        }
+        foreach ($rows as $r) {
+            $eid = (int)$r->element_id;
+            $directTagged[$eid]++;
+            if ((int)$r->calibrated === 1) {
+                $directCalib[$eid]++;
+            }
+            if ((int)$r->is2pl === 1) {
+                $direct2pl[$eid]++;
+            }
+        }
+
+        $minitems = (int)get_config('local_unics', 'cat_min_items');
+        if ($minitems <= 0) {
+            $minitems = 5;
+        }
+
+        // Роллап по поддереву (через path) + вердикт.
+        $out = [];
+        foreach ($elements as $e) {
+            $tagged = 0;
+            $calib  = 0;
+            $r2pl   = 0;
+            foreach ($elements as $d) {
+                if (strpos((string)$d->path, (string)$e->path) !== 0) {
+                    continue;
+                }
+                $tagged += $directTagged[(int)$d->id];
+                $calib  += $directCalib[(int)$d->id];
+                $r2pl   += $direct2pl[(int)$d->id];
+            }
+            if ($tagged === 0) {
+                $verdict = 'no_tags';
+            } else if ($calib < $minitems) {
+                $verdict = 'low_calib';
+            } else {
+                $verdict = 'ready';
+            }
+            $out[] = (object)[
+                'id'           => (int)$e->id,
+                'code'         => $e->code,
+                'title'        => $e->title,
+                'parent_id'    => $e->parent_id ? (int)$e->parent_id : null,
+                'path'         => $e->path,
+                'depth'        => (int)($e->depth ?? 0),
+                'tagged_n'     => $tagged,
+                'calibrated_n' => $calib,
+                'ready_2pl_n'  => $r2pl,
+                'verdict'      => $verdict,
+            ];
+        }
+        return $out;
+    }
 }
