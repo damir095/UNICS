@@ -54,6 +54,11 @@ if ($cap_courses) {
     }
 }
 
+// Ранняя выгрузка журнала (Excel/CSV/ODS) - до вывода. Только доступный курс.
+if ($course_id && isset($allowed[$course_id])) {
+    local_unics_export_gradebook($course_id, $filter_class, $filter_letter);
+}
+
 echo $OUTPUT->header();
 echo local_unics_dashboard_button();
 
@@ -132,124 +137,28 @@ if (!$course_id) {
     exit;
 }
 
-$course     = get_course($course_id);
+$course = get_course($course_id);
+
+// Право правки оценок в контексте ЭТОГО курса (grade:viewall уже гарантирован $allowed).
+// Ядровый single-view требует все три cap (index.php стр. 63-65). [[grade-editing-design]]
 $course_ctx = context_course::instance($course_id);
+$can_edit = has_capability('moodle/grade:edit', $course_ctx)
+         && has_capability('gradereport/singleview:view', $course_ctx);
 
 echo '<h5 class="mb-3">' . s($course->fullname) . '</h5>';
+echo local_unics_export_buttons(new moodle_url($PAGE->url, ['f_class' => $filter_class, 'f_letter' => $filter_letter]));
 
-// ----------------------------------------------------------------
-// Групповая изоляция: раздельные группы без accessallgroups → только
-// учащиеся из групп смотрящего.
-// ----------------------------------------------------------------
-$restrict_uids = null; // null = без ограничения
-if (groups_get_course_groupmode($course) == SEPARATEGROUPS
-        && !has_capability('moodle/site:accessallgroups', $course_ctx)) {
-    $my_groups = groups_get_user_groups($course_id, $USER->id);
-    $gids = !empty($my_groups[0]) ? $my_groups[0] : [];
-    $restrict_uids = [];
-    foreach ($gids as $gid) {
-        foreach (groups_get_members($gid, 'u.id') as $m) {
-            $restrict_uids[(int)$m->id] = true;
-        }
-    }
-    $restrict_uids = array_keys($restrict_uids);
-    if (empty($restrict_uids)) {
-        echo $OUTPUT->notification(
-            'Вы не состоите ни в одной группе этого курса, а курс использует раздельные группы. '
-            . 'Обратитесь к методисту для добавления в группу.',
-            'warning'
-        );
-        echo $OUTPUT->footer();
-        exit;
-    }
-}
-
-// ----------------------------------------------------------------
-// Строки: активные учащиеся, записанные на курс (+ фильтр класса).
-// ----------------------------------------------------------------
-$where  = 'ue.status = 0 AND s.archived_at IS NULL AND e.courseid = :cid';
-$params = ['cid' => $course_id];
-if ($filter_class > 0)     { $where .= ' AND s.class_number = :fclass';  $params['fclass']  = $filter_class; }
-if ($filter_letter !== '') { $where .= ' AND s.class_letter = :fletter'; $params['fletter'] = $filter_letter; }
-if ($restrict_uids !== null) {
-    [$ruin, $ruparams] = $DB->get_in_or_equal($restrict_uids, SQL_PARAMS_NAMED, 'ru');
-    $where .= " AND s.mdl_user_id {$ruin}";
-    $params += $ruparams;
-}
-
-$students = $DB->get_records_sql(
-    "SELECT DISTINCT s.id AS student_id, s.mdl_user_id,
-            u.lastname, u.firstname, u.middlename,
-            s.class_number, s.class_letter
-       FROM {unics_students} s
-       JOIN {user} u ON u.id = s.mdl_user_id AND u.deleted = 0
-       JOIN {user_enrolments} ue ON ue.userid = s.mdl_user_id
-       JOIN {enrol} e ON e.id = ue.enrolid
-      WHERE {$where}
-      ORDER BY s.class_number, s.class_letter, u.lastname, u.firstname",
-    $params
-);
-
-if (empty($students)) {
-    echo $OUTPUT->notification('На этот курс не записано активных учащихся по выбранным условиям.', 'info');
+// Данные журнала (групп.изоляция, фильтр, ученики, оценки, матрица) - общий построитель.
+$gb = local_unics_gradebook_matrix($course_id, $filter_class, $filter_letter);
+if ($gb['notice'] !== null) {
+    echo $OUTPUT->notification($gb['notice']['text'], $gb['notice']['level']);
     echo $OUTPUT->footer();
     exit;
 }
-
-// ----------------------------------------------------------------
-// Оценки одним запросом по показанным ученикам.
-// ----------------------------------------------------------------
-$user_ids = array_map('intval', array_column((array)$students, 'mdl_user_id'));
-[$uin, $uparams] = $DB->get_in_or_equal($user_ids, SQL_PARAMS_NAMED, 'u');
-$grade_rows = $DB->get_records_sql(
-    "SELECT g.id, g.userid, g.itemid, g.finalgrade, gi.grademax, gi.itemname, gi.itemmodule,
-            gi.sortorder, COALESCE(g.timemodified, g.timecreated, 0) AS gtime
-       FROM {grade_grades} g
-       JOIN {grade_items} gi ON gi.id = g.itemid
-      WHERE g.userid {$uin}
-        AND gi.courseid   = :cid
-        AND gi.itemtype   = 'mod'
-        AND gi.grademax   > 0
-        AND g.finalgrade IS NOT NULL
-      ORDER BY g.userid, gtime, g.id",
-    $uparams + ['cid' => $course_id]
-);
-
-$by_user    = []; // userid => [ {itemid,pct,val,name,time} ] в порядке получения
-$item_meta  = []; // itemid => {name, sortorder}
-$item_sum   = []; // itemid => сумма pct (для среднего по классу)
-$item_cnt   = []; // itemid => число оценок
-foreach ($grade_rows as $gr) {
-    $uid = (int)$gr->userid;
-    $iid = (int)$gr->itemid;
-    $pct = $gr->finalgrade / (float)$gr->grademax * 100;
-    $by_user[$uid][] = [
-        'itemid' => $iid,
-        'pct'    => $pct,
-        'val'    => grade_scale::from_percent($pct),
-        'name'   => $gr->itemname ?: $gr->itemmodule,
-        'time'   => (int)$gr->gtime,
-    ];
-    if (!isset($item_meta[$iid])) {
-        $item_meta[$iid] = ['name' => $gr->itemname ?: $gr->itemmodule, 'sortorder' => (int)$gr->sortorder];
-        $item_sum[$iid]  = 0.0;
-        $item_cnt[$iid]  = 0;
-    }
-    $item_sum[$iid] += $pct;
-    $item_cnt[$iid]++;
-}
-
-if (empty($grade_rows)) {
-    echo $OUTPUT->notification('Оценок по этому курсу ещё нет.', 'info');
-    echo $OUTPUT->footer();
-    exit;
-}
-
-// Средний по классу (единая шкала) на каждое задание — для подсказки.
-$item_class_avg = [];
-foreach ($item_sum as $iid => $sum) {
-    $item_class_avg[$iid] = grade_scale::from_percent($sum / $item_cnt[$iid]);
-}
+$students       = $gb['students'];
+$by_user        = $gb['by_user'];
+$item_meta      = $gb['item_meta'];
+$item_class_avg = $gb['item_class_avg'];
 
 /**
  * Подсказка к ячейке: задание, дата, средний по классу.
@@ -266,6 +175,18 @@ $build_tip = function(array $g) use ($item_class_avg) {
 $cell = function(array $g) use ($build_tip) {
     return '<span class="badge badge-' . grade_scale::badge_class($g['val'])
         . '" title="' . s($build_tip($g)) . '">' . $g['val'] . '</span>';
+};
+
+// Карандаш «Править оценки ученика» -> ядровый single-view (item=user). Только при праве.
+$edit_user_link = function(int $uid, string $fio) use ($can_edit, $course_id, $OUTPUT) {
+    if (!$can_edit) {
+        return '';
+    }
+    $label = 'Править оценки: ' . $fio;
+    $url = new moodle_url('/grade/report/singleview/index.php',
+        ['id' => $course_id, 'item' => 'user', 'itemid' => $uid]);
+    return ' ' . html_writer::link($url, $OUTPUT->pix_icon('t/edit', $label),
+        ['class' => 'unics-grade-edit', 'title' => $label]);
 };
 
 echo '<div class="table-responsive">';
@@ -289,7 +210,16 @@ if ($view === 'item') {
     echo '<thead class="table-light"><tr>';
     echo '<th>Учащийся</th><th>Класс</th>';
     foreach ($ordered_iids as $iid) {
-        echo '<th title="' . s($item_meta[$iid]['name']) . '">' . s($item_meta[$iid]['name']) . '</th>';
+        $hname = $item_meta[$iid]['name'];
+        $edit_item = '';
+        if ($can_edit) {
+            $ilabel = 'Править оценки за задание: ' . $hname;
+            $iurl = new moodle_url('/grade/report/singleview/index.php',
+                ['id' => $course_id, 'item' => 'grade', 'itemid' => $iid]);
+            $edit_item = ' ' . html_writer::link($iurl, $OUTPUT->pix_icon('t/edit', $ilabel),
+                ['class' => 'unics-grade-edit', 'title' => $ilabel]);
+        }
+        echo '<th title="' . s($hname) . '">' . s($hname) . $edit_item . '</th>';
     }
     echo '<th>Средний</th>';
     echo '</tr></thead><tbody>';
@@ -305,7 +235,7 @@ if ($view === 'item') {
         echo '<td>' . html_writer::link(
             new moodle_url('/local/unics/pages/student_report.php', ['student_id' => (int)$s->student_id]),
             s($fio)
-        ) . '</td>';
+        ) . $edit_user_link($uid, $fio) . '</td>';
         echo '<td>' . s($cls) . '</td>';
 
         $row_pcts = [];
@@ -366,7 +296,7 @@ if ($view === 'item') {
         echo '<td>' . html_writer::link(
             new moodle_url('/local/unics/pages/student_report.php', ['student_id' => (int)$s->student_id]),
             s($fio)
-        ) . '</td>';
+        ) . $edit_user_link($uid, $fio) . '</td>';
         echo '<td>' . s($cls) . '</td>';
 
         for ($i = 0; $i < $maxcols; $i++) {
