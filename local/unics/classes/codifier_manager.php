@@ -121,7 +121,7 @@ class codifier_manager {
     public static function update_element(int $element_id, array $data): void {
         global $DB;
         $rec = ['id' => $element_id, 'timemodified' => time()];
-        foreach (['code', 'title'] as $k) {
+        foreach (['code', 'title', 'description'] as $k) {
             if (array_key_exists($k, $data)) {
                 $rec[$k] = $data[$k];
             }

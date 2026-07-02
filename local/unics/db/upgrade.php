@@ -1319,5 +1319,15 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026062400, 'local', 'unics');
     }
 
+    if ($oldversion < 2026070100) {
+        // Направление C: описание/компетенции элемента кодификатора.
+        $table = new xmldb_table('unics_codifier_element');
+        $field = new xmldb_field('description', XMLDB_TYPE_TEXT, null, null, null, null, null, 'title');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        upgrade_plugin_savepoint(true, 2026070100, 'local', 'unics');
+    }
+
     return true;
 }

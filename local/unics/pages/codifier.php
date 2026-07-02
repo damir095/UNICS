@@ -60,7 +60,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 break;
             case 'rename':
                 codifier_manager::update_element(required_param('element_id', PARAM_INT),
-                    ['code' => required_param('code', PARAM_TEXT), 'title' => required_param('title', PARAM_TEXT)]);
+                    ['code'        => required_param('code', PARAM_TEXT),
+                     'title'       => required_param('title', PARAM_TEXT),
+                     'description' => optional_param('description', '', PARAM_TEXT)]);
                 break;
             case 'move':
                 codifier_manager::move_ordinal(required_param('element_id', PARAM_INT),
@@ -225,15 +227,20 @@ foreach ($tree as $e) {
     $indent = $depth * 24;
 
     if ($edit == $e->id) {
-        // Инлайн-переименование.
-        $cell = html_writer::start_tag('form', ['method' => 'post', 'class' => 'form-inline']);
+        // Инлайн-редактирование: код, название, описание.
+        $cell = html_writer::start_tag('form', ['method' => 'post']);
         $cell .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
         $cell .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'rename']);
         $cell .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'element_id', 'value' => $e->id]);
+        $cell .= html_writer::start_div('form-inline mb-2');
         $cell .= html_writer::empty_tag('input', ['type' => 'text', 'name' => 'code', 'value' => s($e->code),
             'class' => 'form-control mr-2', 'size' => 8]);
         $cell .= html_writer::empty_tag('input', ['type' => 'text', 'name' => 'title', 'value' => s($e->title),
             'class' => 'form-control mr-2', 'size' => 40, 'required' => 'required']);
+        $cell .= html_writer::end_div();
+        $cell .= html_writer::tag('textarea', s($e->description ?? ''),
+            ['name' => 'description', 'class' => 'form-control mb-2', 'rows' => 3,
+             'placeholder' => 'Описание: какие компетенции проверяются/формируются']);
         $cell .= html_writer::tag('button', 'Сохранить', ['type' => 'submit', 'class' => 'btn btn-sm btn-primary']);
         $cell .= ' ' . html_writer::link($baseurl, 'Отмена', ['class' => 'btn btn-sm btn-link']);
         $cell .= html_writer::end_tag('form');
@@ -242,7 +249,12 @@ foreach ($tree as $e) {
     }
 
     $code = html_writer::tag('td', s($e->code), ['class' => 'text-muted']);
-    $title = html_writer::tag('td', html_writer::tag('span', s($e->title), ['style' => "margin-left:{$indent}px;"]));
+    $title_html = html_writer::tag('span', s($e->title), ['style' => "margin-left:{$indent}px;"]);
+    if (trim((string)($e->description ?? '')) !== '') {
+        $title_html .= html_writer::tag('div', nl2br(s($e->description)),
+            ['class' => 'small text-muted mt-1', 'style' => "margin-left:{$indent}px;"]);
+    }
+    $title = html_writer::tag('td', $title_html);
 
     // Действия.
     $mkbtn = function (string $act, array $extra, string $label, string $cls) {
@@ -258,7 +270,7 @@ foreach ($tree as $e) {
     };
     $actions  = $mkbtn('move', ['element_id' => $e->id, 'dir' => 'up'], 'Вверх', 'btn-outline-secondary') . ' ';
     $actions .= $mkbtn('move', ['element_id' => $e->id, 'dir' => 'down'], 'Вниз', 'btn-outline-secondary') . ' ';
-    $actions .= html_writer::link(new moodle_url($baseurl, ['edit' => $e->id]), 'Переименовать',
+    $actions .= html_writer::link(new moodle_url($baseurl, ['edit' => $e->id]), 'Редактировать',
         ['class' => 'btn btn-sm btn-outline-primary']) . ' ';
     $actions .= html_writer::link(new moodle_url($baseurl, ['addto' => $e->id]), 'Подраздел',
         ['class' => 'btn btn-sm btn-outline-success']) . ' ';
