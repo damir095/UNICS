@@ -9,28 +9,30 @@ defined('MOODLE_INTERNAL') || die();
 class observer {
 
     /**
-     * При удалении активности — чистим её метаданные (unics_activity_meta),
-     * чтобы не оставлять осиротевших строк (is_final/is_milestone).
+     * При удалении активности — каскадная зачистка cm-привязанных данных
+     * (метаданные, привязки кодификатора, материалы УМК, пересдачи/возвраты).
      */
     public static function course_module_deleted(\core\event\course_module_deleted $event): void {
-        // activity_meta загружается автозагрузчиком (local_unics\activity_meta).
-        activity_meta::delete((int)$event->objectid);
+        cleanup::course_module_deleted((int)$event->objectid);
     }
 
     /**
-     * При удалении курса чистим связанные данные. delete_course удаляет модули
-     * курса bulk-путём, НЕ вызывая course_module_deleted на каждый — поэтому здесь:
-     * (1) удаляем пересдачи курса (есть mdl_course_id); (2) подметаем осиротевшие
-     * метаданные активностей (модули курса уже удалены, cmid больше не существует).
+     * При удалении курса — каскадная зачистка course-привязанных данных
+     * (цепочка УМК, статистика, отчеты, делегирование, шаги маршрутов) и
+     * орфан-свипы cm-таблиц: delete_course удаляет модули bulk-путём,
+     * НЕ вызывая course_module_deleted на каждый. См. local_unics\cleanup.
      */
     public static function course_deleted(\core\event\course_deleted $event): void {
-        global $DB;
-        $DB->delete_records('unics_retakes', ['mdl_course_id' => (int)$event->objectid]);
-        $DB->delete_records('unics_topic_retries', ['mdl_course_id' => (int)$event->objectid]);
-        $DB->execute(
-            "DELETE FROM {unics_activity_meta}
-              WHERE cmid NOT IN (SELECT id FROM {course_modules})"
-        );
+        cleanup::course_deleted((int)$event->objectid);
+    }
+
+    /**
+     * При удалении пользователя ядром — зачистка его данных в unics_*
+     * (та же семантика, что у privacy-провайдера: субъектные строки удаляются,
+     * авторские поля и журнал аудита анонимизируются).
+     */
+    public static function user_deleted(\core\event\user_deleted $event): void {
+        cleanup::purge_user_data((int)$event->objectid);
     }
 
     /**
@@ -56,6 +58,7 @@ class observer {
             self::award_quiz_points($cmid, $userid);
         } catch (\Throwable $e) {
             // Нефатально.
+            debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
 
         // Адаптивный цикл: реакция на оценку теста сразу (стык «анализ результата
@@ -79,6 +82,7 @@ class observer {
             }
         } catch (\Throwable $e) {
             // Нефатально - адаптация не должна валить обработку оценки.
+            debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
         if ($is_diagnostic) {
             return;

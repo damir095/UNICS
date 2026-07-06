@@ -56,6 +56,7 @@ function local_unics_before_http_headers(): void {
         ]]);
     } catch (\Throwable $e) {
         // Нефатально - поллер просто не запустится.
+        debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
     }
 
     // Стандартный Moodle-дашборд (`/my/index.php`) и страница «Мои курсы»
@@ -1084,6 +1085,7 @@ function local_unics_before_standard_html_head(): string {
                 $PAGE->requires->js_call_amd('local_unics/voice_input', 'init');
             } catch (\Throwable $e) {
                 // Нефатально — кнопка просто не появится.
+                debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
             }
         }
     }

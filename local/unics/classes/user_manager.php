@@ -369,6 +369,7 @@ class unics_user_manager {
             }
         } catch (\Throwable $e) {
             // Нефатально
+            debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
 
         return true;

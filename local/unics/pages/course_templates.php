@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $class_num    = required_param('class_num',    PARAM_INT);
     $category_id  = optional_param('category_id', 0, PARAM_INT);
     $num_topics   = optional_param('num_topics',   0, PARAM_INT);
-    $topic_names_raw = optional_param('topic_names', '', PARAM_RAW);
+    $topic_names_raw = optional_param('topic_names', '', PARAM_TEXT);
 
     // Парсим список тем (по строкам, пустые отбрасываем, обрезаем пробелы).
     $topic_names = null;

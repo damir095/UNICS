@@ -23,11 +23,13 @@ class social_manager {
             \core_message\api::add_contact($user_id_a, $user_id_b);
         } catch (\Throwable $e) {
             // Нефатально - возможно, уже существует или API недоступен
+            debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
         try {
             \core_message\api::add_contact($user_id_b, $user_id_a);
         } catch (\Throwable $e) {
             // Нефатально
+            debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
     }
 

@@ -276,6 +276,7 @@ class adaptive_engine {
             }
         } catch (\Throwable $e) {
             // Уведомления нефатальны.
+            debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
 
         if ($new_lvl > $cur_lvl) {
@@ -286,6 +287,7 @@ class adaptive_engine {
                     'Повышение уровня до «' . ($level_names[$new_lvl] ?? $new_lvl) . '»');
             } catch (\Throwable $e) {
                 // Нефатально.
+                debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
             }
         }
 

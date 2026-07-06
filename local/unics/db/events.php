@@ -12,8 +12,13 @@ $observers = [
         'callback'  => '\local_unics\observer::quiz_attempt_graded',
     ],
     [
-        // Чистка пересдач + осиротевших метаданных при удалении курса.
+        // Каскадная зачистка course-привязанных данных unics_* (см. cleanup).
         'eventname' => '\core\event\course_deleted',
         'callback'  => '\local_unics\observer::course_deleted',
+    ],
+    [
+        // Зачистка данных пользователя в unics_* при удалении ядром (этап 1.2 аудита).
+        'eventname' => '\core\event\user_deleted',
+        'callback'  => '\local_unics\observer::user_deleted',
     ],
 ];

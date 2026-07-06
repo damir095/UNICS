@@ -50,36 +50,8 @@ class provider implements
         'unics_audit_log'          => 'mdl_user_id',
     ];
 
-    /** Таблицы, привязанные через профиль обучающегося (student_id -> unics_students). */
-    private const STUDENT_TABLES = [
-        'unics_teacher_student', 'unics_parent_student', 'unics_umk_students',
-        'unics_achievements', 'unics_points_log', 'unics_purchases',
-        'unics_learning_path', 'unics_skill_mastery', 'unics_mastery_history',
-        'unics_adaptive_suggestion', 'unics_cat_session', 'unics_reports',
-        'unics_comments', 'unics_comment_seen', 'unics_level_history',
-        'unics_stats_student_course',
-    ];
-
-    /** Таблицы, привязанные через профиль педагога (teacher_id -> unics_teachers). */
-    private const TEACHER_TABLES = [
-        'unics_teacher_subject', 'unics_teacher_student', 'unics_reports',
-    ];
-
-    /**
-     * Поля «кто выполнил/создал»: при удалении данных пользователя анонимизируются (0),
-     * а не удаляются - чтобы не разрушать записи других субъектов и журнал аудита.
-     */
-    private const AUTHOR_FIELDS = [
-        'unics_teacher_student'     => ['assigned_by'],
-        'unics_learning_path'       => ['created_by_mdl_user_id'],
-        'unics_achievements'        => ['awarded_by'],
-        'unics_adaptive_suggestion' => ['decided_by'],
-        'unics_course_delegation'   => ['usercreated'],
-        'unics_codifier'            => ['created_by_mdl_user_id'],
-        'unics_codifier_link'       => ['created_by_mdl_user_id'],
-    ];
-
-    /** Группы экспорта: подконтекст => [таблица => замыкание выборки]. Собирается в export_user_data. */
+    // Состав субъектных таблиц и анонимизируемых авторских полей - в \local_unics\cleanup
+    // (единая реализация удаления для privacy-запросов и события user_deleted).
 
     // ----------------------------------------------------------------- metadata.
 
@@ -372,50 +344,13 @@ class provider implements
 
     // ------------------------------------------------------------------- delete.
 
-    /** Удаление данных одного пользователя (субъектные строки - delete, авторские поля - 0). */
+    /**
+     * Удаление данных одного пользователя. Единая реализация - в \local_unics\cleanup
+     * (переиспользуется наблюдателем user_deleted): субъектные строки удаляются,
+     * авторские поля и журнал аудита анонимизируются.
+     */
     private static function purge_user(int $userid): void {
-        global $DB;
-
-        $sid = self::student_id($userid);
-        $tid = self::teacher_id($userid);
-
-        if ($sid !== null) {
-            // Дочерние - раньше родителей.
-            $pathids = $DB->get_fieldset_select('unics_learning_path', 'id', 'student_id = ?', [$sid]);
-            if ($pathids) {
-                [$insql, $params] = $DB->get_in_or_equal($pathids);
-                $DB->delete_records_select('unics_path_step', "path_id $insql", $params);
-            }
-            $sessionids = $DB->get_fieldset_select('unics_cat_session', 'id', 'student_id = ?', [$sid]);
-            if ($sessionids) {
-                [$insql, $params] = $DB->get_in_or_equal($sessionids);
-                $DB->delete_records_select('unics_cat_step', "session_id $insql", $params);
-            }
-            foreach (self::STUDENT_TABLES as $table) {
-                $DB->delete_records($table, ['student_id' => $sid]);
-            }
-        }
-        if ($tid !== null) {
-            foreach (self::TEACHER_TABLES as $table) {
-                $DB->delete_records($table, ['teacher_id' => $tid]);
-            }
-        }
-
-        // Прямые субъектные строки (кроме аудита - он анонимизируется ниже).
-        foreach (self::DIRECT_TABLES as $table => $col) {
-            if ($table === 'unics_audit_log') {
-                continue;
-            }
-            $DB->delete_records($table, [$col => $userid]);
-        }
-
-        // Анонимизация «кто сделал» и журнала аудита: субъект исчезает, записи целы.
-        $DB->set_field('unics_audit_log', 'mdl_user_id', 0, ['mdl_user_id' => $userid]);
-        foreach (self::AUTHOR_FIELDS as $table => $fields) {
-            foreach ($fields as $field) {
-                $DB->set_field($table, $field, 0, [$field => $userid]);
-            }
-        }
+        \local_unics\cleanup::purge_user_data($userid);
     }
 
     public static function delete_data_for_user(approved_contextlist $contextlist) {

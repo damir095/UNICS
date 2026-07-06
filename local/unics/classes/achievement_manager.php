@@ -50,6 +50,7 @@ class achievement_manager {
                 );
             } catch (\Throwable $e) {
                 // Нефатально
+                debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
             }
 
             // Уведомить учащегося
@@ -62,6 +63,7 @@ class achievement_manager {
                 );
             } catch (\Throwable $e) {
                 // Нефатально
+                debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
             }
 
             // Уведомить родителей
@@ -76,6 +78,7 @@ class achievement_manager {
                 }
             } catch (\Throwable $e) {
                 // Нефатально
+                debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
             }
         }
 

@@ -1329,5 +1329,21 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026070100, 'local', 'unics');
     }
 
+    if ($oldversion < 2026070602) {
+        // Этап 1.2 аудита: выравнивание живой БД с install.xml - дроп мертвых колонок
+        // от старых ручных ALTER (кодом нигде не используются, значения пусты).
+        $table = new xmldb_table('unics_organizations');
+        $field = new xmldb_field('logo_path');
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+        $table = new xmldb_table('unics_umk');
+        $field = new xmldb_field('ai_params');
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+        upgrade_plugin_savepoint(true, 2026070602, 'local', 'unics');
+    }
+
     return true;
 }
