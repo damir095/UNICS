@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             'target_section'   => (int)$target_section,
             'extra_prompt'     => $extra_prompt,
             'status'           => 1,
-            'generated_at'     => date('Y-m-d H:i:s'),
+            'generated_at'     => time(),
         ]);
         $DB->insert_record('unics_ai_queue', (object)[
             'umk_id'              => $umk_id,
@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             'generate_assignment' => (int)$generate_assignment,
             'generate_video'      => (int)$generate_video,
             'status'              => 1,
-            'created_at'          => date('Y-m-d H:i:s'),
+            'created_at'          => time(),
         ]);
         $queued++;
     }

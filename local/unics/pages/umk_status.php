@@ -121,7 +121,7 @@ if ($publish_id && confirm_sesskey()) {
     foreach ($cmids as $cmid) {
         $builder->set_cm_visible((int)$cmid, 1);
     }
-    $DB->set_field('unics_umk', 'published_at', date('Y-m-d H:i:s'), ['id' => $umk->id]);
+    $DB->set_field('unics_umk', 'published_at', time(), ['id' => $umk->id]);
 
     // Баллы + уведомление учащимся (перенесено со сборки на момент публикации).
     $course_rec  = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
@@ -287,7 +287,7 @@ if (empty($records)) {
             (int)$r->student_count,
             $course_link,
             $status,
-            $r->generated_at ? userdate(strtotime($r->generated_at)) : '-',
+            $r->generated_at ? userdate((int)$r->generated_at) : '-',
             $actions,
         ];
     }

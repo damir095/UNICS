@@ -470,7 +470,7 @@ if ($is_admin || $is_teacher) {
         foreach ($umk_list as $u) {
             $sl  = $umk_statuses[$u->status] ?? '?';
             $sc  = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'][$u->status] ?? 'secondary';
-            $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '-';
+            $dt  = $u->generated_at ? date('d.m.Y', (int)$u->generated_at) : '-';
             $lvl = $level_labels[$u->difficulty_level] ?? '-';
             echo '<tr>';
             echo '<td>' . s($u->title) . '</td>';

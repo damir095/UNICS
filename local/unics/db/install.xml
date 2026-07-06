@@ -205,7 +205,7 @@
         <FIELD NAME="teacher_id"  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="student_id"  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="assigned_by" TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="assigned_at" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="assigned_at" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
@@ -242,7 +242,7 @@
         <FIELD NAME="file_path"     TYPE="char" LENGTH="500" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="period_start"  TYPE="char" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="period_end"    TYPE="char" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="generated_at"  TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="generated_at"  TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
@@ -261,7 +261,7 @@
         <FIELD NAME="old_value"   TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="new_value"   TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="ip_address"  TYPE="char" LENGTH="45" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="changed_at"  TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="changed_at"  TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -283,8 +283,8 @@
         <FIELD NAME="extra_prompt"     TYPE="text"              NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="target_section"   TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="-1"  SEQUENCE="false"/>
         <FIELD NAME="status"           TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"   SEQUENCE="false"/>
-        <FIELD NAME="generated_at"     TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="published_at"     TYPE="char" LENGTH="20"  NOTNULL="false" SEQUENCE="false" COMMENT="NULL = на проверке (черновик), задано = опубликован педагогом"/>
+        <FIELD NAME="generated_at"     TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="published_at"     TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="NULL = на проверке (черновик), задано = опубликован педагогом"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -373,8 +373,8 @@
         <FIELD NAME="generate_video"      TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 - генерировать видеопрезентацию"/>
         <FIELD NAME="status"              TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="1" SEQUENCE="false"/>
         <FIELD NAME="error_message"       TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="created_at"          TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="processed_at"        TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="created_at"          TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="processed_at"        TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>

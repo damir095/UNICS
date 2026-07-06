@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             'old_value'   => $old_value,
             'new_value'   => $new_value,
             'ip_address'  => getremoteaddr(),
-            'changed_at'  => date('Y-m-d H:i:s'),
+            'changed_at'  => time(),
         ]);
     }
 

@@ -367,7 +367,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                 $DB->update_record('unics_ai_queue', (object)[
                     'id'           => $task->id,
                     'status'       => 3,
-                    'processed_at' => date('Y-m-d H:i:s'),
+                    'processed_at' => time(),
                 ]);
 
                 // B8: пересобрать критерии завершения курса (все активности с completion).
@@ -384,7 +384,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                     'id'            => $task->id,
                     'status'        => 4,
                     'error_message' => $e->getMessage(),
-                    'processed_at'  => date('Y-m-d H:i:s'),
+                    'processed_at'  => time(),
                 ]);
                 $DB->set_field('unics_umk', 'status', 4, ['id' => $task->umk_id]);
                 mtrace("UMK #{$task->umk_id} - ошибка: " . $e->getMessage());

@@ -277,7 +277,7 @@ class unics_user_manager {
             'old_value'   => json_encode(['archived_at' => $old]),
             'new_value'   => json_encode(['archived_at' => $new]),
             'ip_address'  => getremoteaddr(),
-            'changed_at'  => date('Y-m-d H:i:s'),
+            'changed_at'  => time(),
         ]);
     }
 
@@ -352,7 +352,7 @@ class unics_user_manager {
             'teacher_id'  => $teacher_id,
             'student_id'  => $student_id,
             'assigned_by' => $assigned_by,
-            'assigned_at' => date('Y-m-d H:i:s'),
+            'assigned_at' => time(),
         ]);
 
         // Автоматически добавить педагога и учащегося в контакты Moodle Messaging

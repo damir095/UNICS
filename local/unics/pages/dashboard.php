@@ -184,7 +184,7 @@ if ($is_admin) {
             $lvl = $level_labels[$u->difficulty_level] ?? '?';
             $sc  = $status_colors[$u->status] ?? 'secondary';
             $sl  = $status_labels[$u->status] ?? '?';
-            $dt  = $u->generated_at ? date('d.m.Y', strtotime($u->generated_at)) : '-';
+            $dt  = $u->generated_at ? date('d.m.Y', (int)$u->generated_at) : '-';
             echo '<tr>';
             echo '<td>' . s($u->title) . '</td>';
             echo '<td><span class="unics-lvl unics-lvl-' . (int)$u->difficulty_level . '">' . s($lvl) . '</span></td>';

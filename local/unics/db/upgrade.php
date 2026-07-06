@@ -1345,5 +1345,63 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026070602, 'local', 'unics');
     }
 
+    if ($oldversion < 2026070603) {
+        // Цикл R-A аудита: нормализация датных колонок. Живая БД исторически имела
+        // DATETIME/DATE (ручные ALTER; XMLDB таких типов не умеет), install.xml - char.
+        // Целевые типы: метки времени -> INT(10) unix, календарные даты -> VARCHAR(10)
+        // «YYYY-MM-DD». Конвертация значений через временную колонку; идемпотентно
+        // (guard по фактическому типу). SQL специфичен для MySQL/MariaDB - целевая СУБД проекта.
+        global $DB;
+
+        $toint = function(string $table, string $field) use ($DB) {
+            $cols = $DB->get_columns($table, false);
+            if (!isset($cols[$field]) || $cols[$field]->meta_type === 'I') {
+                return; // уже INT (или колонки нет)
+            }
+            $tmp = $field . '_tmp_ra';
+            if (isset($cols[$tmp])) { // хвост прерванной попытки
+                $DB->execute("ALTER TABLE {{$table}} DROP COLUMN $tmp");
+            }
+            $DB->execute("ALTER TABLE {{$table}} ADD COLUMN $tmp BIGINT(10) DEFAULT NULL");
+            // CAST-гард: сравнение DATETIME с '' в строгом режиме - ошибка, а CASE
+            // ленив - до UNIX_TIMESTAMP пустые значения не доходят.
+            $DB->execute("UPDATE {{$table}}
+                             SET $tmp = CASE WHEN $field IS NULL THEN NULL
+                                             WHEN CAST($field AS CHAR) = '' THEN NULL
+                                             ELSE UNIX_TIMESTAMP($field) END");
+            $DB->execute("ALTER TABLE {{$table}} DROP COLUMN $field");
+            $DB->execute("ALTER TABLE {{$table}} CHANGE $tmp $field BIGINT(10) DEFAULT NULL");
+        };
+        $tochar10 = function(string $table, string $field) use ($DB) {
+            $cols = $DB->get_columns($table, false);
+            if (!isset($cols[$field]) || $cols[$field]->meta_type === 'C') {
+                return; // уже VARCHAR
+            }
+            $tmp = $field . '_tmp_ra';
+            if (isset($cols[$tmp])) { // хвост прерванной попытки
+                $DB->execute("ALTER TABLE {{$table}} DROP COLUMN $tmp");
+            }
+            $DB->execute("ALTER TABLE {{$table}} ADD COLUMN $tmp VARCHAR(10) DEFAULT NULL");
+            $DB->execute("UPDATE {{$table}}
+                             SET $tmp = CASE WHEN $field IS NULL THEN NULL
+                                             ELSE DATE_FORMAT($field, '%Y-%m-%d') END");
+            $DB->execute("ALTER TABLE {{$table}} DROP COLUMN $field");
+            $DB->execute("ALTER TABLE {{$table}} CHANGE $tmp $field VARCHAR(10) DEFAULT NULL");
+        };
+
+        $toint('unics_teacher_student', 'assigned_at');
+        $toint('unics_audit_log', 'changed_at');
+        $toint('unics_umk', 'generated_at');
+        $toint('unics_umk', 'published_at');
+        $toint('unics_reports', 'generated_at');
+        $toint('unics_ai_queue', 'created_at');
+        $toint('unics_ai_queue', 'processed_at');
+        $tochar10('unics_students', 'birth_date');
+        $tochar10('unics_reports', 'period_start');
+        $tochar10('unics_reports', 'period_end');
+
+        upgrade_plugin_savepoint(true, 2026070603, 'local', 'unics');
+    }
+
     return true;
 }
