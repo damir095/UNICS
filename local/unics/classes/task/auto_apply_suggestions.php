@@ -17,17 +17,17 @@ class auto_apply_suggestions extends \core\task\scheduled_task {
 
     public function execute(): void {
         global $DB, $CFG;
-        require_once($CFG->dirroot . '/local/unics/classes/suggestion_service.php');
+        require_once($CFG->dirroot . '/local/unics/classes/learning/suggestion_service.php');
 
         $now = time();
         $due = $DB->get_records_select('unics_adaptive_suggestion',
             'status = :st AND auto_apply_after IS NOT NULL AND auto_apply_after <= :now',
-            ['st' => \local_unics\suggestion_service::STATUS_PENDING, 'now' => $now],
+            ['st' => \local_unics\learning\suggestion_service::STATUS_PENDING, 'now' => $now],
             'auto_apply_after ASC', 'id');
 
         $applied = 0;
         foreach ($due as $row) {
-            if (\local_unics\suggestion_service::apply((int)$row->id, null, true)) {
+            if (\local_unics\learning\suggestion_service::apply((int)$row->id, null, true)) {
                 $applied++;
             }
         }

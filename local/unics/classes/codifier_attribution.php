@@ -81,7 +81,7 @@ class codifier_attribution {
         return $cm ? (int)$cm->id : null;
     }
 
-    /** Whole-test % (finalgrade/grademax), зеркалит mastery_manager::attempt_pct. */
+    /** Whole-test % (finalgrade/grademax), зеркалит \local_unics\learning\mastery_manager::attempt_pct. */
     private static function whole_test_pct(int $cmid, int $userid): ?float {
         global $DB;
         $rec = $DB->get_record_sql(

@@ -1,9 +1,9 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/grade_scale.php');
+require_once(__DIR__ . '/../classes/learning/grade_scale.php');
 
-use local_unics\grade_scale;
+use local_unics\learning\grade_scale;
 
 require_login();
 global $USER, $DB;
@@ -347,7 +347,7 @@ if (empty($quiz_grades)) {
 
 // Контрольные точки (B4) — промежуточная аттестация по milestone-тестам.
 // Видны всем ролям, у кого есть доступ к отчёту (учащийся видит свои).
-$milestones = \local_unics\milestone_manager::student_milestones($student->mdl_user_id);
+$milestones = \local_unics\learning\milestone_manager::student_milestones($student->mdl_user_id);
 echo '<h2 class="unics-section-title mt-4">Контрольные точки</h2>';
 if (empty($milestones)) {
     echo '<p class="text-muted">Контрольных точек пока нет.</p>';
@@ -361,8 +361,8 @@ if (empty($milestones)) {
         echo '<tr>';
         echo '<td>' . s($m->course_name) . '</td>';
         echo '<td>' . s($m->quiz_name) . '</td>';
-        echo '<td>' . \local_unics\milestone_manager::status_html($r) . '</td>';
-        echo '<td>' . \local_unics\milestone_manager::grade_text($r) . '</td>';
+        echo '<td>' . \local_unics\learning\milestone_manager::status_html($r) . '</td>';
+        echo '<td>' . \local_unics\learning\milestone_manager::grade_text($r) . '</td>';
         echo '<td>' . (!empty($r->timemodified) ? userdate($r->timemodified, '%d.%m.%Y') : '-') . '</td>';
         echo '</tr>';
     }
@@ -371,7 +371,7 @@ if (empty($milestones)) {
 
 // Темы для повторения (B2) — проваленные тесты темы (с B1-гейтом), ожидающие повтора.
 // Видны всем ролям с доступом к отчёту (учащийся видит свои).
-$topic_retries = \local_unics\topic_retry_manager::student_open_retries($student->mdl_user_id);
+$topic_retries = \local_unics\learning\topic_retry_manager::student_open_retries($student->mdl_user_id);
 echo '<h2 class="unics-section-title mt-4">Темы для повторения</h2>';
 if (empty($topic_retries)) {
     echo '<p class="text-muted">Тем для повторения нет.</p>';
@@ -385,7 +385,7 @@ if (empty($topic_retries)) {
         echo '<tr>';
         echo '<td>' . s($tr->course_name) . '</td>';
         echo '<td>' . s($tr->quiz_name ?? 'тест темы') . '</td>';
-        echo '<td>' . \local_unics\topic_retry_manager::grade_text($tr) . '</td>';
+        echo '<td>' . \local_unics\learning\topic_retry_manager::grade_text($tr) . '</td>';
         echo '<td>' . (!empty($tr->timecreated) ? userdate($tr->timecreated, '%d.%m.%Y') : '-') . '</td>';
         echo '</tr>';
     }
@@ -395,7 +395,7 @@ if (empty($topic_retries)) {
 // Пробелы (B3) - вопросы с ошибками по последней завершённой попытке каждого теста,
 // сгруппированные по теме (тесту). Правило, без ИИ; читаем из ядровых question_*.
 // Видны всем ролям с доступом к отчёту (учащийся видит свои).
-$gaps = \local_unics\gap_manager::student_gaps($student->mdl_user_id);
+$gaps = \local_unics\learning\gap_manager::student_gaps($student->mdl_user_id);
 echo '<h2 class="unics-section-title mt-4">Пробелы</h2>';
 if (empty($gaps)) {
     echo '<p class="text-muted">Пробелов по тестам не выявлено.</p>';
@@ -409,7 +409,7 @@ if (empty($gaps)) {
         echo '<tr>';
         echo '<td>' . s($topic->course_name) . '</td>';
         echo '<td>' . s($topic->quiz_name) . '</td>';
-        echo '<td>' . s(\local_unics\gap_manager::summary_text($topic)) . '</td>';
+        echo '<td>' . s(\local_unics\learning\gap_manager::summary_text($topic)) . '</td>';
         echo '</tr>';
 
         // Перечень ошибочных вопросов этой темы inline (что ответил учащийся).
@@ -418,7 +418,7 @@ if (empty($gaps)) {
             $resp = ($qq->response !== null && $qq->response !== '')
                 ? ' <span class="text-muted small">- ответ: ' . s($qq->response) . '</span>'
                 : '';
-            echo '<li>' . \local_unics\gap_manager::state_html($qq->state)
+            echo '<li>' . \local_unics\learning\gap_manager::state_html($qq->state)
                . ' ' . s($qq->qname) . $resp . '</li>';
         }
         echo '</ul></td></tr>';

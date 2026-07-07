@@ -12,9 +12,9 @@
  */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/adaptive_engine.php');
+require_once(__DIR__ . '/../classes/learning/adaptive_engine.php');
 
-use local_unics\adaptive_engine;
+use local_unics\learning\adaptive_engine;
 
 $course_id = required_param('course_id', PARAM_INT);
 $course    = $DB->get_record('course', ['id' => $course_id], '*', MUST_EXIST);

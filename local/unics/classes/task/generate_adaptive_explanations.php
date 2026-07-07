@@ -30,11 +30,11 @@ class generate_adaptive_explanations extends \core\task\scheduled_task {
         }
 
         require_once($CFG->dirroot . '/local/unics/classes/ai/ai_generator.php');
-        require_once($CFG->dirroot . '/local/unics/classes/suggestion_service.php');
+        require_once($CFG->dirroot . '/local/unics/classes/learning/suggestion_service.php');
 
         $rows = $DB->get_records_select('unics_adaptive_suggestion',
             'status = :st AND (rationale IS NULL OR rationale = :empty)',
-            ['st' => \local_unics\suggestion_service::STATUS_PENDING, 'empty' => ''],
+            ['st' => \local_unics\learning\suggestion_service::STATUS_PENDING, 'empty' => ''],
             'created_at ASC', '*', 0, self::BATCH);
         if (!$rows) {
             mtrace('УНИКС ИИ-обоснования: нечего генерировать.');
@@ -63,7 +63,7 @@ class generate_adaptive_explanations extends \core\task\scheduled_task {
             $tl = isset($payload['target_level']) ? (int)$payload['target_level'] : 0;
 
             $text = $gen->generate_rationale([
-                'kind_label'         => \local_unics\suggestion_service::kind_label((int)$s->kind),
+                'kind_label'         => \local_unics\learning\suggestion_service::kind_label((int)$s->kind),
                 'skill_title'        => trim($skill_title),
                 'target_level_label' => $levels[$tl] ?? '',
                 'last_score'         => $last_score,

@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\learning;
 
 use local_unics\adaptive\mastery_state;
 use local_unics\adaptive\mastery_estimator;
@@ -57,7 +57,7 @@ class mastery_manager {
 
         // Фаза 2: если есть id попытки - атрибутируем per-question (приоритет) с cmid
         // фолбэком по элементу через единый движок. Иначе - прежний cmid-путь.
-        $scores = $attemptid ? codifier_attribution::element_scores_for_attempt((int)$attemptid) : [];
+        $scores = $attemptid ? \local_unics\codifier_attribution::element_scores_for_attempt((int)$attemptid) : [];
         if ($scores) {
             foreach ($scores as $eid => $pct) {
                 self::apply_to_element($sid, (int)$eid, (float)$pct, $cmid, null, $irtmap[(int)$eid] ?? []);
@@ -320,7 +320,7 @@ class mastery_manager {
     private static function element_links_for_cmid(int $cmid): array {
         global $DB;
         $rows = $DB->get_records('unics_codifier_link',
-            ['target_type' => codifier_link_manager::TYPE_ACTIVITY, 'target_id' => $cmid],
+            ['target_type' => \local_unics\codifier_link_manager::TYPE_ACTIVITY, 'target_id' => $cmid],
             '', 'id, element_id, weight');
         $out = [];
         foreach ($rows as $r) {

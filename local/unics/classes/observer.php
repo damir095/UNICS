@@ -67,17 +67,17 @@ class observer {
         //  - обычный тест -> пересчет уровня (движок сам проверит минимум тестов
         //    и сменит уровень только при необходимости).
         // Диагностику дальше по циклу (B2/B7) не гоняем - это вход, не тема/итог.
-        $is_diagnostic = activity_meta::is_diagnostic($cmid);
+        $is_diagnostic = \local_unics\learning\activity_meta::is_diagnostic($cmid);
         try {
             global $DB;
             $student = $DB->get_record('unics_students', ['mdl_user_id' => $userid], 'id');
             if ($student) {
                 if ($is_diagnostic) {
-                    adaptive_engine::diagnose_student((int)$student->id, $cmid);
+                    \local_unics\learning\adaptive_engine::diagnose_student((int)$student->id, $cmid);
                 } else {
                     // S1: per-skill пересчет владения + глобальный rollup внутри on_attempt
                     // (заменяет прямой evaluate_student; диагностику по-прежнему ведет diagnose).
-                    mastery_manager::on_attempt($cmid, $userid, (int)$event->objectid);
+                    \local_unics\learning\mastery_manager::on_attempt($cmid, $userid, (int)$event->objectid);
                 }
             }
         } catch (\Throwable $e) {
@@ -88,13 +88,13 @@ class observer {
             return;
         }
 
-        if (activity_meta::is_final($cmid)) {
-            retake_manager::evaluate_cm_for_user($cmid, $userid); // B7
+        if (\local_unics\learning\activity_meta::is_final($cmid)) {
+            \local_unics\learning\retake_manager::evaluate_cm_for_user($cmid, $userid); // B7
             return;
         }
         // B2: не итоговый. evaluate_cm_for_user сам проверит, что это тест темы
         // (B1-гейт), и тихо выйдет для прочих тестов.
-        topic_retry_manager::evaluate_cm_for_user($cmid, $userid);
+        \local_unics\learning\topic_retry_manager::evaluate_cm_for_user($cmid, $userid);
     }
 
     /**

@@ -139,7 +139,7 @@ if ($is_admin) {
             'url'  => new moodle_url('/local/unics/pages/enrol_students.php'),
             'icon' => 'i/users', 'tone' => 'warning', 'badge' => $nocourse];
     }
-    $adapt_n = count(\local_unics\suggestion_service::list_open_for_user((int)$USER->id));
+    $adapt_n = count(\local_unics\learning\suggestion_service::list_open_for_user((int)$USER->id));
     if ($adapt_n > 0) {
         $attention[] = ['label' => 'Адаптивные предложения',
             'url'  => new moodle_url('/local/unics/pages/adaptive_suggestions.php'),
@@ -320,7 +320,7 @@ if ($is_admin) {
             'url'  => new moodle_url('/local/unics/pages/messenger.php'),
             'icon' => 't/message', 'tone' => 'info', 'badge' => $msgs];
     }
-    $adapt_n = count(\local_unics\suggestion_service::list_open_for_user((int)$USER->id));
+    $adapt_n = count(\local_unics\learning\suggestion_service::list_open_for_user((int)$USER->id));
     if ($adapt_n > 0) {
         $attention[] = ['label' => 'Адаптивные предложения',
             'url'  => new moodle_url('/local/unics/pages/adaptive_suggestions.php'),
@@ -430,7 +430,7 @@ if ($is_admin) {
             'url'  => new moodle_url('/local/unics/pages/messenger.php'),
             'icon' => 't/message', 'tone' => 'info', 'badge' => $msgs];
     }
-    $adapt_n = count(\local_unics\suggestion_service::list_open_for_user((int)$USER->id));
+    $adapt_n = count(\local_unics\learning\suggestion_service::list_open_for_user((int)$USER->id));
     if ($adapt_n > 0) {
         $attention[] = ['label' => 'Адаптивные предложения',
             'url'  => new moodle_url('/local/unics/pages/adaptive_suggestions.php'),
@@ -546,14 +546,14 @@ if ($is_admin) {
         ]);
 
         // Виджет «Стоит повторить»: топ слабых элементов по полосе владения (если есть).
-        $weak = \local_unics\mastery_manager::get_weak_elements((int)$student->id, 3);
+        $weak = \local_unics\learning\mastery_manager::get_weak_elements((int)$student->id, 3);
         if ($weak) {
             echo html_writer::start_tag('div', ['class' => 'card mb-4']);
             echo html_writer::tag('div', 'Стоит повторить', ['class' => 'card-header']);
             echo html_writer::start_tag('div', ['class' => 'card-body']);
             echo html_writer::start_tag('ul', ['class' => 'mb-2']);
             foreach ($weak as $w) {
-                [$wtext, $wcls] = \local_unics\mastery_manager::band_label((int)$w->band, true);
+                [$wtext, $wcls] = \local_unics\learning\mastery_manager::band_label((int)$w->band, true);
                 $label = s($w->title);
                 echo html_writer::tag('li',
                     $label . ' ' . html_writer::tag('span', $wtext, ['class' => "badge badge-$wcls"]));

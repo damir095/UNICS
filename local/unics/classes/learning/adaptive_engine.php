@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\learning;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -88,7 +88,6 @@ class adaptive_engine {
         }
 
         // Поле профиля Moodle (как в evaluate_student).
-        require_once(dirname(__DIR__) . '/classes/user_manager.php');
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $level);
 
         return $level;
@@ -239,7 +238,6 @@ class adaptive_engine {
             debugging('local_unics: запись unics_level_history не удалась: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
 
-        require_once(dirname(__DIR__) . '/classes/user_manager.php');
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $new_lvl);
 
         $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
@@ -258,7 +256,6 @@ class adaptive_engine {
         $parent_uids = array_column((array)$parents, 'parent_mdl_user_id');
 
         try {
-            require_once(dirname(__DIR__) . '/classes/social/notification_manager.php');
             $points_awarded = $new_lvl > $cur_lvl ? \local_unics\social\points_manager::POINTS_LEVEL_UP : 0;
             \local_unics\social\notification_manager::notify_level_changed_student(
                 (int)$student->mdl_user_id, $cur_lvl, $new_lvl, $avg !== null ? $avg : 0, $points_awarded);
@@ -281,7 +278,6 @@ class adaptive_engine {
 
         if ($new_lvl > $cur_lvl) {
             try {
-                require_once(dirname(__DIR__) . '/classes/social/points_manager.php');
                 \local_unics\social\points_manager::award($student_id, \local_unics\social\points_manager::POINTS_LEVEL_UP,
                     \local_unics\social\points_manager::REASON_LEVEL_UP,
                     'Повышение уровня до «' . ($level_names[$new_lvl] ?? $new_lvl) . '»');

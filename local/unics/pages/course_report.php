@@ -11,9 +11,9 @@
  */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/grade_scale.php');
+require_once(__DIR__ . '/../classes/learning/grade_scale.php');
 
-use local_unics\grade_scale;
+use local_unics\learning\grade_scale;
 
 $course_id = required_param('course_id', PARAM_INT);
 $course    = $DB->get_record('course', ['id' => $course_id], '*', MUST_EXIST);

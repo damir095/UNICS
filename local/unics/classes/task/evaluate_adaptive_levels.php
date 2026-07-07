@@ -11,14 +11,14 @@ class evaluate_adaptive_levels extends \core\task\scheduled_task {
 
     public function execute(): void {
         global $DB, $CFG;
-        require_once($CFG->dirroot . '/local/unics/classes/adaptive_engine.php');
+        require_once($CFG->dirroot . '/local/unics/classes/learning/adaptive_engine.php');
 
         $students = $DB->get_records('unics_students', [], '', 'id, mdl_user_id, difficulty_level');
         $changed  = 0;
         $skipped  = 0;
 
         foreach ($students as $student) {
-            $new_level = \local_unics\adaptive_engine::gate_level_change((int)$student->id);
+            $new_level = \local_unics\learning\adaptive_engine::gate_level_change((int)$student->id);
             if ($new_level !== null) {
                 $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
                 $old_label   = $level_names[$student->difficulty_level] ?? $student->difficulty_level;

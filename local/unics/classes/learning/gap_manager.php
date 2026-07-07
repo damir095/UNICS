@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\learning;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -192,7 +192,7 @@ class gap_manager {
                      WHERE a2.quiz = quiza.quiz AND a2.userid = quiza.userid
                        AND a2.state = 'finished')
            ORDER BY e.path",
-            ['tq' => codifier_link_manager::TYPE_QUESTION, 'uid' => $userid]);
+            ['tq' => \local_unics\codifier_link_manager::TYPE_QUESTION, 'uid' => $userid]);
 
         $out = [];
         foreach ($rows as $r) {

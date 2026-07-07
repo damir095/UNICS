@@ -10,8 +10,8 @@ require_once(__DIR__ . '/../lib.php');
 
 use local_unics\codifier_manager;
 use local_unics\codifier_analytics;
-use local_unics\gap_manager;
-use local_unics\mastery_manager;
+use local_unics\learning\gap_manager;
+use local_unics\learning\mastery_manager;
 
 require_login();
 global $USER, $DB;

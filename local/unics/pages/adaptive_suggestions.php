@@ -7,10 +7,10 @@
  */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/suggestion_service.php');
+require_once(__DIR__ . '/../classes/learning/suggestion_service.php');
 require_once(__DIR__ . '/../classes/path_manager.php');
 
-use local_unics\suggestion_service;
+use local_unics\learning\suggestion_service;
 
 require_login();
 local_unics_require_not_student();

@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\learning;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -29,7 +29,7 @@ class cat_session_manager {
            GROUP BY e.id, e.code, e.title
              HAVING COUNT(DISTINCT p.item_ref) > 0
            ORDER BY e.path ASC",
-            ['tq' => codifier_link_manager::TYPE_QUESTION]);
+            ['tq' => \local_unics\codifier_link_manager::TYPE_QUESTION]);
         $out = [];
         foreach ($rows as $r) {
             $eid = (int)$r->element_id;
@@ -57,8 +57,8 @@ class cat_session_manager {
 
     /** Калиброванный банк элемента (+поддерево): [item_ref => ['a'=>,'b'=>]]. */
     private static function bank(int $element_id): array {
-        $entries = codifier_link_manager::get_questions_for_element($element_id, true);
-        return $entries ? item_irt_manager::get_ab_for_entries($entries) : [];
+        $entries = \local_unics\codifier_link_manager::get_questions_for_element($element_id, true);
+        return $entries ? \local_unics\item_irt_manager::get_ab_for_entries($entries) : [];
     }
 
     /** bankentryid -> последний questionid версии. */

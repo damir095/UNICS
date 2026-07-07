@@ -39,7 +39,7 @@ $quizzes = $DB->get_records_sql(
     ['course' => $course_id]
 );
 
-$current_final = \local_unics\activity_meta::get_final_cmid($course_id);
+$current_final = \local_unics\learning\activity_meta::get_final_cmid($course_id);
 
 // --- POST: задать/снять итоговый ---
 $msg = '';
@@ -50,14 +50,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         if (!isset($quizzes[$final_cmid])) {
             $msg = 'Выбранный тест не принадлежит этому курсу.';
         } else {
-            \local_unics\activity_meta::set_final($final_cmid, $course_id);
+            \local_unics\learning\activity_meta::set_final($final_cmid, $course_id);
             $current_final = $final_cmid;
             $msg = 'Итоговый экзамен назначен: ' . format_string($quizzes[$final_cmid]->name);
         }
     } else {
         // Снять флаг с текущего итогового.
         if ($current_final) {
-            \local_unics\activity_meta::set_flags($current_final, false, null);
+            \local_unics\learning\activity_meta::set_flags($current_final, false, null);
         }
         $current_final = null;
         $msg = 'Итоговый экзамен снят.';

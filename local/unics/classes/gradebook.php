@@ -102,7 +102,7 @@ class gradebook {
             $by_user[$uid][] = [
                 'itemid' => $iid,
                 'pct'    => $pct,
-                'val'    => grade_scale::from_percent($pct),
+                'val'    => \local_unics\learning\grade_scale::from_percent($pct),
                 'name'   => $gr->itemname ?: $gr->itemmodule,
                 'time'   => (int)$gr->gtime,
             ];
@@ -121,7 +121,7 @@ class gradebook {
 
         $item_class_avg = [];
         foreach ($item_sum as $iid => $sum) {
-            $item_class_avg[$iid] = grade_scale::from_percent($sum / $item_cnt[$iid]);
+            $item_class_avg[$iid] = \local_unics\learning\grade_scale::from_percent($sum / $item_cnt[$iid]);
         }
 
         $result['students']       = $students;

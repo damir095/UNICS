@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\learning;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -73,7 +73,6 @@ class suggestion_service {
               WHERE ts.student_id = :sid",
             ['sid' => $student_id]);
         try {
-            require_once(dirname(__DIR__) . '/classes/social/notification_manager.php');
             foreach ($teachers as $t) {
                 \local_unics\social\notification_manager::notify_adaptive_suggestion((int)$t->mdl_user_id, $sname, $label);
             }
@@ -136,8 +135,6 @@ class suggestion_service {
         if (!$s || (int)$s->status !== self::STATUS_PENDING) {
             return false;
         }
-        require_once(dirname(__DIR__) . '/classes/adaptive_engine.php');
-        require_once(dirname(__DIR__) . '/classes/path_manager.php');
 
         $payload = json_decode((string)$s->payload, true) ?: [];
         $target  = isset($payload['target_level']) ? (int)$payload['target_level'] : null;
@@ -147,7 +144,7 @@ class suggestion_service {
         switch ((int)$s->kind) {
             case self::KIND_LEVEL_CHANGE:
                 if ($target !== null) {
-                    \local_unics\adaptive_engine::apply_level((int)$s->student_id, $target,
+                    \local_unics\learning\adaptive_engine::apply_level((int)$s->student_id, $target,
                         isset($payload['avg']) ? (float)$payload['avg'] : null);
                     $ok = true; // если уровень уже такой, apply_level вернёт null - предложение всё равно закрываем
                 }
@@ -179,14 +176,13 @@ class suggestion_service {
 
     /**
      * Открытые (ожидающие) предложения, которые пользователь вправе рассмотреть.
-     * Фильтр - по path_manager::can_edit (админ / методист в скоупе / педагог по привязке).
+     * Фильтр - по \local_unics\path_manager::can_edit (админ / методист в скоупе / педагог по привязке).
      * Новые сверху. Объём открытых предложений невелик - фильтруем в PHP с кэшем по ученику.
      *
      * @return array<int,object> строки unics_adaptive_suggestion
      */
     public static function list_open_for_user(int $userid): array {
         global $DB;
-        require_once(dirname(__DIR__) . '/classes/path_manager.php');
         $rows = $DB->get_records('unics_adaptive_suggestion',
             ['status' => self::STATUS_PENDING], 'created_at DESC');
         $can = [];

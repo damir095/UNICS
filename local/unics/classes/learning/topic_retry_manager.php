@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\learning;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -128,7 +128,7 @@ class topic_retry_manager {
             $student = $DB->get_record('unics_students', ['mdl_user_id' => $userid], 'id, difficulty_level');
             if ($student) {
                 $topic = preg_replace('/\s*-\s*тест\s*$/ui', '', self::quiz_name($cmid));
-                path_manager::add_adaptive_topic_step(
+                \local_unics\path_manager::add_adaptive_topic_step(
                     (int)$student->id, $userid, (int)$cm->course, (string)$topic,
                     (int)$student->difficulty_level,
                     'Добавлено автоматически: возврат к теме после провала контрольной точки'

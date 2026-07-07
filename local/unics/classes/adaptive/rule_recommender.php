@@ -28,14 +28,14 @@ class rule_recommender implements recommender {
             $band = (int)$r->band;
             if ($band === rolling_avg_estimator::BAND_GAP) {
                 $out[] = [
-                    'kind'         => \local_unics\suggestion_service::KIND_REMEDIATION,
+                    'kind'         => \local_unics\learning\suggestion_service::KIND_REMEDIATION,
                     'element_id'   => (int)$r->element_id,
                     'target_level' => $level,
                     'reason'       => 'Пробел по навыку (балл ' . round((float)$r->score) . '%)',
                 ];
             } else if ($band === rolling_avg_estimator::BAND_MASTERED) {
                 $out[] = [
-                    'kind'         => \local_unics\suggestion_service::KIND_ADVANCEMENT,
+                    'kind'         => \local_unics\learning\suggestion_service::KIND_ADVANCEMENT,
                     'element_id'   => (int)$r->element_id,
                     'target_level' => min(3, $level + 1),
                     'reason'       => 'Навык освоен (балл ' . round((float)$r->score) . '%)',

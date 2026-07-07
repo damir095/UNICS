@@ -6,8 +6,8 @@
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 
-use local_unics\cat_session_manager;
-use local_unics\mastery_manager;
+use local_unics\learning\cat_session_manager;
+use local_unics\learning\mastery_manager;
 
 require_login();
 global $USER, $DB;

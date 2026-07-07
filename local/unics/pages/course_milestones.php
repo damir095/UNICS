@@ -2,8 +2,8 @@
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 
-use local_unics\activity_meta;
-use local_unics\milestone_manager;
+use local_unics\learning\activity_meta;
+use local_unics\learning\milestone_manager;
 
 $course_id = required_param('course_id', PARAM_INT);
 $course    = $DB->get_record('course', ['id' => $course_id], '*', MUST_EXIST);

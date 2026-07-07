@@ -33,7 +33,7 @@ class essay_checker {
             return ['score' => 0.0, 'feedback' => 'Ответ пуст — оценивать нечего.', 'raw' => ''];
         }
 
-        $scale_max = \local_unics\grade_scale::MAX;
+        $scale_max = \local_unics\learning\grade_scale::MAX;
 
         $crit_block = $criteria !== ''
             ? "Критерии оценивания от педагога:\n{$criteria}\n"
@@ -58,7 +58,7 @@ class essay_checker {
         $parsed = self::parse_json($raw);
 
         $score = isset($parsed['score']) ? (float)$parsed['score'] : 0.0;
-        // Нормализуем в диапазон единой шкалы [0; \local_unics\grade_scale::MAX].
+        // Нормализуем в диапазон единой шкалы [0; \local_unics\learning\grade_scale::MAX].
         if ($score < 0) {
             $score = 0.0;
         }

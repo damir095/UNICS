@@ -2,9 +2,9 @@
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/organization_manager.php');
-require_once(__DIR__ . '/../classes/grade_scale.php');
+require_once(__DIR__ . '/../classes/learning/grade_scale.php');
 
-use local_unics\grade_scale;
+use local_unics\learning\grade_scale;
 
 require_login();
 local_unics_require_not_student();

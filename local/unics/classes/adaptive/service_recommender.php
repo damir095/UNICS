@@ -15,7 +15,7 @@ class service_recommender implements recommender {
 
     public function recommend(int $student_id): array {
         global $DB;
-        $map = \local_unics\mastery_manager::get_student_mastery_map($student_id);
+        $map = \local_unics\learning\mastery_manager::get_student_mastery_map($student_id);
         if (!$map) {
             return [];
         }
@@ -50,10 +50,10 @@ class service_recommender implements recommender {
             $score = isset($map[$eid]) ? (int)round((float)$map[$eid]->score) : 0;
             $reason = self::reason_text((string)($r['reason_code'] ?? ''), $score);
             if ($kind === 'remediation') {
-                $out[] = ['kind' => \local_unics\suggestion_service::KIND_REMEDIATION,
+                $out[] = ['kind' => \local_unics\learning\suggestion_service::KIND_REMEDIATION,
                     'element_id' => $eid, 'target_level' => $level, 'reason' => $reason];
             } else if ($kind === 'advancement') {
-                $out[] = ['kind' => \local_unics\suggestion_service::KIND_ADVANCEMENT,
+                $out[] = ['kind' => \local_unics\learning\suggestion_service::KIND_ADVANCEMENT,
                     'element_id' => $eid, 'target_level' => min(3, $level + 1), 'reason' => $reason];
             }
         }

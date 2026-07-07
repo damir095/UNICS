@@ -18,7 +18,7 @@ class cleanup {
      */
     public static function course_module_deleted(int $cmid): void {
         global $DB;
-        activity_meta::delete($cmid);
+        \local_unics\learning\activity_meta::delete($cmid);
         $DB->delete_records('unics_codifier_link',
             ['target_type' => codifier_link_manager::TYPE_ACTIVITY, 'target_id' => $cmid]);
         $DB->delete_records('unics_umk_materials', ['mdl_course_module_id' => $cmid]);

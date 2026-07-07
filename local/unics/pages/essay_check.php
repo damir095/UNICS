@@ -13,10 +13,10 @@
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/ai/essay_checker.php');
-require_once(__DIR__ . '/../classes/grade_scale.php');
+require_once(__DIR__ . '/../classes/learning/grade_scale.php');
 
 use local_unics\ai\essay_checker;
-use local_unics\grade_scale;
+use local_unics\learning\grade_scale;
 
 global $USER, $DB, $OUTPUT, $PAGE;
 

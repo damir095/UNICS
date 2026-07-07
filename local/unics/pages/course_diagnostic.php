@@ -40,7 +40,7 @@ $quizzes = $DB->get_records_sql(
     ['course' => $course_id]
 );
 
-$current = \local_unics\activity_meta::get_diagnostic_cmid($course_id);
+$current = \local_unics\learning\activity_meta::get_diagnostic_cmid($course_id);
 
 // --- POST: задать/снять входную диагностику ---
 $msg = '';
@@ -51,13 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         if (!isset($quizzes[$diag_cmid])) {
             $msg = 'Выбранный тест не принадлежит этому курсу.';
         } else {
-            \local_unics\activity_meta::set_diagnostic($diag_cmid, $course_id);
+            \local_unics\learning\activity_meta::set_diagnostic($diag_cmid, $course_id);
             $current = $diag_cmid;
             $msg = 'Входная диагностика назначена: ' . format_string($quizzes[$diag_cmid]->name);
         }
     } else {
         if ($current) {
-            \local_unics\activity_meta::set_flags($current, null, null, false);
+            \local_unics\learning\activity_meta::set_flags($current, null, null, false);
         }
         $current = null;
         $msg = 'Входная диагностика снята.';
