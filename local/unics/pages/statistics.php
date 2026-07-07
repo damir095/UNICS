@@ -194,10 +194,22 @@ uksort($by_class, function ($a, $b) {
 local_unics_render_slice('По классу', 'Класс', $by_class);
 
 // --- По организации ---
+// Единственный неограниченный срез (организаций в регионе - сотни): страницами
+// по 25 (этап 3.1). Агрегаты считаются по всем, страница ограничивает только вывод.
+$org_page    = optional_param('org_page', 0, PARAM_INT);
+$org_perpage = 25;
 $by_org = \local_unics\analytics\stats_manager::aggregate($rows,
     fn($r) => $r->organization_name ?: 'Без организации');
 uksort($by_org, fn($a, $b) => strcoll((string)$a, (string)$b));
-local_unics_render_slice('По организации', 'Организация', $by_org);
+$org_total = count($by_org);
+if ($org_page * $org_perpage >= $org_total) {
+    $org_page = 0;
+}
+local_unics_render_slice('По организации', 'Организация',
+    array_slice($by_org, $org_page * $org_perpage, $org_perpage, true));
+echo local_unics_render_paging_bar($org_total, $org_page, $org_perpage,
+    new moodle_url($PAGE->url, ['codifier_id' => optional_param('codifier_id', 0, PARAM_INT)]),
+    'org_page');
 
 // --- По муниципалитету (показываем, если их несколько) ---
 $by_dist = \local_unics\analytics\stats_manager::aggregate($rows,
