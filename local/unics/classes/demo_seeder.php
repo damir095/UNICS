@@ -5,10 +5,10 @@ defined('MOODLE_INTERNAL') || die();
 
 class demo_seeder {
 
-    private course_builder $builder;
+    private \local_unics\ai\course_builder $builder;
 
     public function __construct() {
-        $this->builder = new course_builder();
+        $this->builder = new \local_unics\ai\course_builder();
     }
 
     /**
@@ -16,7 +16,7 @@ class demo_seeder {
      * Each topic section contains 3 sets of activities restricted by profile_field_unics_level.
      */
     public function seed_math_demo(int $category_id = 0): \stdClass {
-        $course = course_template::create_from_template('math', 5, $category_id);
+        $course = \local_unics\ai\course_template::create_from_template('math', 5, $category_id);
         $this->fill_course($course->id);
         return $course;
     }
@@ -212,7 +212,7 @@ class demo_seeder {
         $cm->section      = $section->id;
         $cm->visible      = 1;
         $cm->added        = time();
-        $cm->availability = course_template::profile_level_availability($level);
+        $cm->availability = \local_unics\ai\course_template::profile_level_availability($level);
         $cm->id = $DB->insert_record('course_modules', $cm);
 
         $seq   = array_filter(explode(',', $section->sequence ?? ''));
@@ -223,7 +223,7 @@ class demo_seeder {
     }
 
     private function level_label(int $level): string {
-        return course_template::get_level_labels()[$level] ?? '';
+        return \local_unics\ai\course_template::get_level_labels()[$level] ?? '';
     }
 
     private function get_intro_text(): string {

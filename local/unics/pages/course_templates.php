@@ -29,8 +29,8 @@ $PAGE->set_title('Шаблоны курсов - УНИКС');
 $PAGE->set_heading('Создание курса по шаблону');
 $PAGE->set_pagelayout('admin');
 
-$subjects     = \local_unics\course_template::get_subjects();
-$level_labels = \local_unics\course_template::get_level_labels();
+$subjects     = \local_unics\ai\course_template::get_subjects();
+$level_labels = \local_unics\ai\course_template::get_level_labels();
 
 // ----------------------------------------------------------------
 // POST: создать курс из шаблона
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $error_msg = 'Класс должен быть от 1 до 11.';
     } else {
         try {
-            $created_course = \local_unics\course_template::create_from_template(
+            $created_course = \local_unics\ai\course_template::create_from_template(
                 $subject_key, $class_num, $category_id,
                 $num_topics > 0 ? $num_topics : null,
                 $topic_names

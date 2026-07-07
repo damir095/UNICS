@@ -29,7 +29,7 @@ class generate_adaptive_explanations extends \core\task\scheduled_task {
             return;
         }
 
-        require_once($CFG->dirroot . '/local/unics/classes/ai_generator.php');
+        require_once($CFG->dirroot . '/local/unics/classes/ai/ai_generator.php');
         require_once($CFG->dirroot . '/local/unics/classes/suggestion_service.php');
 
         $rows = $DB->get_records_select('unics_adaptive_suggestion',
@@ -42,7 +42,7 @@ class generate_adaptive_explanations extends \core\task\scheduled_task {
         }
 
         $levels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
-        $gen = new \local_unics\ai_generator();
+        $gen = new \local_unics\ai\ai_generator();
         $done = 0;
 
         foreach ($rows as $s) {

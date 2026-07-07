@@ -17,8 +17,8 @@ class process_ai_queue extends \core\task\scheduled_task {
         require_once($CFG->dirroot . '/local/unics/classes/points_manager.php');
         require_once($CFG->dirroot . '/group/lib.php');
 
-        $generator = new \local_unics\ai_generator();
-        $builder   = new \local_unics\course_builder();
+        $generator = new \local_unics\ai\ai_generator();
+        $builder   = new \local_unics\ai\course_builder();
 
         // Review-гейт УМК: материалы создаются скрытыми (visible=0). Ученик не видит
         // их, пока педагог не нажмёт «Опубликовать» на umk_status.php. Секции остаются

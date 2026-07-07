@@ -633,6 +633,6 @@ class unics_user_manager {
      * Возвращает id поля.
      */
     public static function ensure_profile_field(): int {
-        return \local_unics\course_template::ensure_profile_field();
+        return \local_unics\ai\course_template::ensure_profile_field();
     }
 }

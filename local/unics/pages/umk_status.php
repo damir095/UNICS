@@ -25,8 +25,8 @@ $perpage = 25;
 // Ручной запуск обработки очереди (для отладки)
 $run_now = optional_param('run_now', 0, PARAM_INT);
 if ($run_now && confirm_sesskey()) {
-    require_once(__DIR__ . '/../classes/ai_generator.php');
-    require_once(__DIR__ . '/../classes/course_builder.php');
+    require_once(__DIR__ . '/../classes/ai/ai_generator.php');
+    require_once(__DIR__ . '/../classes/ai/course_builder.php');
     $task = new \local_unics\task\process_ai_queue();
     ob_start();
     $task->execute();
@@ -101,7 +101,7 @@ $can_publish = function(\stdClass $umk): bool {
 // Публикация УМК: открыть скрытые активности учащимся + начислить баллы + уведомить.
 $publish_id = optional_param('publish_id', 0, PARAM_INT);
 if ($publish_id && confirm_sesskey()) {
-    require_once(__DIR__ . '/../classes/course_builder.php');
+    require_once(__DIR__ . '/../classes/ai/course_builder.php');
     require_once(__DIR__ . '/../classes/points_manager.php');
     require_once(__DIR__ . '/../classes/notification_manager.php');
 
@@ -115,7 +115,7 @@ if ($publish_id && confirm_sesskey()) {
         throw new \moodle_exception('nopermissions', 'error', '', 'публикация УМК вне вашего доступа');
     }
 
-    $builder = new \local_unics\course_builder();
+    $builder = new \local_unics\ai\course_builder();
     $cmids = $DB->get_fieldset_select('unics_umk_materials',
         'mdl_course_module_id', 'umk_id = ?', [$umk->id]);
     foreach ($cmids as $cmid) {

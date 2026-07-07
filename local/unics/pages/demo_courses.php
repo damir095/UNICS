@@ -66,7 +66,7 @@ if ($created) {
         'success'
     );
     echo '<ul>';
-    $level_labels = \local_unics\course_template::get_level_labels();
+    $level_labels = \local_unics\ai\course_template::get_level_labels();
     foreach ($created as $lvl => $course) {
         $url = new moodle_url('/course/view.php', ['id' => $course->id]);
         echo '<li>' . htmlspecialchars($level_labels[$lvl]) . ': '

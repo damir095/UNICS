@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/ai_generator.php');
+require_once(__DIR__ . '/../classes/ai/ai_generator.php');
 
 require_login();
 
