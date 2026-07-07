@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/achievement_manager.php');
+require_once(__DIR__ . '/../classes/social/achievement_manager.php');
 
 require_login();
 global $USER, $DB;
@@ -56,7 +56,7 @@ $PAGE->set_pagelayout('standard');
 
 // Достижения из БД
 $awards     = $DB->get_records('unics_achievements', ['student_id' => $student_id], '', 'badge_type, awarded_at, note');
-$badge_info = \local_unics\achievement_manager::get_badge_info();
+$badge_info = \local_unics\social\achievement_manager::get_badge_info();
 $total_all  = count($badge_info);
 $total_got  = count($awards);
 
@@ -128,8 +128,8 @@ if ($is_admin || $is_teacher) {
 
 // Пересчёт по запросу
 if (optional_param('recheck', 0, PARAM_INT) && confirm_sesskey() && ($is_admin || $is_teacher)) {
-    require_once(__DIR__ . '/../classes/achievement_manager.php');
-    $new_badges = \local_unics\achievement_manager::evaluate_student($student_id, (int)$student->mdl_user_id);
+    require_once(__DIR__ . '/../classes/social/achievement_manager.php');
+    $new_badges = \local_unics\social\achievement_manager::evaluate_student($student_id, (int)$student->mdl_user_id);
     if ($new_badges) {
         $names = [];
         foreach ($new_badges as $bt) {

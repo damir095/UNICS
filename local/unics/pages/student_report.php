@@ -129,7 +129,7 @@ $umk_list = $DB->get_records_sql(
 
 // Заметки педагога - через сервис (видимость по audience для роли смотрящего).
 // Один вызов: активные видимые заметки этого ученика; делим на по-активностные и общие.
-$all_notes = \local_unics\comment_manager::get_visible_for_student(
+$all_notes = \local_unics\social\comment_manager::get_visible_for_student(
     (int)$student_id, (int)$USER->id, ['archived' => 'active']);
 $note_map = [];        // cmid => [заметки]
 $general_notes = [];   // заметки без cmid
@@ -141,7 +141,7 @@ foreach ($all_notes as $nr) {
     }
 }
 // Отмечаем заметки ученика как просмотренные (для бейджей «N новых»).
-\local_unics\comment_manager::mark_seen((int)$student_id, (int)$USER->id);
+\local_unics\social\comment_manager::mark_seen((int)$student_id, (int)$USER->id);
 
 $last5 = array_slice((array)$quiz_grades, 0, 5);
 $avg_score = 0;
@@ -329,7 +329,7 @@ if (empty($quiz_grades)) {
             echo '<td colspan="7">';
             foreach ($notes_for_quiz as $note) {
                 $na = trim("{$note->lastname} {$note->firstname}");
-                [$abadge, $aclass] = \local_unics\comment_manager::audience_badge((int)$note->audience);
+                [$abadge, $aclass] = \local_unics\social\comment_manager::audience_badge((int)$note->audience);
                 echo '<div class="unics-teacher-note">';
                 echo '<div class="note-meta">';
                 echo '<span class="note-author">' . s($na)
@@ -495,7 +495,7 @@ if (empty($last_comments)) {
 } else {
     foreach ($last_comments as $cm) {
         $author = trim("{$cm->lastname} {$cm->firstname}");
-        [$abadge, $aclass] = \local_unics\comment_manager::audience_badge((int)$cm->audience);
+        [$abadge, $aclass] = \local_unics\social\comment_manager::audience_badge((int)$cm->audience);
         echo '<div class="card mb-2">';
         echo '<div class="card-header d-flex justify-content-between">';
         echo '<span class="font-weight-bold">' . s($author)

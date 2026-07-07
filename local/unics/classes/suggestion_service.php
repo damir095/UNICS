@@ -73,9 +73,9 @@ class suggestion_service {
               WHERE ts.student_id = :sid",
             ['sid' => $student_id]);
         try {
-            require_once(dirname(__DIR__) . '/classes/notification_manager.php');
+            require_once(dirname(__DIR__) . '/classes/social/notification_manager.php');
             foreach ($teachers as $t) {
-                notification_manager::notify_adaptive_suggestion((int)$t->mdl_user_id, $sname, $label);
+                \local_unics\social\notification_manager::notify_adaptive_suggestion((int)$t->mdl_user_id, $sname, $label);
             }
         } catch (\Throwable $e) {
             // Нефатально.

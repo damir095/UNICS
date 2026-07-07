@@ -61,7 +61,7 @@ $PAGE->set_pagelayout('standard');
 // ----------------------------------------------------------------
 // Заметки активностей этого курса - через сервис (видимость по audience).
 // ----------------------------------------------------------------
-$visible = \local_unics\comment_manager::get_visible_for_student(
+$visible = \local_unics\social\comment_manager::get_visible_for_student(
     (int)$student_id, (int)$USER->id, ['type' => 'activity', 'archived' => 'active']);
 
 // Метаданные cmid (модуль/инстанс/курс) для возвращённых заметок одним запросом.
@@ -98,7 +98,7 @@ foreach ($visible as $n) {
 }
 
 // Отмечаем заметки ученика как просмотренные (для бейджей «N новых»).
-\local_unics\comment_manager::mark_seen((int)$student_id, (int)$USER->id);
+\local_unics\social\comment_manager::mark_seen((int)$student_id, (int)$USER->id);
 
 // ----------------------------------------------------------------
 // Вывод
@@ -161,7 +161,7 @@ foreach ($by_cm as $cmid => $cm_notes) {
     echo '<div class="card-body py-2">';
     foreach ($cm_notes as $n) {
         $author = trim("{$n->lastname} {$n->firstname}");
-        [$abadge, $aclass] = \local_unics\comment_manager::audience_badge((int)$n->audience);
+        [$abadge, $aclass] = \local_unics\social\comment_manager::audience_badge((int)$n->audience);
         echo '<div class="unics-teacher-note mb-2">';
         echo '<div class="note-meta">';
         echo '<span class="note-author">' . s($author)

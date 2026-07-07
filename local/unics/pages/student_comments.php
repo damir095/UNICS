@@ -77,7 +77,7 @@ $PAGE->set_pagelayout('standard');
 // ----------------------------------------------------------------
 // Обработка POST: добавить заметку / архивировать
 // ----------------------------------------------------------------
-use local_unics\comment_manager;
+use local_unics\social\comment_manager;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $action = optional_param('action', 'add', PARAM_ALPHA);
@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         // Уведомления по audience (кумулятивно): педагоги команды (>=staff),
         // ученик (>=student), родители (>=family). private - никого.
         try {
-            require_once(__DIR__ . '/../classes/notification_manager.php');
+            require_once(__DIR__ . '/../classes/social/notification_manager.php');
             $teacher_name = trim($USER->lastname . ' ' . $USER->firstname);
             $student_name = trim($mdl_user->lastname . ' ' . $mdl_user->firstname);
             $context_lbl  = $cmid > 0 && $cm_info ? ($module_label ?: 'активность курса') : '';
@@ -123,25 +123,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             if ($audience >= comment_manager::AUDIENCE_STAFF) {
                 foreach (comment_manager::team_teacher_userids($student_id) as $tuid) {
                     if ($tuid !== (int)$USER->id) {
-                        \local_unics\notification_manager::send(
+                        \local_unics\social\notification_manager::send(
                             $tuid,
                             "Новая заметка об учащемся: {$student_name}",
                             '<p>Педагог <strong>' . htmlspecialchars($teacher_name) . '</strong> оставил заметку об '
                             . 'учащемся <strong>' . htmlspecialchars($student_name) . '</strong>'
                             . ($context_lbl ? ' к «' . htmlspecialchars($context_lbl) . '»' : '') . '.</p>',
-                            \local_unics\notification_manager::TYPE_NEW_COMMENT
+                            \local_unics\social\notification_manager::TYPE_NEW_COMMENT
                         );
                     }
                 }
             }
             if ($audience >= comment_manager::AUDIENCE_STUDENT) {
-                \local_unics\notification_manager::notify_new_comment(
+                \local_unics\social\notification_manager::notify_new_comment(
                     (int)$student->mdl_user_id, $teacher_name, $context_lbl);
             }
             if ($audience >= comment_manager::AUDIENCE_FAMILY) {
                 $parent_ids = comment_manager::parent_userids($student_id);
                 if (!empty($parent_ids)) {
-                    \local_unics\notification_manager::notify_new_comment_parents(
+                    \local_unics\social\notification_manager::notify_new_comment_parents(
                         $parent_ids, $teacher_name, $student_name, $context_lbl);
                 }
             }

@@ -164,7 +164,7 @@ class topic_retry_manager {
         $qname = self::quiz_name($cmid);
 
         // Учащемуся - подсказка повторить тему (Q3: педагог + учащийся).
-        notification_manager::notify_topic_retry_student($userid, $cname, $qname, $grade, $grademax);
+        \local_unics\social\notification_manager::notify_topic_retry_student($userid, $cname, $qname, $grade, $grademax);
 
         // Педагогам учащегося (если это УНИКС-учащийся с назначенными педагогами).
         $student = $DB->get_record('unics_students', ['mdl_user_id' => $userid]);
@@ -179,7 +179,7 @@ class topic_retry_manager {
             ['sid' => $student->id]
         );
         foreach ($teachers as $tl) {
-            notification_manager::notify_topic_retry_teacher(
+            \local_unics\social\notification_manager::notify_topic_retry_teacher(
                 (int)$tl->mdl_user_id, $sname, $cname, $qname, $grade, $grademax
             );
         }

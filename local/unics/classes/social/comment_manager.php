@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\social;
 
 defined('MOODLE_INTERNAL') || die();
 

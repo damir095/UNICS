@@ -258,12 +258,12 @@ class adaptive_engine {
         $parent_uids = array_column((array)$parents, 'parent_mdl_user_id');
 
         try {
-            require_once(dirname(__DIR__) . '/classes/notification_manager.php');
-            $points_awarded = $new_lvl > $cur_lvl ? points_manager::POINTS_LEVEL_UP : 0;
-            notification_manager::notify_level_changed_student(
+            require_once(dirname(__DIR__) . '/classes/social/notification_manager.php');
+            $points_awarded = $new_lvl > $cur_lvl ? \local_unics\social\points_manager::POINTS_LEVEL_UP : 0;
+            \local_unics\social\notification_manager::notify_level_changed_student(
                 (int)$student->mdl_user_id, $cur_lvl, $new_lvl, $avg !== null ? $avg : 0, $points_awarded);
             if (!empty($parent_uids)) {
-                notification_manager::notify_level_changed_parents($parent_uids, $sname, $cur_lvl, $new_lvl);
+                \local_unics\social\notification_manager::notify_level_changed_parents($parent_uids, $sname, $cur_lvl, $new_lvl);
             }
             $subject = "Уровень сложности изменён: {$sname}";
             $body    = '<p>Уровень учащегося <strong>' . htmlspecialchars($sname) . '</strong> '
@@ -271,8 +271,8 @@ class adaptive_engine {
                      . ($level_names[$cur_lvl] ?? $cur_lvl) . ' → '
                      . '<strong>' . ($level_names[$new_lvl] ?? $new_lvl) . '</strong></p>';
             foreach ($teachers as $tl) {
-                notification_manager::send((int)$tl->mdl_user_id, $subject, $body,
-                    $new_lvl > $cur_lvl ? notification_manager::TYPE_LEVEL_UP : notification_manager::TYPE_LEVEL_DOWN);
+                \local_unics\social\notification_manager::send((int)$tl->mdl_user_id, $subject, $body,
+                    $new_lvl > $cur_lvl ? \local_unics\social\notification_manager::TYPE_LEVEL_UP : \local_unics\social\notification_manager::TYPE_LEVEL_DOWN);
             }
         } catch (\Throwable $e) {
             // Уведомления нефатальны.
@@ -281,9 +281,9 @@ class adaptive_engine {
 
         if ($new_lvl > $cur_lvl) {
             try {
-                require_once(dirname(__DIR__) . '/classes/points_manager.php');
-                points_manager::award($student_id, points_manager::POINTS_LEVEL_UP,
-                    points_manager::REASON_LEVEL_UP,
+                require_once(dirname(__DIR__) . '/classes/social/points_manager.php');
+                \local_unics\social\points_manager::award($student_id, \local_unics\social\points_manager::POINTS_LEVEL_UP,
+                    \local_unics\social\points_manager::REASON_LEVEL_UP,
                     'Повышение уровня до «' . ($level_names[$new_lvl] ?? $new_lvl) . '»');
             } catch (\Throwable $e) {
                 // Нефатально.

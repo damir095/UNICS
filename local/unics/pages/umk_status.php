@@ -102,8 +102,8 @@ $can_publish = function(\stdClass $umk): bool {
 $publish_id = optional_param('publish_id', 0, PARAM_INT);
 if ($publish_id && confirm_sesskey()) {
     require_once(__DIR__ . '/../classes/ai/course_builder.php');
-    require_once(__DIR__ . '/../classes/points_manager.php');
-    require_once(__DIR__ . '/../classes/notification_manager.php');
+    require_once(__DIR__ . '/../classes/social/points_manager.php');
+    require_once(__DIR__ . '/../classes/social/notification_manager.php');
 
     $umk = $DB->get_record('unics_umk', ['id' => $publish_id]);
     if (!$umk || (int)$umk->status !== 3 || !empty($umk->published_at)) {
@@ -133,7 +133,7 @@ if ($publish_id && confirm_sesskey()) {
             continue;
         }
         try {
-            \local_unics\notification_manager::notify_umk_ready(
+            \local_unics\social\notification_manager::notify_umk_ready(
                 (int)$student->mdl_user_id,
                 $umk->title,
                 $course_name,

@@ -114,7 +114,7 @@ class retake_manager {
             ['sid' => $student->id]
         );
         foreach ($teachers as $tl) {
-            notification_manager::notify_retake_needed(
+            \local_unics\social\notification_manager::notify_retake_needed(
                 (int)$tl->mdl_user_id, $sname, $cname, $qname, $grade, $grademax
             );
         }

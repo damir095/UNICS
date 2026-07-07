@@ -61,7 +61,7 @@ foreach ($children as $c) {
         echo '<p class="mb-1"><b>Организация:</b> ' . s($c->org_name) . '</p>';
     }
     // Бейдж новых заметок об этом ребёнке (видимых родителю по audience).
-    $unread_notes = \local_unics\comment_manager::count_unread((int)$c->student_id, (int)$USER->id);
+    $unread_notes = \local_unics\social\comment_manager::count_unread((int)$c->student_id, (int)$USER->id);
     if ($unread_notes > 0) {
         echo '<p class="mb-1"><span class="badge badge-danger">📝 ' . $unread_notes . ' новых заметок</span></p>';
     }

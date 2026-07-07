@@ -12,9 +12,9 @@ class process_ai_queue extends \core\task\scheduled_task {
     public function execute(): void {
         global $DB, $CFG;
         require_once($CFG->dirroot . '/local/unics/classes/user_manager.php');
-        require_once($CFG->dirroot . '/local/unics/classes/notification_manager.php');
-        require_once($CFG->dirroot . '/local/unics/classes/achievement_manager.php');
-        require_once($CFG->dirroot . '/local/unics/classes/points_manager.php');
+        require_once($CFG->dirroot . '/local/unics/classes/social/notification_manager.php');
+        require_once($CFG->dirroot . '/local/unics/classes/social/achievement_manager.php');
+        require_once($CFG->dirroot . '/local/unics/classes/social/points_manager.php');
         require_once($CFG->dirroot . '/group/lib.php');
 
         $generator = new \local_unics\ai\ai_generator();
@@ -295,7 +295,7 @@ class process_ai_queue extends \core\task\scheduled_task {
 
                     // Проверка достижений
                     try {
-                        $new_badges = \local_unics\achievement_manager::evaluate_student(
+                        $new_badges = \local_unics\social\achievement_manager::evaluate_student(
                             (int)$student->id,
                             (int)$student->mdl_user_id
                         );
@@ -322,7 +322,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                                 ['sid' => $student->id]
                             );
                             foreach ($teachers as $tl) {
-                                \local_unics\notification_manager::notify_low_score(
+                                \local_unics\social\notification_manager::notify_low_score(
                                     (int)$tl->mdl_user_id,
                                     $sname,
                                     $s_avg,
@@ -349,7 +349,7 @@ class process_ai_queue extends \core\task\scheduled_task {
                         $tparams
                     );
                     foreach ($review_teachers as $rt) {
-                        \local_unics\notification_manager::notify_umk_review(
+                        \local_unics\social\notification_manager::notify_umk_review(
                             (int)$rt->mdl_user_id,
                             $umk->title,
                             $course_name,

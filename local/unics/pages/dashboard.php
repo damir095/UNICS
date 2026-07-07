@@ -478,10 +478,10 @@ if ($is_admin) {
 
     if ($student) {
         // ---- Учащийся ----
-        require_once(__DIR__ . '/../classes/points_manager.php');
+        require_once(__DIR__ . '/../classes/social/points_manager.php');
 
-        $points_bal   = \local_unics\points_manager::get_balance((int)$student->id);
-        $active_title = \local_unics\points_manager::get_active_title((int)$student->id);
+        $points_bal   = \local_unics\social\points_manager::get_balance((int)$student->id);
+        $active_title = \local_unics\social\points_manager::get_active_title((int)$student->id);
 
         $class_str = $student->class_number
             ? $student->class_number . ($student->class_letter ? " «{$student->class_letter}»" : '') . ' класс'
@@ -515,7 +515,7 @@ if ($is_admin) {
                 'url'  => new moodle_url('/mod/quiz/view.php', ['id' => $inprogress->cmid]),
                 'icon' => 'i/grades', 'tone' => 'warning'];
         }
-        $unread_notes = \local_unics\comment_manager::count_unread((int)$student->id, (int)$USER->id);
+        $unread_notes = \local_unics\social\comment_manager::count_unread((int)$student->id, (int)$USER->id);
         if ($unread_notes > 0) {
             $attention[] = ['label' => 'Новые заметки педагога',
                 'url'  => new moodle_url('/local/unics/pages/student_report.php',
@@ -695,7 +695,7 @@ if ($is_admin) {
         // v1-сигналы (дёшево): новые заметки педагога по каждому ребёнку, новые сообщения.
         $attention = [];
         foreach ($children as $ch) {
-            $un = \local_unics\comment_manager::count_unread((int)$ch->id, (int)$USER->id);
+            $un = \local_unics\social\comment_manager::count_unread((int)$ch->id, (int)$USER->id);
             if ($un > 0) {
                 $attention[] = ['label' => 'Новые заметки: ' . trim("{$ch->lastname} {$ch->firstname}"),
                     'url'  => new moodle_url('/local/unics/pages/student_report.php',
@@ -765,7 +765,7 @@ if ($is_admin) {
                 ? '<span class="badge badge-' . $bc . ' ml-2">' . $avg . '%</span>'
                 : '<span class="badge badge-secondary ml-2">-</span>';
             echo '</div>';
-            $unread_notes = \local_unics\comment_manager::count_unread((int)$ch->id, (int)$USER->id);
+            $unread_notes = \local_unics\social\comment_manager::count_unread((int)$ch->id, (int)$USER->id);
             if ($unread_notes > 0) {
                 echo '<div class="mt-1"><span class="badge badge-danger">'
                    . $unread_notes . ' новых</span></div>';

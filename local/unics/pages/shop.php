@@ -23,8 +23,8 @@ $PAGE->set_title('Магазин УНИКС');
 $PAGE->set_heading('Магазин наград');
 $PAGE->set_pagelayout('standard');
 
-require_once(__DIR__ . '/../classes/points_manager.php');
-use local_unics\points_manager;
+require_once(__DIR__ . '/../classes/social/points_manager.php');
+use local_unics\social\points_manager;
 
 // ----------------------------------------------------------------
 // Обработка покупки

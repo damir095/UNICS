@@ -135,7 +135,7 @@ if ($role === 'student') {
 // M1: групповые беседы класса (с педагогом). Для учащегося - его класс,
 // для педагога - все классы, где у него есть ученики. Заодно лениво создаёт/
 // синхронизирует беседы. Для родителя/методиста/админа - пусто.
-$class_convs = \local_unics\class_chat_manager::get_user_class_conversations((int)$USER->id, $role);
+$class_convs = \local_unics\social\class_chat_manager::get_user_class_conversations((int)$USER->id, $role);
 
 // Допустимые для переписки id = только из контактов под роль (защита,
 // чтобы во фрейм нельзя было подставить произвольного пользователя).

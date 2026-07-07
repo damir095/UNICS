@@ -98,7 +98,7 @@ class observer {
     }
 
     /**
-     * +10 баллов за сданный тест (>= порога points_manager::QUIZ_PASS_PCT).
+     * +10 баллов за сданный тест (>= порога \local_unics\social\points_manager::QUIZ_PASS_PCT).
      * Выплата одна на тест: маркер "[cm{id}]" в reason_text лога баллов
      * (страница магазина прячет маркер при выводе истории). Повторная оценка
      * или пересдача того же теста баллов не добавляет.
@@ -123,7 +123,7 @@ class observer {
             "student_id = :sid AND reason_type = :rt AND " . $DB->sql_like('reason_text', ':marker'),
             [
                 'sid'    => (int)$student->id,
-                'rt'     => points_manager::REASON_QUIZ_PASS,
+                'rt'     => \local_unics\social\points_manager::REASON_QUIZ_PASS,
                 'marker' => '%' . $marker,
             ]
         );
@@ -141,20 +141,20 @@ class observer {
             return;
         }
         $pct = (float)$g->grade / (float)$item->grademax * 100;
-        if ($pct < points_manager::QUIZ_PASS_PCT) {
+        if ($pct < \local_unics\social\points_manager::QUIZ_PASS_PCT) {
             return;
         }
 
         $quizname = $DB->get_field('quiz', 'name', ['id' => $cm->instance]) ?: 'Тест';
-        points_manager::award(
+        \local_unics\social\points_manager::award(
             (int)$student->id,
-            points_manager::POINTS_QUIZ_PASS,
-            points_manager::REASON_QUIZ_PASS,
+            \local_unics\social\points_manager::POINTS_QUIZ_PASS,
+            \local_unics\social\points_manager::REASON_QUIZ_PASS,
             'Сдан тест «' . mb_substr($quizname, 0, 120) . '» ' . $marker
         );
 
         // Тест мог открыть значок (Завершитель, Отличник и т.п.) - пересчитать
         // сразу, чтобы уведомление пришло по горячим следам.
-        achievement_manager::evaluate_student((int)$student->id, $userid);
+        \local_unics\social\achievement_manager::evaluate_student((int)$student->id, $userid);
     }
 }

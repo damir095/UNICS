@@ -361,7 +361,7 @@ class unics_user_manager {
             $teacher_rec = $DB->get_record('unics_teachers', ['id' => $teacher_id], 'mdl_user_id');
             $student_rec = $DB->get_record('unics_students', ['id' => $student_id], 'mdl_user_id');
             if ($teacher_rec && $student_rec) {
-                \local_unics\social_manager::sync_on_teacher_assign(
+                \local_unics\social\social_manager::sync_on_teacher_assign(
                     (int)$teacher_rec->mdl_user_id,
                     (int)$student_rec->mdl_user_id,
                     $student_id
