@@ -17,7 +17,7 @@ class export {
      * Выгрузка построчной статистики учеников в файл (Excel/CSV/ODS). Вызывать РАНО,
      * до $OUTPUT->header(): при валидном параметре download ставит заголовки, стримит
      * файл и завершает скрипт; иначе просто возвращает.
-     * Данные - stats_manager::get_student_rows($org_ids) (скоуп задаёт вызывающая страница).
+     * Данные - \local_unics\analytics\stats_manager::get_student_rows($org_ids) (скоуп задаёт вызывающая страница).
      *
      * @param int[]|null $org_ids  скоуп организаций (null = вся система)
      * @param string     $basename базовое имя файла (дата добавится автоматически)
@@ -28,7 +28,7 @@ class export {
         if ($download === '' || !in_array($download, ['excel', 'csv', 'ods'], true) || !confirm_sesskey()) {
             return;
         }
-        $exrows = stats_manager::get_student_rows($org_ids);
+        $exrows = \local_unics\analytics\stats_manager::get_student_rows($org_ids);
         $names = [];
         if ($exrows) {
             $uids = array_map(static fn($r) => (int)$r->mdl_user_id, $exrows);

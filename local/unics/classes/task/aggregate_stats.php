@@ -15,9 +15,9 @@ class aggregate_stats extends \core\task\scheduled_task {
 
     public function execute(): void {
         global $CFG;
-        require_once($CFG->dirroot . '/local/unics/classes/stats_manager.php');
+        require_once($CFG->dirroot . '/local/unics/classes/analytics/stats_manager.php');
 
-        $res = \local_unics\stats_manager::rebuild_all();
+        $res = \local_unics\analytics\stats_manager::rebuild_all();
         mtrace("Статистика пересчитана: учащихся {$res['students']}, строк (учащийся x курс) {$res['rows']}.");
     }
 }

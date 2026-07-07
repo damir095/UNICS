@@ -5,7 +5,7 @@ require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/../classes/scope_checker.php');
 require_once(__DIR__ . '/../classes/student_helper.php');
-require_once(__DIR__ . '/../classes/stats_manager.php');
+require_once(__DIR__ . '/../classes/analytics/stats_manager.php');
 
 require_login();
 local_unics_require_not_student();
@@ -40,7 +40,7 @@ if ($is_admin_user) {
 
 // --- Действие: пересчитать сейчас (не ждать ночной задачи) ---
 if (optional_param('action', '', PARAM_ALPHA) === 'rebuild' && confirm_sesskey()) {
-    $res = \local_unics\stats_manager::rebuild_all();
+    $res = \local_unics\analytics\stats_manager::rebuild_all();
     redirect($PAGE->url,
         "Статистика пересчитана: учащихся {$res['students']}, строк {$res['rows']}.",
         null, \core\output\notification::NOTIFY_SUCCESS);
@@ -49,7 +49,7 @@ if (optional_param('action', '', PARAM_ALPHA) === 'rebuild' && confirm_sesskey()
 // Ранняя выгрузка (Excel/CSV/ODS) общим хелпером - до любого вывода.
 local_unics_export_student_stats($org_ids, 'unics-statistika');
 
-$rows = \local_unics\stats_manager::get_student_rows($org_ids);
+$rows = \local_unics\analytics\stats_manager::get_student_rows($org_ids);
 
 echo $OUTPUT->header();
 echo local_unics_dashboard_button();
@@ -76,7 +76,7 @@ if (empty($rows)) {
 echo local_unics_export_buttons($PAGE->url);
 
 // ==================== ИТОГО ====================
-$totals = \local_unics\stats_manager::totals($rows);
+$totals = \local_unics\analytics\stats_manager::totals($rows);
 
 $cards = [
     ['Учащихся',          $totals->n_students],
@@ -84,7 +84,7 @@ $cards = [
     ['Средний балл',      $totals->avg_score === null ? '-' : $totals->avg_score . '%'],
     ['Завершаемость',     $totals->completion_pct === null ? '-' : $totals->completion_pct . '%'],
     ['Просмотры',         $totals->sum_views],
-    ['Время',             \local_unics\stats_manager::format_minutes($totals->sum_time)],
+    ['Время',             \local_unics\analytics\stats_manager::format_minutes($totals->sum_time)],
     ['Попытки тестов',    $totals->sum_attempts],
     ['Выдано УМК',        $totals->sum_ai],
     ['Смен уровня',       $totals->sum_levelchg],
@@ -147,7 +147,7 @@ function local_unics_render_slice(string $title, string $colhead, array $aggs): 
             $a->avg_score === null ? '-' : $a->avg_score . '%',
             $a->completion_pct === null ? '-' : $a->completion_pct . '%',
             $a->sum_views,
-            \local_unics\stats_manager::format_minutes($a->sum_time),
+            \local_unics\analytics\stats_manager::format_minutes($a->sum_time),
             $a->sum_attempts,
             $a->sum_ai,
             $a->sum_levelchg,
@@ -168,19 +168,19 @@ function local_unics_order_aggs(array $aggs, array $order): array {
 }
 
 // --- По категории (ОВЗ / семейное / лечение / одарённые) ---
-$by_cat = \local_unics\stats_manager::aggregate($rows,
+$by_cat = \local_unics\analytics\stats_manager::aggregate($rows,
     fn($r) => \local_unics\student_helper::category_names($r->category));
 $by_cat = local_unics_order_aggs($by_cat, \local_unics\student_helper::category_labels_in_order());
 local_unics_render_slice('По категории учащихся', 'Категория', $by_cat);
 
 // --- По виду ОВЗ (только учащиеся с указанным видом ОВЗ) ---
-$by_ovz = \local_unics\stats_manager::aggregate($rows,
+$by_ovz = \local_unics\analytics\stats_manager::aggregate($rows,
     fn($r) => \local_unics\student_helper::ovz_type_names($r->ovz_type));
 $by_ovz = local_unics_order_aggs($by_ovz, \local_unics\student_helper::ovz_labels_in_order());
 local_unics_render_slice('По виду ОВЗ', 'Вид ОВЗ', $by_ovz);
 
 // --- По классу ---
-$by_class = \local_unics\stats_manager::aggregate($rows,
+$by_class = \local_unics\analytics\stats_manager::aggregate($rows,
     fn($r) => $r->class_number ? ((int)$r->class_number . ' класс') : 'Без класса');
 uksort($by_class, function ($a, $b) {
     if ($a === 'Без класса') {
@@ -194,13 +194,13 @@ uksort($by_class, function ($a, $b) {
 local_unics_render_slice('По классу', 'Класс', $by_class);
 
 // --- По организации ---
-$by_org = \local_unics\stats_manager::aggregate($rows,
+$by_org = \local_unics\analytics\stats_manager::aggregate($rows,
     fn($r) => $r->organization_name ?: 'Без организации');
 uksort($by_org, fn($a, $b) => strcoll((string)$a, (string)$b));
 local_unics_render_slice('По организации', 'Организация', $by_org);
 
 // --- По муниципалитету (показываем, если их несколько) ---
-$by_dist = \local_unics\stats_manager::aggregate($rows,
+$by_dist = \local_unics\analytics\stats_manager::aggregate($rows,
     fn($r) => $r->district_name ?: 'Без муниципалитета');
 if (count($by_dist) > 1) {
     uksort($by_dist, fn($a, $b) => strcoll((string)$a, (string)$b));
@@ -208,7 +208,7 @@ if (count($by_dist) > 1) {
 }
 
 // --- По региону (показываем, если их несколько) ---
-$by_region = \local_unics\stats_manager::aggregate($rows,
+$by_region = \local_unics\analytics\stats_manager::aggregate($rows,
     fn($r) => $r->region_name ?: 'Без региона');
 if (count($by_region) > 1) {
     uksort($by_region, fn($a, $b) => strcoll((string)$a, (string)$b));
