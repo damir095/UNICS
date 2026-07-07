@@ -176,16 +176,25 @@ function local_unics_creatable_roles(?int $userid = null): array {
     $ctx = context_system::instance();
 
     if (has_capability('local/unics:manage', $ctx, $userid)) {
-        return [1, 10, 9, 4, 5, 6, 7, 8];
+        return [\local_unics\role_manager::ROLE_REGION_ADMIN, \local_unics\role_manager::ROLE_REGION_METHODIST,
+            \local_unics\role_manager::ROLE_DISTRICT_METHODIST, \local_unics\role_manager::ROLE_METHODIST,
+            \local_unics\role_manager::ROLE_COURSE_CREATOR, \local_unics\role_manager::ROLE_TEACHER,
+            \local_unics\role_manager::ROLE_STUDENT, \local_unics\role_manager::ROLE_PARENT];
     }
     if (local_unics_user_has_role($userid, ['region_admin'])) {
-        return [10, 9, 4, 5, 6, 7, 8];
+        return [\local_unics\role_manager::ROLE_REGION_METHODIST, \local_unics\role_manager::ROLE_DISTRICT_METHODIST,
+            \local_unics\role_manager::ROLE_METHODIST, \local_unics\role_manager::ROLE_COURSE_CREATOR,
+            \local_unics\role_manager::ROLE_TEACHER, \local_unics\role_manager::ROLE_STUDENT,
+            \local_unics\role_manager::ROLE_PARENT];
     }
     if (local_unics_user_has_role($userid, ['region_methodist'])) {
-        return [9, 4, 5, 6, 7, 8];
+        return [\local_unics\role_manager::ROLE_DISTRICT_METHODIST, \local_unics\role_manager::ROLE_METHODIST,
+            \local_unics\role_manager::ROLE_COURSE_CREATOR, \local_unics\role_manager::ROLE_TEACHER,
+            \local_unics\role_manager::ROLE_STUDENT, \local_unics\role_manager::ROLE_PARENT];
     }
     if (local_unics_is_methodist($userid)) {
-        return [5, 6, 7, 8];
+        return [\local_unics\role_manager::ROLE_COURSE_CREATOR, \local_unics\role_manager::ROLE_TEACHER,
+            \local_unics\role_manager::ROLE_STUDENT, \local_unics\role_manager::ROLE_PARENT];
     }
     return [];
 }
@@ -211,7 +220,8 @@ function local_unics_get_role_for_user(?int $userid = null): string {
     // Родитель: либо привязан к ребёнку в unics_parent_student,
     // либо у него unics_role=8 в unics_user_org (даже без активной привязки).
     if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $userid])
-        || $DB->record_exists('unics_user_org', ['mdl_user_id' => $userid, 'unics_role' => 8])) {
+        || $DB->record_exists('unics_user_org', ['mdl_user_id' => $userid,
+            'unics_role' => \local_unics\role_manager::ROLE_PARENT])) {
         return 'parent';
     }
     $ctx = context_system::instance();

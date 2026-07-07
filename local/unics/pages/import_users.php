@@ -162,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         }
 
         // Для учащихся - category и difficulty_level
-        if ($role === 7) {
+        if ($role === \local_unics\role_manager::ROLE_STUDENT) {
             $cat = (int)($data['category'] ?? 0);
             if (!isset($CATEGORIES[$cat])) {
                 $errors[] = "Для учащегося поле category должно быть 1–4";

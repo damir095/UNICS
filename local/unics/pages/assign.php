@@ -205,7 +205,7 @@ if ($is_admin_user) {
            FROM {user} u
            JOIN {unics_user_org} uo      ON uo.mdl_user_id = u.id
            JOIN {unics_organizations} o  ON o.id = uo.organization_id
-          WHERE u.deleted = 0 AND uo.unics_role = 8 AND ({$scope_where})
+          WHERE u.deleted = 0 AND uo.unics_role = " . \local_unics\role_manager::ROLE_PARENT . " AND ({$scope_where})
           ORDER BY u.lastname, u.firstname",
         $scope_params);
 }

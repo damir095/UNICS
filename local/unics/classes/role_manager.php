@@ -15,6 +15,19 @@ defined('MOODLE_INTERNAL') || die();
  */
 class role_manager {
 
+    // Канонические коды прикладных ролей (unics_user_org.unics_role).
+    // Единственный источник истины для числовых кодов; маппинг на Moodle-роли -
+    // user_manager::get_moodle_role_id(). Код 2 (district_admin) удален в v3.
+    public const ROLE_REGION_ADMIN      = 1;  // региональный администратор (скоуп: регион)
+    public const ROLE_ORG_ADMIN         = 3;  // администратор организации (legacy)
+    public const ROLE_METHODIST         = 4;  // методист организации
+    public const ROLE_COURSE_CREATOR    = 5;  // педагог-создатель курсов (editingteacher)
+    public const ROLE_TEACHER           = 6;  // педагог/тьютор (non-editing)
+    public const ROLE_STUDENT           = 7;  // учащийся
+    public const ROLE_PARENT            = 8;  // родитель
+    public const ROLE_DISTRICT_METHODIST = 9; // муниципальный методист
+    public const ROLE_REGION_METHODIST  = 10; // региональный методист (v3)
+
     /**
      * Применяет матрицу прав ко всем ролям из get_matrix().
      * Безопасно вызывать многократно — assign_capability перезаписывает существующие назначения.

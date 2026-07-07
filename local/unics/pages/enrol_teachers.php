@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
         // Курс-роль строго по unics_role: 6 → 'teacher', 4/5 → 'editingteacher'.
         $u_role        = (int)$DB->get_field('unics_user_org', 'unics_role', ['mdl_user_id' => $mdl_uid]);
-        $eff_shortname = ($u_role === 6) ? 'teacher' : 'editingteacher';
+        $eff_shortname = ($u_role === \local_unics\role_manager::ROLE_TEACHER) ? 'teacher' : 'editingteacher';
         $eff_role_id   = $resolve_role_id($eff_shortname) ?: $resolve_role_id('editingteacher');
 
         if (!is_enrolled($ctx, $mdl_uid)) {

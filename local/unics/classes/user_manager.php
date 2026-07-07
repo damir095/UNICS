@@ -115,7 +115,7 @@ class unics_user_manager {
         }
 
         // 5. Устанавливаем кастомное поле профиля unics_level (для учащихся)
-        if ((int)$data['unics_role'] === 7) {
+        if ((int)$data['unics_role'] === role_manager::ROLE_STUDENT) {
             self::set_student_level($mdl_user_id, (int)($data['difficulty_level'] ?? 2));
         }
 
@@ -124,7 +124,7 @@ class unics_user_manager {
         // районного админа — роль 2 — этого не делаем, её существование под вопросом).
         // При удалении/архиве siteadmin НЕ отзывается автоматически — потребуется
         // ручная чистка через Site administration → Permissions → Site administrators.
-        if ((int)$data['unics_role'] === 1) {
+        if ((int)$data['unics_role'] === role_manager::ROLE_REGION_ADMIN) {
             self::add_to_siteadmins($mdl_user_id);
         }
 

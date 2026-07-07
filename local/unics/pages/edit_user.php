@@ -30,9 +30,9 @@ if (!$profile) {
 local_unics_require_manage_or_scope_user((int)$user_id);
 
 $unics_role = (int)$profile->unics_role;
-$is_student = ($unics_role === 7);
+$is_student = ($unics_role === \local_unics\role_manager::ROLE_STUDENT);
 // Профиль педагога есть у методистов (4, 9) и педагогов (5, 6).
-$is_teacher = in_array($unics_role, [4, 9, 5, 6]);
+$is_teacher = in_array($unics_role, [\local_unics\role_manager::ROLE_METHODIST, \local_unics\role_manager::ROLE_DISTRICT_METHODIST, \local_unics\role_manager::ROLE_COURSE_CREATOR, \local_unics\role_manager::ROLE_TEACHER]);
 
 // Категория ОВЗ — метки берём из lang (абстрактные «ОВЗ N категории»); расшифровка
 // только в вики (student-categories.md). Хардкод-названий диагнозов здесь быть не должно.

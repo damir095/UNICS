@@ -33,11 +33,11 @@ if ($form->is_cancelled()) {
         // Проверка прав на территорию: новый пользователь должен попадать в вашу зону.
         //   роли 1 и 10 — регион; роль 9 — муниципалитет; роль 8 (родитель) — скоуп через
         //   ребёнка (поэтому при создании orgnization не проверяем); прочие — организация.
-        if ($role === 1 || $role === 10) {
+        if ($role === \local_unics\role_manager::ROLE_REGION_ADMIN || $role === \local_unics\role_manager::ROLE_REGION_METHODIST) {
             if (!empty($data->region_id)) {
                 local_unics_require_manage_or_scope_region((int)$data->region_id);
             }
-        } else if ($role === 9) {
+        } else if ($role === \local_unics\role_manager::ROLE_DISTRICT_METHODIST) {
             if (!empty($data->district_id)) {
                 local_unics_require_manage_or_scope_district((int)$data->district_id);
             }
@@ -60,7 +60,7 @@ if ($form->is_cancelled()) {
                 || \local_unics\scope_checker::user_can_access_user((int)$USER->id, $target_mdl_user_id);
         };
 
-        if ($role === 5 || $role === 6) {
+        if ($role === \local_unics\role_manager::ROLE_COURSE_CREATOR || $role === \local_unics\role_manager::ROLE_TEACHER) {
             // Создан педагог — привязка выбранных учащихся той же орг.
             $teacher = $DB->get_record('unics_teachers', ['mdl_user_id' => $new_mdl_user_id], 'id');
             $teacher_org = (int)($data->organization_id ?? 0);
@@ -82,7 +82,7 @@ if ($form->is_cancelled()) {
                 if ($added > 0) { $link_msg .= ' Привязано учащихся: ' . $added . '.'; }
             }
 
-        } else if ($role === 7) {
+        } else if ($role === \local_unics\role_manager::ROLE_STUDENT) {
             // Создан учащийся — привязка педагогов и родителей той же орг.
             $student = $DB->get_record('unics_students', ['mdl_user_id' => $new_mdl_user_id],
                 'id, organization_id');
@@ -111,7 +111,7 @@ if ($form->is_cancelled()) {
                     $pid = (int)$pid;
                     if ($pid <= 0) { continue; }
                     $p_org = (int)$DB->get_field('unics_user_org',
-                        'organization_id', ['mdl_user_id' => $pid, 'unics_role' => 8]);
+                        'organization_id', ['mdl_user_id' => $pid, 'unics_role' => \local_unics\role_manager::ROLE_PARENT]);
                     if ($p_org !== $stu_org) { continue; }
                     if (!$can_touch($pid)) { continue; }
                     if (unics_user_manager::assign_parent_student($pid, (int)$student->id)) {
@@ -121,7 +121,7 @@ if ($form->is_cancelled()) {
                 if ($added_p > 0) { $link_msg .= ' Родителей: ' . $added_p . '.'; }
             }
 
-        } else if ($role === 8 && !empty($data->assign_student_id)) {
+        } else if ($role === \local_unics\role_manager::ROLE_PARENT && !empty($data->assign_student_id)) {
             // Родитель — single ребёнок: + scope-check выбранного учащегося.
             $sid = (int)$data->assign_student_id;
             $s = $DB->get_record('unics_students', ['id' => $sid], 'id, mdl_user_id');

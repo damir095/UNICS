@@ -275,7 +275,7 @@ if (empty($users)) {
     };
 
     foreach ($users as $user) {
-        $is_archived = (int)$user->unics_role === 7 && !empty($user->archived_at);
+        $is_archived = (int)$user->unics_role === \local_unics\role_manager::ROLE_STUDENT && !empty($user->archived_at);
         $fio = s(trim("{$user->lastname} {$user->firstname} {$user->middlename}"));
         if ($is_archived) {
             $fio .= ' ' . html_writer::tag('span', 'Архив', ['class' => 'badge bg-secondary']);
@@ -290,7 +290,7 @@ if (empty($users)) {
 
         // Класс: только для учащихся (роль 7)
         $class_cell = '-';
-        if ((int)$user->unics_role === 7 && !empty($user->class_number)) {
+        if ((int)$user->unics_role === \local_unics\role_manager::ROLE_STUDENT && !empty($user->class_number)) {
             $class_cell = $user->class_number . ($user->class_letter ?? '');
         }
 
@@ -304,7 +304,7 @@ if (empty($users)) {
                  'title' => 'Редактировать аккаунт в Moodle (пароль, аватар, email)']);
 
         // Архив/восстановление/удаление — только для учащихся (роль 7).
-        if ((int)$user->unics_role === 7 && !empty($user->student_id)) {
+        if ((int)$user->unics_role === \local_unics\role_manager::ROLE_STUDENT && !empty($user->student_id)) {
             if ($is_archived) {
                 $actions_cell .= $student_action((int)$user->student_id, 'restore',
                     'Восстановить', 'btn-outline-success');
