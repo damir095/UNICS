@@ -291,12 +291,14 @@ function local_unics_export_buttons(moodle_url $pageurl): string {
 /**
  * Построение данных журнала (ученики x задания курса) БЕЗ вывода - для экрана и экспорта.
  * Тонкая обёртка над {@see \local_unics\gradebook::matrix()}. [[gradebook-export-design]].
+ * $perpage > 0 - пагинация учеников (колонки/средние всё равно по всей выборке); 0 - без неё.
  *
  * @return array{notice: ?array{text:string,level:string}, students: array, by_user: array,
- *               item_meta: array, item_class_avg: array}
+ *               item_meta: array, item_class_avg: array, total: int}
  */
-function local_unics_gradebook_matrix(int $course_id, int $filter_class, string $filter_letter): array {
-    return \local_unics\gradebook::matrix($course_id, $filter_class, $filter_letter);
+function local_unics_gradebook_matrix(int $course_id, int $filter_class, string $filter_letter,
+                                      int $page = 0, int $perpage = 0): array {
+    return \local_unics\gradebook::matrix($course_id, $filter_class, $filter_letter, $page, $perpage);
 }
 
 /**

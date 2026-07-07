@@ -29,6 +29,8 @@ $filter_cat    = optional_param('f_cat',     0,        PARAM_INT);
 $filter_class  = optional_param('f_class',   0,        PARAM_INT);
 $filter_letter = optional_param('f_letter',  '',       PARAM_TEXT);
 $view          = optional_param('view',      'order',  PARAM_ALPHA);
+$pg            = optional_param('page',      0,        PARAM_INT);
+$perpage       = 25;
 if (!in_array($view, ['order', 'item'], true)) {
     $view = 'order';
 }
@@ -149,7 +151,8 @@ echo '<h5 class="mb-3">' . s($course->fullname) . '</h5>';
 echo local_unics_export_buttons(new moodle_url($PAGE->url, ['f_class' => $filter_class, 'f_letter' => $filter_letter]));
 
 // Данные журнала (групп.изоляция, фильтр, ученики, оценки, матрица) - общий построитель.
-$gb = local_unics_gradebook_matrix($course_id, $filter_class, $filter_letter);
+// Пагинация учеников (этап 3.1): страница строк; колонки/средние - по всей выборке.
+$gb = local_unics_gradebook_matrix($course_id, $filter_class, $filter_letter, $pg, $perpage);
 if ($gb['notice'] !== null) {
     echo $OUTPUT->notification($gb['notice']['text'], $gb['notice']['level']);
     echo $OUTPUT->footer();
@@ -320,5 +323,12 @@ if ($view === 'item') {
 
 echo '</tbody></table>';
 echo '</div>';
+
+// Пагинация строк-учеников; фильтры сохраняются в ссылках страниц.
+echo local_unics_render_paging_bar($gb['total'], $pg, $perpage,
+    new moodle_url('/local/unics/pages/gradebook.php', [
+        'course_id' => $course_id, 'f_cat' => $filter_cat,
+        'f_class' => $filter_class, 'f_letter' => $filter_letter, 'view' => $view,
+    ]));
 
 echo $OUTPUT->footer();
