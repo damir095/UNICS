@@ -121,6 +121,37 @@ if (!$rows) {
 
 $mastery = mastery_manager::get_student_mastery_map((int)$student_id);
 
+// Постранично по корневым разделам (этап 3.1): дерево нельзя резать посреди
+// поддерева, поэтому страница = целые корневые блоки, набранные до ~40 строк
+// (один негабаритный блок остаётся целым). Пейджер скрыт, пока страница одна.
+$el_page = optional_param('el_page', 0, PARAM_INT);
+$blocks = [];
+$bi = -1;
+foreach ($rows as $r) {
+    if ((int)$r->depth === 0 || $bi < 0) {
+        $bi++;
+        $blocks[$bi] = [];
+    }
+    $blocks[$bi][] = $r;
+}
+$chunks = [];
+$cur = [];
+foreach ($blocks as $b) {
+    if ($cur && count($cur) + count($b) > 40) {
+        $chunks[] = $cur;
+        $cur = [];
+    }
+    $cur = array_merge($cur, $b);
+}
+if ($cur) {
+    $chunks[] = $cur;
+}
+if ($el_page < 0 || $el_page >= count($chunks)) {
+    $el_page = 0;
+}
+$rows_page = $chunks[$el_page];
+$pager_url = new moodle_url($baseurl, ['codifier_id' => (int)$codifier->id]);
+
 echo html_writer::tag('h4', s($codifier->name), ['class' => 'mt-2']);
 echo html_writer::start_tag('table', ['class' => 'table']);
 $head = html_writer::tag('th', 'Элемент содержания')
@@ -135,7 +166,7 @@ echo html_writer::tag('thead', html_writer::tag('tr', $head));
 echo html_writer::start_tag('tbody');
 $any_theta = false;
 
-foreach ($rows as $r) {
+foreach ($rows_page as $r) {
     $indent = (int)$r->depth * 24;
     $name = html_writer::tag('span',
         (!$is_own_view && $r->code !== '' ? s($r->code) . ' ' : '') . s($r->title),
@@ -196,6 +227,8 @@ foreach ($rows as $r) {
 }
 echo html_writer::end_tag('tbody');
 echo html_writer::end_tag('table');
+
+echo local_unics_render_paging_bar(count($chunks), $el_page, 1, $pager_url, 'el_page');
 
 if ($is_staff && $any_theta) {
     echo html_writer::tag('p',
