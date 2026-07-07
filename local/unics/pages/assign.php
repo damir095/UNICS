@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/user_manager.php');
+require_once(__DIR__ . '/../classes/identity/user_manager.php');
 
 require_login();
 local_unics_require_not_student();
@@ -13,7 +13,7 @@ $sys_ctx       = context_system::instance();
 $is_admin_user = has_capability('local/unics:manage', $sys_ctx);
 $my_scope      = $is_admin_user
     ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
-    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    : \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
 // Кнопка «На дашборд» вместо «К пользователям» — для всех, кому недоступна полная панель.
 $is_scoped_role  = !$is_admin_user;
 $methodist_org_id = $my_scope['organization_id'] ?? 0;
@@ -117,7 +117,7 @@ $perpage = 25;
 if (!$is_admin_user && $methodist_org_id) {
     $filter_org = $methodist_org_id;
 } else if (!$is_admin_user && $filter_org > 0
-    && !\local_unics\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
+    && !\local_unics\identity\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
     // Не-админ выбрал орг вне скоупа — сбрасываем фильтр.
     $filter_org = 0;
 }
@@ -127,7 +127,7 @@ $orgs_menu = [0 => '- все организации -'];
 if ($is_admin_user) {
     $orgs_rows = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
 } else {
-    [$org_where, $org_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$org_where, $org_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $orgs_rows = $DB->get_records_sql(
         "SELECT o.id, o.name FROM {unics_organizations} o
            WHERE o.is_active = 1 AND ({$org_where})
@@ -154,7 +154,7 @@ if ($filter_org > 0) {
     $params['org_id'] = $filter_org;
 } else if (!$is_admin_user) {
     // Не-админ без явного фильтра — ограничиваем своим скоупом.
-    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o2');
+    [$scope_where, $scope_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o2');
     $where .= " AND s.organization_id IN (SELECT o2.id FROM {unics_organizations} o2 WHERE {$scope_where})";
     $params = array_merge($params, $scope_params);
 }
@@ -189,7 +189,7 @@ if ($is_admin_user) {
     $parents_raw = unics_user_manager::get_users($methodist_org_id, 8);
 } else {
     // Скоуп = район или регион: фильтр по нескольким орг через org_filter_sql.
-    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$scope_where, $scope_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $teachers = $DB->get_records_sql(
         "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
                 t.id AS teacher_id, t.subjects, uo.unics_role
@@ -205,7 +205,7 @@ if ($is_admin_user) {
            FROM {user} u
            JOIN {unics_user_org} uo      ON uo.mdl_user_id = u.id
            JOIN {unics_organizations} o  ON o.id = uo.organization_id
-          WHERE u.deleted = 0 AND uo.unics_role = " . \local_unics\role_manager::ROLE_PARENT . " AND ({$scope_where})
+          WHERE u.deleted = 0 AND uo.unics_role = " . \local_unics\identity\role_manager::ROLE_PARENT . " AND ({$scope_where})
           ORDER BY u.lastname, u.firstname",
         $scope_params);
 }
@@ -235,7 +235,7 @@ if ($is_admin_user) {
     $ps_extra = '';
     $extra_params = [];
 } else {
-    [$scope_where, $extra_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o_pair');
+    [$scope_where, $extra_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o_pair');
     $ts_extra = " AND s.organization_id IN (SELECT o_pair.id FROM {unics_organizations} o_pair WHERE {$scope_where})";
     $ps_extra = $ts_extra;
 }

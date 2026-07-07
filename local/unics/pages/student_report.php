@@ -212,8 +212,8 @@ echo '<div class="card-body">';
 echo '<div class="row">';
 echo '<div class="col-md-3"><b>Класс:</b> ' . s($class_str) . '</div>';
 if (!$is_own_view) {
-    $cat_label = \local_unics\student_helper::format_categories($student) ?: '-';
-    $ovz_label = \local_unics\student_helper::format_ovz_types($student);
+    $cat_label = \local_unics\identity\student_helper::format_categories($student) ?: '-';
+    $ovz_label = \local_unics\identity\student_helper::format_ovz_types($student);
     echo '<div class="col-md-3"><b>Категория:</b> ' . s($cat_label)
        . ($ovz_label ? ' <span class="text-muted small">(' . s($ovz_label) . ')</span>' : '')
        . '</div>';

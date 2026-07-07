@@ -111,7 +111,7 @@ $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'П�
 // ----------------------------------------------------------------
 if ($is_admin) {
 
-    $total_students  = \local_unics\student_helper::count_active_students();
+    $total_students  = \local_unics\identity\student_helper::count_active_students();
     $total_orgs      = $DB->count_records('unics_organizations', ['is_active' => 1]);
     $ai_in_queue     = $DB->count_records_sql(
         "SELECT COUNT(*) FROM {unics_ai_queue} WHERE status IN (1, 2)");
@@ -201,7 +201,7 @@ if ($is_admin) {
 // ----------------------------------------------------------------
 } elseif ($is_scoped_admin) {
 
-    [$sw, $sp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$sw, $sp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $total_students = (int)$DB->count_records_sql(
         "SELECT COUNT(s.id) FROM {unics_students} s
             JOIN {unics_organizations} o ON o.id = s.organization_id
@@ -210,7 +210,7 @@ if ($is_admin) {
     $total_orgs = (int)$DB->count_records_sql(
         "SELECT COUNT(o.id) FROM {unics_organizations} o WHERE o.is_active = 1 AND ({$sw})", $sp);
 
-    $scope = \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    $scope = \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
     $scope_name = '';
     if ($scope['district_id']) {
         $scope_name = (string)$DB->get_field('unics_districts', 'name', ['id' => $scope['district_id']]);
@@ -265,8 +265,8 @@ if ($is_admin) {
     // Скоуп методиста берём из unics_user_org через scope_checker (как my_students/
     // statistics), а НЕ из unics_teachers.organization_id: у муниципального методиста
     // записи в unics_teachers нет, и метрики раньше считались по ВСЕЙ системе.
-    [$sw, $sp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
-    $scope     = \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    [$sw, $sp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    $scope     = \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
     if ($scope['organization_id']) {
         $scope_name     = (string)$DB->get_field('unics_organizations', 'name', ['id' => $scope['organization_id']]);
         $students_label = 'Учащихся в организации';

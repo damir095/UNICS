@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/user_manager.php');
+require_once(__DIR__ . '/../classes/identity/user_manager.php');
 
 require_login();
 
@@ -45,7 +45,7 @@ if ($is_admin && !$teacher_record) {
     $mode = 'admin';
 } elseif (!$is_admin && $is_manageorg) {
     // Скоуп берётся из unics_user_org: одна орг, весь район или весь регион.
-    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$scope_where, $scope_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $mode = 'scoped';
 } elseif ($teacher_record) {
     $mode = 'teacher';
@@ -129,7 +129,7 @@ if ($mode === 'noprofile') {
 if ($mode === 'admin') {
     echo $OUTPUT->notification('Вы вошли как администратор. Отображаются все учащиеся системы.', 'info');
 } elseif ($mode === 'scoped') {
-    $scope = \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    $scope = \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
     $scope_name = '';
     if ($scope['organization_id']) {
         $scope_name = 'организация «' . (string)$DB->get_field('unics_organizations', 'name', ['id' => $scope['organization_id']]) . '»';
@@ -149,7 +149,7 @@ if ($mode === 'admin' || $mode === 'scoped') {
     if ($is_admin) {
         $orgs_rows = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
     } else {
-        [$ofw, $ofp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+        [$ofw, $ofp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
         $orgs_rows = $DB->get_records_sql(
             "SELECT o.id, o.name FROM {unics_organizations} o
               WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp);
@@ -167,7 +167,7 @@ if ($mode === 'admin' || $mode === 'scoped') {
 
     // Меню районов — по скоупу. Показываем только если доступно больше одного
     // (у районного/орг-методиста район один и фиксирован скоуп-фильтром).
-    $districts_menu = \local_unics\scope_checker::accessible_districts_menu((int)$USER->id, (bool)$is_admin);
+    $districts_menu = \local_unics\identity\scope_checker::accessible_districts_menu((int)$USER->id, (bool)$is_admin);
 
     echo html_writer::start_tag('form',
         ['method' => 'get', 'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
@@ -213,7 +213,7 @@ $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($students as $s) {
     $fio = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
-    $cat = \local_unics\student_helper::format_categories($s) ?: '-';
+    $cat = \local_unics\identity\student_helper::format_categories($s) ?: '-';
     $lvl = $levels[$s->difficulty_level] ?? '-';
 
     $actions = html_writer::link(

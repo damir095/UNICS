@@ -199,7 +199,7 @@ if ($filter_letter !== '') {
 // scoped-админ) видит только учащихся своего скоупа (регион/район/орг). Без этого
 // фильтра районный методист увидел бы всех учащихся системы — утечка скоупа.
 if (!$is_admin && !$teacher_record) {
-    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$scope_where, $scope_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $where .= " AND ({$scope_where})";
     $params += $scope_params;
 }
@@ -449,7 +449,7 @@ if (empty($students)) {
                 . '. Если они не показаны - снимите фильтр класса/организации.';
         }
     } elseif (!$is_admin) {
-        $scope = \local_unics\scope_checker::get_user_scope((int)$USER->id);
+        $scope = \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
         if (!$scope['organization_id'] && !$scope['district_id'] && !$scope['region_id']) {
             $hint .= ' Ваш профиль не привязан к организации, муниципалитету или региону - обратитесь к администратору.';
         } else {

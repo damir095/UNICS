@@ -11,7 +11,7 @@
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 
-use local_unics\delegation_manager;
+use local_unics\identity\delegation_manager;
 
 require_login();
 local_unics_require_not_student();

@@ -3,14 +3,14 @@
  * Настройка прав ролей УНИКС.
  * Применяет матрицу прав для каждой роли системы.
  *
- * Реализация матрицы — в \local_unics\role_manager (классы переиспользуются
+ * Реализация матрицы — в \local_unics\identity\role_manager (классы переиспользуются
  * из db/upgrade.php для авто-применения при апгрейде плагина).
  */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/role_manager.php');
+require_once(__DIR__ . '/../classes/identity/role_manager.php');
 
-use local_unics\role_manager;
+use local_unics\identity\role_manager;
 
 require_login();
 require_capability('moodle/site:config', context_system::instance());

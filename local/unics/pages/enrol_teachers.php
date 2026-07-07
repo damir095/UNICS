@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/user_manager.php');
+require_once(__DIR__ . '/../classes/identity/user_manager.php');
 require_once($CFG->dirroot . '/group/lib.php');
 
 require_login();
@@ -15,7 +15,7 @@ $is_admin_user    = has_capability('local/unics:manage', $sys_ctx);
 $is_scoped_role   = !$is_admin_user;
 $my_scope         = $is_admin_user
     ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
-    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    : \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
 $methodist_org_id = $my_scope['organization_id'] ?? 0;
 
 $PAGE->set_context(context_system::instance());
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
         // Курс-роль строго по unics_role: 6 → 'teacher', 4/5 → 'editingteacher'.
         $u_role        = (int)$DB->get_field('unics_user_org', 'unics_role', ['mdl_user_id' => $mdl_uid]);
-        $eff_shortname = ($u_role === \local_unics\role_manager::ROLE_TEACHER) ? 'teacher' : 'editingteacher';
+        $eff_shortname = ($u_role === \local_unics\identity\role_manager::ROLE_TEACHER) ? 'teacher' : 'editingteacher';
         $eff_role_id   = $resolve_role_id($eff_shortname) ?: $resolve_role_id('editingteacher');
 
         if (!is_enrolled($ctx, $mdl_uid)) {
@@ -290,7 +290,7 @@ $filter_org      = optional_param('org_id',    0, PARAM_INT);
 if (!$is_admin_user && $methodist_org_id) {
     $filter_org = $methodist_org_id;
 } else if (!$is_admin_user && $filter_org > 0
-    && !\local_unics\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
+    && !\local_unics\identity\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
     $filter_org = 0;
 }
 
@@ -305,7 +305,7 @@ foreach ($courses_raw as $c) {
 if ($is_admin_user) {
     $orgs_raw = $DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name');
 } else {
-    [$org_where, $org_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$org_where, $org_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $orgs_raw = $DB->get_records_sql(
         "SELECT o.id, o.name FROM {unics_organizations} o
            WHERE o.is_active = 1 AND ({$org_where})
@@ -332,7 +332,7 @@ if ($filter_org > 0) {
     $sql_where .= ' AND t.organization_id = :org_id';
     $sql_params['org_id'] = $filter_org;
 } else if (!$is_admin_user) {
-    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o2');
+    [$scope_where, $scope_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o2');
     $sql_where .= " AND t.organization_id IN (SELECT o2.id FROM {unics_organizations} o2 WHERE {$scope_where})";
     $sql_params = array_merge($sql_params, $scope_params);
 }

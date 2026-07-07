@@ -58,10 +58,10 @@ class export {
         ];
         $data = [];
         foreach ($exrows as $r) {
-            $ovz = student_helper::ovz_type_names($r->ovz_type);
+            $ovz = \local_unics\identity\student_helper::ovz_type_names($r->ovz_type);
             $data[] = [
                 'name'          => $names[(int)$r->mdl_user_id] ?? '-',
-                'category'      => implode(', ', student_helper::category_names($r->category)),
+                'category'      => implode(', ', \local_unics\identity\student_helper::category_names($r->category)),
                 'ovz'           => $ovz ? implode(', ', $ovz) : '-',
                 'class'         => $r->class_number ? (int)$r->class_number : '-',
                 'org'           => $r->organization_name ?: '-',

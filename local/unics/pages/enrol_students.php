@@ -14,13 +14,13 @@ $is_admin_user    = has_capability('local/unics:manage', $sys_ctx);
 $is_scoped_role   = !$is_admin_user;
 $my_scope         = $is_admin_user
     ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
-    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    : \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
 $methodist_org_id = $my_scope['organization_id'] ?? 0;
 
 // Делегирование курсов (роли v3 фаза 3, [[role-model-v3-2026-06-11]]): муниципальный
 // методист / методист организации записывает учеников только на делегированные ему
 // курсы. NULL = фильтр не применяется (региональные роли, педагог-создатель, админ).
-$deleg_course_ids = \local_unics\delegation_manager::get_delegated_course_ids_for_user((int)$USER->id);
+$deleg_course_ids = \local_unics\identity\delegation_manager::get_delegated_course_ids_for_user((int)$USER->id);
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/enrol_students.php'));
@@ -146,11 +146,11 @@ if (!$is_admin_user && $methodist_org_id) {
 } else if (!$is_admin_user) {
     // Не-админ выбрал орг/район вне скоупа — сбрасываем.
     if ($filter_org > 0
-        && !\local_unics\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
+        && !\local_unics\identity\scope_checker::user_can_access_org((int)$USER->id, $filter_org)) {
         $filter_org = 0;
     }
     if ($filter_district > 0
-        && !\local_unics\scope_checker::user_can_access_district((int)$USER->id, $filter_district)) {
+        && !\local_unics\identity\scope_checker::user_can_access_district((int)$USER->id, $filter_district)) {
         $filter_district = 0;
     }
 }
@@ -190,7 +190,7 @@ if ($filter_district > 0) {
     $org_filters = ['district_id' => $filter_district, 'is_active' => 1];
     foreach ($DB->get_records('unics_organizations', $org_filters, 'name ASC', 'id, name') as $o) {
         if ($is_admin_user
-            || \local_unics\scope_checker::user_can_access_org((int)$USER->id, (int)$o->id)) {
+            || \local_unics\identity\scope_checker::user_can_access_org((int)$USER->id, (int)$o->id)) {
             $orgs_menu[$o->id] = $o->name;
         }
     }
@@ -223,7 +223,7 @@ if ($filter_org > 0) {
     $sql_params['dist_id'] = $filter_district;
 } else if (!$is_admin_user) {
     // Не-админ без явного фильтра — ограничиваем своим скоупом.
-    [$scope_where, $scope_params] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o2');
+    [$scope_where, $scope_params] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o2');
     $sql_where .= " AND s.organization_id IN (SELECT o2.id FROM {unics_organizations} o2 WHERE {$scope_where})";
     $sql_params = array_merge($sql_params, $scope_params);
 }
@@ -412,7 +412,7 @@ $table->attributes['class'] = 'table table-sm table-bordered table-hover';
 
 foreach ($students as $s) {
     $fio = htmlspecialchars(trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? '')));
-    $cat = \local_unics\student_helper::format_categories($s) ?: '-';
+    $cat = \local_unics\identity\student_helper::format_categories($s) ?: '-';
 
     $is_enrolled  = isset($enrolled_users[$s->student_id]);
     $status_badge = $is_enrolled

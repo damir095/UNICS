@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/user_manager.php');
+require_once(__DIR__ . '/../classes/identity/user_manager.php');
 require_login();
 local_unics_require_manage_or_manageorg();
 
@@ -30,9 +30,9 @@ if (!$profile) {
 local_unics_require_manage_or_scope_user((int)$user_id);
 
 $unics_role = (int)$profile->unics_role;
-$is_student = ($unics_role === \local_unics\role_manager::ROLE_STUDENT);
+$is_student = ($unics_role === \local_unics\identity\role_manager::ROLE_STUDENT);
 // Профиль педагога есть у методистов (4, 9) и педагогов (5, 6).
-$is_teacher = in_array($unics_role, [\local_unics\role_manager::ROLE_METHODIST, \local_unics\role_manager::ROLE_DISTRICT_METHODIST, \local_unics\role_manager::ROLE_COURSE_CREATOR, \local_unics\role_manager::ROLE_TEACHER]);
+$is_teacher = in_array($unics_role, [\local_unics\identity\role_manager::ROLE_METHODIST, \local_unics\identity\role_manager::ROLE_DISTRICT_METHODIST, \local_unics\identity\role_manager::ROLE_COURSE_CREATOR, \local_unics\identity\role_manager::ROLE_TEACHER]);
 
 // Категория ОВЗ — метки берём из lang (абстрактные «ОВЗ N категории»); расшифровка
 // только в вики (student-categories.md). Хардкод-названий диагнозов здесь быть не должно.
@@ -79,12 +79,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         if (!empty($gifted))  { $cats[] = 4; }
         // Legacy-категории (2=семейное, 3=лечение) из выбора убраны, но молча терять
         // их при сохранении нельзя — переносим, если были.
-        $existing = \local_unics\student_helper::get_categories($profile);
+        $existing = \local_unics\identity\student_helper::get_categories($profile);
         foreach ([2, 3] as $legacy) {
             if (in_array($legacy, $existing, true)) { $cats[] = $legacy; }
         }
-        $data['student_category'] = \local_unics\student_helper::to_csv($cats);
-        $data['ovz_type']         = \local_unics\student_helper::to_csv($ovz_raw);
+        $data['student_category'] = \local_unics\identity\student_helper::to_csv($cats);
+        $data['ovz_type']         = \local_unics\identity\student_helper::to_csv($ovz_raw);
         $data['difficulty_level'] = required_param('difficulty_level', PARAM_INT);
         $data['class_number']     = optional_param('class_number', null, PARAM_INT);
         $data['class_letter']     = optional_param('class_letter', '', PARAM_TEXT);
@@ -159,14 +159,14 @@ echo '</div></div>';
 
 // Поля учащегося
 if ($is_student) {
-    $cats_selected = \local_unics\student_helper::parse_csv($profile->student_category ?? '');
-    $ovz_selected  = \local_unics\student_helper::parse_csv($profile->ovz_type ?? '');
+    $cats_selected = \local_unics\identity\student_helper::parse_csv($profile->student_category ?? '');
+    $ovz_selected  = \local_unics\identity\student_helper::parse_csv($profile->ovz_type ?? '');
 
     echo '<div class="card mb-3"><div class="card-header">Профиль учащегося</div><div class="card-body">';
 
     // Категория учащегося — плоский чеклист: ОВЗ 1-6 + «Одарённый». Можно несколько.
     echo '<div class="mb-3"><label class="form-label d-block">Категория учащегося</label>';
-    foreach (\local_unics\student_helper::OVZ_TYPES as $v => $key) {
+    foreach (\local_unics\identity\student_helper::OVZ_TYPES as $v => $key) {
         $chk = in_array($v, $ovz_selected, true) ? 'checked' : '';
         $l   = s(get_string($key, 'local_unics'));
         echo "<div class=\"form-check\">

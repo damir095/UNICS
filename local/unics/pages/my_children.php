@@ -55,7 +55,7 @@ foreach ($children as $c) {
     echo '</div>';
     echo '<div class="card-body">';
     echo '<p class="mb-1"><b>Класс:</b> ' . s($class_str) . '</p>';
-    echo '<p class="mb-1"><b>Категория:</b> ' . s(\local_unics\student_helper::format_categories($c) ?: '-') . '</p>';
+    echo '<p class="mb-1"><b>Категория:</b> ' . s(\local_unics\identity\student_helper::format_categories($c) ?: '-') . '</p>';
     echo '<p class="mb-1"><b>Уровень:</b> ' . s($levels[$c->difficulty_level] ?? '-') . '</p>';
     if ($c->org_name) {
         echo '<p class="mb-1"><b>Организация:</b> ' . s($c->org_name) . '</p>';

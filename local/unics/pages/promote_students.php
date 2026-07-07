@@ -15,7 +15,7 @@
  */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/user_manager.php');
+require_once(__DIR__ . '/../classes/identity/user_manager.php');
 require_once($CFG->dirroot . '/course/lib.php'); // course_change_visibility()
 
 require_login();

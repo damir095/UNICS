@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/organization_manager.php');
+require_once(__DIR__ . '/../classes/identity/organization_manager.php');
 
 require_login();
 local_unics_require_manage_or_manageorg();
@@ -11,7 +11,7 @@ $sys_ctx       = context_system::instance();
 $is_admin_user = has_capability('local/unics:manage', $sys_ctx);
 $my_scope      = $is_admin_user
     ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
-    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    : \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
 
 $PAGE->set_url(new moodle_url('/local/unics/pages/organizations.php'));
 $PAGE->set_title(get_string('org_management', 'local_unics'));
@@ -385,7 +385,7 @@ if (empty($tree)) {
         // Тот же предикат, что серверный guard local_unics_require_manage_or_scope_region
         // (POST). Держим UI и POST на одном scope_checker, чтобы не разъехались.
         if ($is_admin_user
-                || \local_unics\scope_checker::user_can_access_region((int)$USER->id, (int)$region->id)) {
+                || \local_unics\identity\scope_checker::user_can_access_region((int)$USER->id, (int)$region->id)) {
             echo '<details class="mt-2"><summary class="text-primary" style="cursor:pointer">Добавить муниципалитет в этот регион</summary>';
             echo '<form method="post" class="mt-2 form-inline">';
             echo '<input type="hidden" name="action"    value="save">';

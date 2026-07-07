@@ -3,7 +3,7 @@ namespace local_unics\analytics;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once($CFG->dirroot . '/local/unics/classes/student_helper.php');
+require_once($CFG->dirroot . '/local/unics/classes/identity/student_helper.php');
 require_once($CFG->dirroot . '/lib/enrollib.php');
 
 /**

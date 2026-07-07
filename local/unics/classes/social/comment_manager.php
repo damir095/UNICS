@@ -99,7 +99,7 @@ class comment_manager {
         }
         // Региональный / районный администратор в своём скоупе - полный read как у админа.
         if (\local_unics_is_scoped_admin($viewer_id)
-                && \local_unics\scope_checker::user_can_access_org($viewer_id, (int)$student->organization_id)) {
+                && \local_unics\identity\scope_checker::user_can_access_org($viewer_id, (int)$student->organization_id)) {
             return 'admin';
         }
 

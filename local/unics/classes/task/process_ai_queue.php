@@ -11,7 +11,7 @@ class process_ai_queue extends \core\task\scheduled_task {
 
     public function execute(): void {
         global $DB, $CFG;
-        require_once($CFG->dirroot . '/local/unics/classes/user_manager.php');
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
         require_once($CFG->dirroot . '/local/unics/classes/social/notification_manager.php');
         require_once($CFG->dirroot . '/local/unics/classes/social/achievement_manager.php');
         require_once($CFG->dirroot . '/local/unics/classes/social/points_manager.php');
@@ -59,8 +59,8 @@ class process_ai_queue extends \core\task\scheduled_task {
                 $umk_level  = (int)$umk->difficulty_level;
                 $avg_score  = $generator->get_avg_score((int)$first_student->mdl_user_id);
 
-                $cats_arr = \local_unics\student_helper::get_categories($first_student);
-                $ovz_arr  = \local_unics\student_helper::get_ovz_types($first_student);
+                $cats_arr = \local_unics\identity\student_helper::get_categories($first_student);
+                $ovz_arr  = \local_unics\identity\student_helper::get_ovz_types($first_student);
 
                 $profile = [
                     // Бэк-компат - первая категория как скаляр.

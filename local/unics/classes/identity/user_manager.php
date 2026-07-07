@@ -52,14 +52,14 @@ class unics_user_manager {
                 // category / ovz_type приходят как CSV-строки "1,3" из формы.
                 // Если пришёл int (старый код / API), нормализуем через helper.
                 $category_csv = is_array($data['student_category'] ?? null)
-                    ? \local_unics\student_helper::to_csv($data['student_category'])
+                    ? \local_unics\identity\student_helper::to_csv($data['student_category'])
                     : (string)($data['student_category'] ?? '');
                 $ovz_csv = is_array($data['ovz_type'] ?? null)
-                    ? \local_unics\student_helper::to_csv($data['ovz_type'])
+                    ? \local_unics\identity\student_helper::to_csv($data['ovz_type'])
                     : (string)($data['ovz_type'] ?? '');
 
                 // Виды ОВЗ имеют смысл только если в категориях отмечен «ОВЗ» (1).
-                $has_ovz_cat = in_array(1, \local_unics\student_helper::parse_csv($category_csv), true);
+                $has_ovz_cat = in_array(1, \local_unics\identity\student_helper::parse_csv($category_csv), true);
                 if (!$has_ovz_cat) {
                     $ovz_csv = '';
                 }
@@ -357,7 +357,6 @@ class unics_user_manager {
 
         // Автоматически добавить педагога и учащегося в контакты Moodle Messaging
         try {
-            require_once(dirname(__FILE__) . '/social_manager.php');
             $teacher_rec = $DB->get_record('unics_teachers', ['id' => $teacher_id], 'mdl_user_id');
             $student_rec = $DB->get_record('unics_students', ['id' => $student_id], 'mdl_user_id');
             if ($teacher_rec && $student_rec) {
@@ -429,14 +428,14 @@ class unics_user_manager {
         if ($student) {
             if (array_key_exists('student_category', $data)) {
                 $student->category = is_array($data['student_category'])
-                    ? \local_unics\student_helper::to_csv($data['student_category'])
+                    ? \local_unics\identity\student_helper::to_csv($data['student_category'])
                     : (string)$data['student_category'];
             }
             if (array_key_exists('ovz_type', $data)) {
                 $ovz_csv = is_array($data['ovz_type'])
-                    ? \local_unics\student_helper::to_csv($data['ovz_type'])
+                    ? \local_unics\identity\student_helper::to_csv($data['ovz_type'])
                     : (string)($data['ovz_type'] ?? '');
-                $cats = \local_unics\student_helper::parse_csv($student->category);
+                $cats = \local_unics\identity\student_helper::parse_csv($student->category);
                 $student->ovz_type = (in_array(1, $cats, true) && $ovz_csv !== '') ? $ovz_csv : null;
             }
             $student->difficulty_level = $data['difficulty_level'] ?? $student->difficulty_level;

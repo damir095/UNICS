@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/user_manager.php');
+require_once(__DIR__ . '/../classes/identity/user_manager.php');
 
 require_login();
 // Полный доступ — у системного админа (manage); районный/региональн. админ и методист
@@ -123,12 +123,12 @@ if ($is_full_admin) {
     // Скоуп-фильтр: только пользователи района/региона/организации смотрящего.
     // Доп. фильтры комбинируются со скоупом через AND — обойти территорию нельзя.
     [$scope_where, $scope_params] =
-        \local_unics\scope_checker::user_list_filter_sql((int)$USER->id, 'uo', 'o');
+        \local_unics\identity\scope_checker::user_list_filter_sql((int)$USER->id, 'uo', 'o');
     $where = implode(' AND ', array_merge([$scope_where], $extra));
     $query_params = $extra_params + $scope_params;
 
     // Выпадающий список организаций — тоже по скоупу.
-    [$ofw, $ofp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$ofw, $ofp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $orgs_rows = $DB->get_records_sql(
         "SELECT o.id, o.name FROM {unics_organizations} o
           WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp);
@@ -151,7 +151,7 @@ $baseurl = new moodle_url('/local/unics/pages/users.php', [
 ]);
 
 // Меню для фильтров «Район / Класс / Буква».
-$districts_menu = \local_unics\scope_checker::accessible_districts_menu((int)$USER->id, $is_full_admin);
+$districts_menu = \local_unics\identity\scope_checker::accessible_districts_menu((int)$USER->id, $is_full_admin);
 $class_menu = [];
 for ($i = 1; $i <= 11; $i++) { $class_menu[$i] = $i . ' класс'; }
 $letters_menu = ['А' => 'А', 'Б' => 'Б', 'В' => 'В', 'Г' => 'Г',
@@ -275,7 +275,7 @@ if (empty($users)) {
     };
 
     foreach ($users as $user) {
-        $is_archived = (int)$user->unics_role === \local_unics\role_manager::ROLE_STUDENT && !empty($user->archived_at);
+        $is_archived = (int)$user->unics_role === \local_unics\identity\role_manager::ROLE_STUDENT && !empty($user->archived_at);
         $fio = s(trim("{$user->lastname} {$user->firstname} {$user->middlename}"));
         if ($is_archived) {
             $fio .= ' ' . html_writer::tag('span', 'Архив', ['class' => 'badge bg-secondary']);
@@ -290,7 +290,7 @@ if (empty($users)) {
 
         // Класс: только для учащихся (роль 7)
         $class_cell = '-';
-        if ((int)$user->unics_role === \local_unics\role_manager::ROLE_STUDENT && !empty($user->class_number)) {
+        if ((int)$user->unics_role === \local_unics\identity\role_manager::ROLE_STUDENT && !empty($user->class_number)) {
             $class_cell = $user->class_number . ($user->class_letter ?? '');
         }
 
@@ -304,7 +304,7 @@ if (empty($users)) {
                  'title' => 'Редактировать аккаунт в Moodle (пароль, аватар, email)']);
 
         // Архив/восстановление/удаление — только для учащихся (роль 7).
-        if ((int)$user->unics_role === \local_unics\role_manager::ROLE_STUDENT && !empty($user->student_id)) {
+        if ((int)$user->unics_role === \local_unics\identity\role_manager::ROLE_STUDENT && !empty($user->student_id)) {
             if ($is_archived) {
                 $actions_cell .= $student_action((int)$user->student_id, 'restore',
                     'Восстановить', 'btn-outline-success');

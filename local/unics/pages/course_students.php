@@ -113,7 +113,7 @@ foreach ($students as $s) {
     echo '<tr>';
     echo '<td>' . s($fio) . '</td>';
     echo '<td>' . s($class_str) . '</td>';
-    echo '<td>' . s(\local_unics\student_helper::format_categories($s) ?: '-') . '</td>';
+    echo '<td>' . s(\local_unics\identity\student_helper::format_categories($s) ?: '-') . '</td>';
     echo '<td>' . ($levels[$s->difficulty_level] ?? '-') . '</td>';
     echo '<td><div class="d-flex flex-wrap gap-1">' . implode(' ', $actions) . '</div></td>';
     echo '</tr>';

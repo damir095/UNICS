@@ -3,9 +3,9 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->libdir . '/formslib.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/user_manager.php');
+require_once(__DIR__ . '/../classes/identity/user_manager.php');
 
-use local_unics\scope_checker;
+use local_unics\identity\scope_checker;
 
 class unics_create_user_form extends moodleform {
 
@@ -282,7 +282,7 @@ class unics_create_user_form extends moodleform {
                 "SELECT u.id, u.lastname, u.firstname, uo.organization_id
                    FROM {user} u
                    JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
-                  WHERE u.deleted = 0 AND uo.unics_role = " . \local_unics\role_manager::ROLE_PARENT . "
+                  WHERE u.deleted = 0 AND uo.unics_role = " . \local_unics\identity\role_manager::ROLE_PARENT . "
                   ORDER BY u.lastname, u.firstname");
         } else {
             [$pk_where, $pk_params] = scope_checker::org_filter_sql((int)$USER->id, 'o');
@@ -309,7 +309,7 @@ class unics_create_user_form extends moodleform {
                    FROM {user} u
                    JOIN {unics_user_org} uo ON uo.mdl_user_id = u.id
                    JOIN {unics_organizations} o ON o.id = uo.organization_id
-                  WHERE u.deleted = 0 AND uo.unics_role = " . \local_unics\role_manager::ROLE_PARENT . "
+                  WHERE u.deleted = 0 AND uo.unics_role = " . \local_unics\identity\role_manager::ROLE_PARENT . "
                     AND ({$pk_where})
                   ORDER BY u.lastname, u.firstname", $pk_params);
         }
@@ -553,8 +553,8 @@ JS;
             $cats[] = 4; // одарённый
         }
 
-        $data->student_category = \local_unics\student_helper::to_csv($cats);
-        $data->ovz_type = !empty($ovz) ? \local_unics\student_helper::to_csv($ovz) : '';
+        $data->student_category = \local_unics\identity\student_helper::to_csv($cats);
+        $data->ovz_type = !empty($ovz) ? \local_unics\identity\student_helper::to_csv($ovz) : '';
 
         return $data;
     }
@@ -584,26 +584,26 @@ JS;
         //   9 (муниципальный методист) — муниципалитет;
         //   8 (родитель) — выводится через ребёнка, поля не требуем;
         //   остальные (4,5,6,7) — организация.
-        if ($role === \local_unics\role_manager::ROLE_REGION_ADMIN
-                || $role === \local_unics\role_manager::ROLE_REGION_METHODIST) {
+        if ($role === \local_unics\identity\role_manager::ROLE_REGION_ADMIN
+                || $role === \local_unics\identity\role_manager::ROLE_REGION_METHODIST) {
             if (empty($data['region_id'])) {
                 $errors['region_id'] = 'Укажите регион для региональной роли';
             }
-        } else if ($role === \local_unics\role_manager::ROLE_DISTRICT_METHODIST) {
+        } else if ($role === \local_unics\identity\role_manager::ROLE_DISTRICT_METHODIST) {
             if (empty($data['district_id'])) {
                 $errors['district_id'] = 'Укажите муниципалитет для этой роли';
             }
-        } else if ($role !== \local_unics\role_manager::ROLE_PARENT && empty($data['organization_id'])) {
+        } else if ($role !== \local_unics\identity\role_manager::ROLE_PARENT && empty($data['organization_id'])) {
             $errors['organization_id'] = get_string('required');
         }
 
         // Категория учащегося больше не обязательна: пустой выбор = обычный учащийся.
 
         // Диапазон классов педагога (методист/мун.методист/создатель/педагог): от <= до.
-        if (in_array($role, [\local_unics\role_manager::ROLE_METHODIST,
-                \local_unics\role_manager::ROLE_DISTRICT_METHODIST,
-                \local_unics\role_manager::ROLE_COURSE_CREATOR,
-                \local_unics\role_manager::ROLE_TEACHER], true)
+        if (in_array($role, [\local_unics\identity\role_manager::ROLE_METHODIST,
+                \local_unics\identity\role_manager::ROLE_DISTRICT_METHODIST,
+                \local_unics\identity\role_manager::ROLE_COURSE_CREATOR,
+                \local_unics\identity\role_manager::ROLE_TEACHER], true)
                 && !empty($data['grade_from']) && !empty($data['grade_to'])
                 && (int)$data['grade_from'] > (int)$data['grade_to']) {
             $errors['grade_range_grp'] = get_string('err_grade_range', 'local_unics');

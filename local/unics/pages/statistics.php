@@ -3,8 +3,8 @@
 // (ОВЗ-категория / вид ОВЗ / класс / организация / муниципалитет / регион). Скоуп - по роли.
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/scope_checker.php');
-require_once(__DIR__ . '/../classes/student_helper.php');
+require_once(__DIR__ . '/../classes/identity/scope_checker.php');
+require_once(__DIR__ . '/../classes/identity/student_helper.php');
 require_once(__DIR__ . '/../classes/analytics/stats_manager.php');
 
 require_login();
@@ -33,7 +33,7 @@ $PAGE->set_heading('Статистика обучения');
 if ($is_admin_user) {
     $org_ids = null;
 } else {
-    [$ofw, $ofp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$ofw, $ofp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $org_ids = array_map('intval',
         $DB->get_fieldset_sql("SELECT o.id FROM {unics_organizations} o WHERE {$ofw}", $ofp));
 }
@@ -169,14 +169,14 @@ function local_unics_order_aggs(array $aggs, array $order): array {
 
 // --- По категории (ОВЗ / семейное / лечение / одарённые) ---
 $by_cat = \local_unics\analytics\stats_manager::aggregate($rows,
-    fn($r) => \local_unics\student_helper::category_names($r->category));
-$by_cat = local_unics_order_aggs($by_cat, \local_unics\student_helper::category_labels_in_order());
+    fn($r) => \local_unics\identity\student_helper::category_names($r->category));
+$by_cat = local_unics_order_aggs($by_cat, \local_unics\identity\student_helper::category_labels_in_order());
 local_unics_render_slice('По категории учащихся', 'Категория', $by_cat);
 
 // --- По виду ОВЗ (только учащиеся с указанным видом ОВЗ) ---
 $by_ovz = \local_unics\analytics\stats_manager::aggregate($rows,
-    fn($r) => \local_unics\student_helper::ovz_type_names($r->ovz_type));
-$by_ovz = local_unics_order_aggs($by_ovz, \local_unics\student_helper::ovz_labels_in_order());
+    fn($r) => \local_unics\identity\student_helper::ovz_type_names($r->ovz_type));
+$by_ovz = local_unics_order_aggs($by_ovz, \local_unics\identity\student_helper::ovz_labels_in_order());
 local_unics_render_slice('По виду ОВЗ', 'Вид ОВЗ', $by_ovz);
 
 // --- По классу ---

@@ -58,7 +58,7 @@ class access {
      * страницах, различаются только скоупом в unics_user_org).
      *
      * Проверяем только Moodle-роль - это единственный надёжный маркер
-     * (user_manager::create_user() создаёт запись в unics_teachers и для методиста,
+     * (unics_user_manager::create_user() создаёт запись в unics_teachers и для методиста,
      * поэтому по таблице teacher'ов методиста не отличить).
      *
      * Capability local/unics:viewstudents проверяется отдельно вызывающим кодом.
@@ -133,25 +133,25 @@ class access {
         $ctx = \context_system::instance();
 
         if (has_capability('local/unics:manage', $ctx, $userid)) {
-            return [role_manager::ROLE_REGION_ADMIN, role_manager::ROLE_REGION_METHODIST,
-                role_manager::ROLE_DISTRICT_METHODIST, role_manager::ROLE_METHODIST,
-                role_manager::ROLE_COURSE_CREATOR, role_manager::ROLE_TEACHER,
-                role_manager::ROLE_STUDENT, role_manager::ROLE_PARENT];
+            return [\local_unics\identity\role_manager::ROLE_REGION_ADMIN, \local_unics\identity\role_manager::ROLE_REGION_METHODIST,
+                \local_unics\identity\role_manager::ROLE_DISTRICT_METHODIST, \local_unics\identity\role_manager::ROLE_METHODIST,
+                \local_unics\identity\role_manager::ROLE_COURSE_CREATOR, \local_unics\identity\role_manager::ROLE_TEACHER,
+                \local_unics\identity\role_manager::ROLE_STUDENT, \local_unics\identity\role_manager::ROLE_PARENT];
         }
         if (self::user_has_role($userid, ['region_admin'])) {
-            return [role_manager::ROLE_REGION_METHODIST, role_manager::ROLE_DISTRICT_METHODIST,
-                role_manager::ROLE_METHODIST, role_manager::ROLE_COURSE_CREATOR,
-                role_manager::ROLE_TEACHER, role_manager::ROLE_STUDENT,
-                role_manager::ROLE_PARENT];
+            return [\local_unics\identity\role_manager::ROLE_REGION_METHODIST, \local_unics\identity\role_manager::ROLE_DISTRICT_METHODIST,
+                \local_unics\identity\role_manager::ROLE_METHODIST, \local_unics\identity\role_manager::ROLE_COURSE_CREATOR,
+                \local_unics\identity\role_manager::ROLE_TEACHER, \local_unics\identity\role_manager::ROLE_STUDENT,
+                \local_unics\identity\role_manager::ROLE_PARENT];
         }
         if (self::user_has_role($userid, ['region_methodist'])) {
-            return [role_manager::ROLE_DISTRICT_METHODIST, role_manager::ROLE_METHODIST,
-                role_manager::ROLE_COURSE_CREATOR, role_manager::ROLE_TEACHER,
-                role_manager::ROLE_STUDENT, role_manager::ROLE_PARENT];
+            return [\local_unics\identity\role_manager::ROLE_DISTRICT_METHODIST, \local_unics\identity\role_manager::ROLE_METHODIST,
+                \local_unics\identity\role_manager::ROLE_COURSE_CREATOR, \local_unics\identity\role_manager::ROLE_TEACHER,
+                \local_unics\identity\role_manager::ROLE_STUDENT, \local_unics\identity\role_manager::ROLE_PARENT];
         }
         if (self::is_methodist($userid)) {
-            return [role_manager::ROLE_COURSE_CREATOR, role_manager::ROLE_TEACHER,
-                role_manager::ROLE_STUDENT, role_manager::ROLE_PARENT];
+            return [\local_unics\identity\role_manager::ROLE_COURSE_CREATOR, \local_unics\identity\role_manager::ROLE_TEACHER,
+                \local_unics\identity\role_manager::ROLE_STUDENT, \local_unics\identity\role_manager::ROLE_PARENT];
         }
         return [];
     }
@@ -178,7 +178,7 @@ class access {
         // либо у него unics_role=8 в unics_user_org (даже без активной привязки).
         if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $userid])
             || $DB->record_exists('unics_user_org', ['mdl_user_id' => $userid,
-                'unics_role' => role_manager::ROLE_PARENT])) {
+                'unics_role' => \local_unics\identity\role_manager::ROLE_PARENT])) {
             return 'parent';
         }
         $ctx = \context_system::instance();
@@ -231,7 +231,7 @@ class access {
         }
         require_capability('local/unics:manageorg', $ctx);
 
-        if (!scope_checker::user_can_access_region((int)$USER->id, $region_id)) {
+        if (!\local_unics\identity\scope_checker::user_can_access_region((int)$USER->id, $region_id)) {
             throw new \moodle_exception('nopermissions', 'error', '',
                 'регион вне вашего скоупа');
         }
@@ -258,7 +258,7 @@ class access {
         }
         require_capability('local/unics:manageorg', $ctx);
 
-        if (!scope_checker::user_can_access_org((int)$USER->id, $org_id)) {
+        if (!\local_unics\identity\scope_checker::user_can_access_org((int)$USER->id, $org_id)) {
             throw new \moodle_exception('nopermissions', 'error', '',
                 'организация вне вашего скоупа');
         }
@@ -276,7 +276,7 @@ class access {
         }
         require_capability('local/unics:manageorg', $ctx);
 
-        if (!scope_checker::user_can_access_district((int)$USER->id, $district_id)) {
+        if (!\local_unics\identity\scope_checker::user_can_access_district((int)$USER->id, $district_id)) {
             throw new \moodle_exception('nopermissions', 'error', '',
                 'муниципалитет вне вашего скоупа');
         }
@@ -284,7 +284,7 @@ class access {
 
     /**
      * Guard для write-операций над пользователем.
-     * Скоуп target'а вычисляется через `scope_checker::get_user_organization` с fallback на сам скоуп.
+     * Скоуп target'а вычисляется через `\local_unics\identity\scope_checker::get_user_organization` с fallback на сам скоуп.
      */
     public static function require_manage_or_scope_user(int $target_mdl_user_id): void {
         global $USER;
@@ -295,7 +295,7 @@ class access {
         }
         require_capability('local/unics:manageorg', $ctx);
 
-        if (!scope_checker::user_can_access_user((int)$USER->id, $target_mdl_user_id)) {
+        if (!\local_unics\identity\scope_checker::user_can_access_user((int)$USER->id, $target_mdl_user_id)) {
             throw new \moodle_exception('nopermissions', 'error', '',
                 'пользователь вне вашего скоупа');
         }

@@ -256,7 +256,7 @@ foreach ($rows as $r) {
     echo '<tr' . ($r['is_risk'] ? ' class="table-danger"' : '') . '>';
     echo '<td>' . s($fio) . '</td>';
     echo '<td>' . s($class_str) . '</td>';
-    echo '<td>' . s(\local_unics\student_helper::format_categories($s) ?: '-') . '</td>';
+    echo '<td>' . s(\local_unics\identity\student_helper::format_categories($s) ?: '-') . '</td>';
     echo '<td>' . ($levels[$s->difficulty_level] ?? '-') . '</td>';
     echo '<td>' . $avg_cell . '</td>';
     echo '<td>' . $risk_cell . '</td>';

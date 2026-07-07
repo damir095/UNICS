@@ -1,7 +1,7 @@
 <?php
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/../classes/organization_manager.php');
+require_once(__DIR__ . '/../classes/identity/organization_manager.php');
 require_once(__DIR__ . '/../classes/learning/grade_scale.php');
 
 use local_unics\learning\grade_scale;
@@ -25,12 +25,12 @@ $org_id = optional_param('org_id', 0, PARAM_INT);
 // Скоуп: если он = одна организация, фиксируем выбор; район/регион → селектор по скоупу.
 $scope = $is_admin_user
     ? ['region_id' => null, 'district_id' => null, 'organization_id' => null]
-    : \local_unics\scope_checker::get_user_scope((int)$USER->id);
+    : \local_unics\identity\scope_checker::get_user_scope((int)$USER->id);
 $fixed_org = (!$is_admin_user && !empty($scope['organization_id']));
 if ($fixed_org) {
     $org_id = (int)$scope['organization_id'];
 } else if (!$is_admin_user && $org_id > 0
-    && !\local_unics\scope_checker::user_can_access_org((int)$USER->id, $org_id)) {
+    && !\local_unics\identity\scope_checker::user_can_access_org((int)$USER->id, $org_id)) {
     $org_id = 0; // организация вне скоупа — сбрасываем
 }
 
@@ -49,7 +49,7 @@ if ($org_id) {
 if ($is_admin_user) {
     $orgs = unics_organization_manager::get_organizations_grouped();
 } else {
-    [$ofw, $ofp] = \local_unics\scope_checker::org_filter_sql((int)$USER->id, 'o');
+    [$ofw, $ofp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
     $orgs = [];
     foreach ($DB->get_records_sql(
         "SELECT o.id, o.name FROM {unics_organizations} o
@@ -354,7 +354,7 @@ foreach ($rows as $r) {
     echo '<tr' . ($r['is_risk'] ? ' class="table-danger"' : '') . '>';
     echo '<td>' . s($fio) . '</td>';
     echo '<td>' . s($class_str) . '</td>';
-    echo '<td>' . s(\local_unics\student_helper::format_categories($s) ?: '-') . '</td>';
+    echo '<td>' . s(\local_unics\identity\student_helper::format_categories($s) ?: '-') . '</td>';
     echo '<td>' . ($levels[$s->difficulty_level] ?? '-') . '</td>';
     echo '<td>' . $avg_cell . '</td>';
     echo '<td>' . $risk_cell . '</td>';

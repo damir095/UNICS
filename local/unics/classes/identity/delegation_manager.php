@@ -1,5 +1,5 @@
 <?php
-namespace local_unics;
+namespace local_unics\identity;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -73,7 +73,7 @@ class delegation_manager {
         global $DB;
 
         if (!function_exists('local_unics_user_has_role')) {
-            require_once(__DIR__ . '/../lib.php');
+            require_once(__DIR__ . '/../../lib.php');
         }
 
         if (has_capability('local/unics:manage', \context_system::instance(), $userid)) {

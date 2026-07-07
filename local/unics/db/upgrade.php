@@ -369,9 +369,9 @@ function xmldb_local_unics_upgrade($oldversion) {
         // Применяем матрицу прав ролей автоматически (Q6 из встречи 2026-05-20):
         // у методиста появляется новая capability local/unics:manageorg.
         // Capability local/unics:viewownchild удалена из access.php — Moodle сам её вычистит.
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_matrix();
         } catch (\Throwable $e) {
             // Не валим апгрейд из-за матрицы: админ может применить руками через setup_roles.php.
             debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
@@ -397,9 +397,9 @@ function xmldb_local_unics_upgrade($oldversion) {
         }
 
         // Тьюторов нет — применяем обновлённую матрицу role_manager (уже без блока 'teacher').
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_matrix();
         } catch (\Throwable $e) {
             debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -424,9 +424,9 @@ function xmldb_local_unics_upgrade($oldversion) {
             set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
         }
 
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_matrix();
         } catch (\Throwable $e) {
             debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -439,7 +439,7 @@ function xmldb_local_unics_upgrade($oldversion) {
         // Две роли админа (региональный/районный) и две роли методиста
         // (районный/организации). region_admin теперь только регион, methodist —
         // только организация; скоупы пишутся в unics_user_org. Подробности и
-        // целевая матрица — в плане и в classes/role_manager.php::get_matrix().
+        // целевая матрица — в плане и в classes/identity/role_manager.php::get_matrix().
 
         // --- Районный администратор (district_admin) ---
         // Управленческая роль уровня района: копия region_admin по правам,
@@ -488,9 +488,9 @@ function xmldb_local_unics_upgrade($oldversion) {
         }
 
         // Применяем обновлённую матрицу прав (district_admin, district_methodist, teacher).
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_matrix();
         } catch (\Throwable $e) {
             debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -502,9 +502,9 @@ function xmldb_local_unics_upgrade($oldversion) {
         // Пункт #7: editingteacher (роль 5) больше не может создавать/удалять курсы —
         // в матрицу role_manager добавлен явный prevent на course:create/course:delete.
         // Переприменяем матрицу, чтобы запрет вступил в силу для существующей роли.
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_matrix();
         } catch (\Throwable $e) {
             debugging('local_unics: role_manager::apply_matrix() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -545,10 +545,10 @@ function xmldb_local_unics_upgrade($oldversion) {
         //       снят, матрица переприменяется.
         //  #13 — отображаемые имена Moodle-ролей приведены к нашим терминам
         //       (editingteacher → «Педагог (создающий курсы)», teacher → «Педагог»).
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
-            \local_unics\role_manager::apply_role_names();
+            \local_unics\identity\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_role_names();
         } catch (\Throwable $e) {
             debugging('local_unics: role refresh failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -558,9 +558,9 @@ function xmldb_local_unics_upgrade($oldversion) {
 
     if ($oldversion < 2026053000) {
         // apply_role_names() is idempotent — only changed rows are touched.
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_role_names();
+            \local_unics\identity\role_manager::apply_role_names();
         } catch (\Throwable $e) {
             debugging('local_unics: apply_role_names() failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -969,10 +969,10 @@ function xmldb_local_unics_upgrade($oldversion) {
         }
 
         // Переприменяем матрицу/имена ролей (district_admin удалён из обоих наборов).
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
-            \local_unics\role_manager::apply_role_names();
+            \local_unics\identity\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_role_names();
         } catch (\Throwable $e) {
             debugging('local_unics v3: role refresh failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -1005,10 +1005,10 @@ function xmldb_local_unics_upgrade($oldversion) {
         }
 
         // Применяем матрицу (region_methodist = алиас region_admin) и имена ролей.
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
         try {
-            \local_unics\role_manager::apply_matrix();
-            \local_unics\role_manager::apply_role_names();
+            \local_unics\identity\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_role_names();
         } catch (\Throwable $e) {
             debugging('local_unics v3 фаза 2: role refresh failed during upgrade: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
@@ -1130,15 +1130,15 @@ function xmldb_local_unics_upgrade($oldversion) {
 
     if ($oldversion < 2026061703) {
         // G5 - фиксы прав ролей по аудиту [[role-capability-audit-2026-06-17]].
-        require_once(__DIR__ . '/../classes/role_manager.php');
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
 
         // A. Методист (methodist) и муниципальный методист (district_methodist, наследует
         //    methodist) больше НЕ создают и НЕ редактируют курсы: контент-строительные
         //    capability перенесены из allow в prevent в role_manager::get_matrix().
         //    Переприменяем матрицу - prevent перезаписывает прежние ALLOW в role_capabilities.
         try {
-            \local_unics\role_manager::apply_matrix();
-            \local_unics\role_manager::apply_role_names();
+            \local_unics\identity\role_manager::apply_matrix();
+            \local_unics\identity\role_manager::apply_role_names();
         } catch (\Throwable $e) {
             debugging('local_unics G5: apply_matrix() failed during upgrade: ' . $e->getMessage(),
                 DEBUG_DEVELOPER);
