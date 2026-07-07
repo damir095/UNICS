@@ -81,12 +81,12 @@ if ($cancel_all && confirm_sesskey()) {
 
 // Кто вправе публиковать/удалять черновик конкретного УМК (review-гейт):
 // системный админ, методист или педагог с правом редактировать активности курса УМК.
-$can_publish = function(\stdClass $umk): bool {
-    $sysctx = context_system::instance();
-    if (has_capability('local/unics:manage', $sysctx)) {
-        return true;
-    }
-    if (local_unics_is_methodist()) {
+// Сквозные проверки (manage / методист) считаем ОДИН раз, а не на каждую строку
+// списка - is_methodist ходит в БД (этап 3.2, N+1).
+$publish_any = has_capability('local/unics:manage', context_system::instance())
+    || local_unics_is_methodist();
+$can_publish = function(\stdClass $umk) use ($publish_any): bool {
+    if ($publish_any) {
         return true;
     }
     if (!empty($umk->mdl_course_id)) {
@@ -127,8 +127,13 @@ if ($publish_id && confirm_sesskey()) {
     $course_rec  = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
     $course_name = $course_rec ? $course_rec->fullname : '';
     $umk_students = $DB->get_records('unics_umk_students', ['umk_id' => $umk->id]);
+    // Ученики одной выборкой вместо get_record на строку (этап 3.2, N+1).
+    $sids = array_map(static fn($r) => (int)$r->student_id, $umk_students);
+    $students_by_id = $sids
+        ? $DB->get_records_list('unics_students', 'id', $sids, '', 'id, mdl_user_id')
+        : [];
     foreach ($umk_students as $row) {
-        $student = $DB->get_record('unics_students', ['id' => $row->student_id]);
+        $student = $students_by_id[(int)$row->student_id] ?? null;
         if (!$student) {
             continue;
         }
