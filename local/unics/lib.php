@@ -50,7 +50,7 @@ function local_unics_before_http_headers(): void {
     if ($path !== '/my/' && $path !== '/my/index.php') {
         return;
     }
-    if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+    if (\local_unics\access::student_record() !== null) {
         redirect(new moodle_url('/local/unics/pages/dashboard.php'));
     }
 }

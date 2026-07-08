@@ -17,20 +17,75 @@ defined('MOODLE_INTERNAL') || die();
  */
 class access {
 
+    /** Запросный кеш identity-чтений (db/caches.php, этап 3.3). */
+    private static function cache(): \cache {
+        return \cache::make('local_unics', 'identity');
+    }
+
+    /**
+     * Запись unics_students пользователя или null - с запросным кешем:
+     * рельс, навигация и гарды спрашивают её по несколько раз за страницу.
+     *
+     * @param int|null $userid id пользователя; null = текущий $USER->id
+     */
+    public static function student_record(?int $userid = null): ?\stdClass {
+        global $DB, $USER;
+        if ($userid === null) {
+            $userid = (int)$USER->id;
+        }
+        if ($userid <= 0) {
+            return null;
+        }
+        $cache = self::cache();
+        $key = 'student_' . $userid;
+        $val = $cache->get($key);
+        if ($val === false) {
+            // «Записи нет» кешируем как 0 (false в MUC означает промах).
+            $val = $DB->get_record('unics_students', ['mdl_user_id' => $userid]) ?: 0;
+            $cache->set($key, $val);
+        }
+        return $val === 0 ? null : $val;
+    }
+
+    /**
+     * true, если пользователь - родитель (есть привязка в unics_parent_student);
+     * с запросным кешем (та же причина, что и у {@see access::student_record()}).
+     *
+     * @param int|null $userid id пользователя; null = текущий $USER->id
+     */
+    public static function is_parent(?int $userid = null): bool {
+        global $DB, $USER;
+        if ($userid === null) {
+            $userid = (int)$USER->id;
+        }
+        if ($userid <= 0) {
+            return false;
+        }
+        $cache = self::cache();
+        $key = 'parent_' . $userid;
+        $val = $cache->get($key);
+        if ($val === false) {
+            $val = $DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $userid]) ? 1 : 2;
+            $cache->set($key, $val);
+        }
+        return $val === 1;
+    }
+
     /**
      * Редиректит учащегося на его дашборд, если он пытается открыть педагогическую страницу.
      * Вызывать в начале каждой страницы, доступной педагогам/администраторам.
      */
     public static function require_not_student(): void {
-        global $DB, $USER;
-        if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+        if (self::student_record() !== null) {
             redirect(new \moodle_url('/local/unics/pages/dashboard.php'));
         }
     }
 
     /**
      * Возвращает true, если у пользователя назначена одна из Moodle-ролей
-     * с указанными shortname (на любом контексте).
+     * с указанными shortname (на любом контексте). Результат кешируется в
+     * пределах запроса (is_methodist/is_scoped_admin зовут это из рельса,
+     * навигации и страниц по несколько раз).
      *
      * @param int $userid id пользователя
      * @param string[] $shortnames список shortname ролей
@@ -41,14 +96,21 @@ class access {
         if (!$userid || empty($shortnames)) {
             return false;
         }
-        [$insql, $params] = $DB->get_in_or_equal($shortnames, SQL_PARAMS_NAMED, 'sn');
-        $params['uid'] = $userid;
-        return $DB->record_exists_sql(
-            "SELECT 1 FROM {role_assignments} ra
-               JOIN {role} r ON r.id = ra.roleid
-              WHERE ra.userid = :uid AND r.shortname {$insql}",
-            $params
-        );
+        $cache = self::cache();
+        $key = 'roles_' . $userid . '_' . implode('_', $shortnames);
+        $val = $cache->get($key);
+        if ($val === false) {
+            [$insql, $params] = $DB->get_in_or_equal($shortnames, SQL_PARAMS_NAMED, 'sn');
+            $params['uid'] = $userid;
+            $val = $DB->record_exists_sql(
+                "SELECT 1 FROM {role_assignments} ra
+                   JOIN {role} r ON r.id = ra.roleid
+                  WHERE ra.userid = :uid AND r.shortname {$insql}",
+                $params
+            ) ? 1 : 2;
+            $cache->set($key, $val);
+        }
+        return $val === 1;
     }
 
     /**
@@ -171,12 +233,12 @@ class access {
         if (!$userid || isguestuser($userid)) {
             return 'guest';
         }
-        if ($DB->record_exists('unics_students', ['mdl_user_id' => $userid])) {
+        if (self::student_record($userid) !== null) {
             return 'student';
         }
         // Родитель: либо привязан к ребёнку в unics_parent_student,
         // либо у него unics_role=8 в unics_user_org (даже без активной привязки).
-        if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $userid])
+        if (self::is_parent($userid)
             || $DB->record_exists('unics_user_org', ['mdl_user_id' => $userid,
                 'unics_role' => \local_unics\identity\role_manager::ROLE_PARENT])) {
             return 'parent';

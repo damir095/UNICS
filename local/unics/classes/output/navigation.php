@@ -45,7 +45,7 @@ class navigation {
         }
 
         // Ветка «учащийся»: локдаун профиля (скрываем настройки, редиректим с edit).
-        if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+        if (access::student_record() !== null) {
             // Редиректим со страниц редактирования профиля (совместимо с PHP 7.x)
             $path = $PAGE->url->get_path();
             if (strpos($path, '/user/edit.php') !== false || strpos($path, '/user/editadvanced.php') !== false) {
@@ -139,7 +139,7 @@ class navigation {
         global $DB, $USER;
 
         // Учащийся - меню курса не показываем.
-        if ($DB->record_exists('unics_students', ['mdl_user_id' => $USER->id])) {
+        if (access::student_record() !== null) {
             return;
         }
 
@@ -257,7 +257,7 @@ class navigation {
 
         // Учащийся - проверяем по БД в первую очередь, до любых проверок возможностей.
         // Это гарантирует, что неправильно назначенная Moodle-роль не откроет педагогическое меню.
-        $student_rec = $DB->get_record('unics_students', ['mdl_user_id' => $USER->id]);
+        $student_rec = access::student_record();
         if ($student_rec) {
             $branch = $nav->add(
                 'УНИКС - Мой портал',
@@ -325,7 +325,7 @@ class navigation {
         }
 
         // Родитель
-        if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $USER->id])) {
+        if (access::is_parent()) {
             $nav->add(
                 'УНИКС - Мои дети',
                 new \moodle_url('/local/unics/pages/dashboard.php'),

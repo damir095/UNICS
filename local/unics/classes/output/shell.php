@@ -166,7 +166,7 @@ class shell {
 
         // --- Учащийся: проверяем по БД первым (как extend_navigation - чтобы ошибочная
         //     Moodle-роль не открыла чужой рельс). Обучение -> Результаты. ---
-        $student_rec = $DB->get_record('unics_students', ['mdl_user_id' => $USER->id]);
+        $student_rec = access::student_record();
         if ($student_rec) {
             $sid    = (int)$student_rec->id;
             $groups = $base;
@@ -206,7 +206,7 @@ class shell {
 
         // --- Родитель: рельс ведёт на ребёнка. Переключатель ребёнка (если детей >1) -
         //     задача дашборд-каркаса; v1 ведёт на первого ребёнка. ---
-        if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $USER->id])) {
+        if (access::is_parent()) {
             $groups = $base;
             $kids   = $DB->get_records('unics_parent_student',
                 ['parent_mdl_user_id' => $USER->id], 'id ASC', 'id, student_id', 0, 1);
