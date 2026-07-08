@@ -24,6 +24,12 @@ $CFG->admin     = 'admin';
 
 $CFG->directorypermissions = 0777;
 
+// PHPUnit (этап 5.2 аудита): полностью изолированная тестовая среда -
+// отдельная БД и отдельный dataroot, живые данные не затрагиваются.
+$CFG->phpunit_dbname   = 'phpunit';
+$CFG->phpunit_prefix   = 'phpu_';
+$CFG->phpunit_dataroot = 'C:\\Moodle\\server\\phpunit_moodledata';
+
 require_once(__DIR__ . '/lib/setup.php');
 
 // There is no php closing tag in this file,
