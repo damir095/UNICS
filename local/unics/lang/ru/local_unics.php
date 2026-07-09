@@ -212,3 +212,9 @@ $string['privacy:export:learning'] = 'Учебный процесс';
 $string['privacy:export:motivation'] = 'Мотивация';
 $string['privacy:export:communication'] = 'Коммуникация';
 $string['privacy:export:audit'] = 'Аудит действий';
+
+// События (этап 2.4 аудита).
+$string['eventpointsawarded'] = 'Баллы начислены';
+$string['eventpointsspent'] = 'Баллы списаны';
+$string['eventlevelchanged'] = 'Уровень учащегося изменен';
+$string['eventumkpublished'] = 'УМК опубликован';
