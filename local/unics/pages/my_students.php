@@ -72,9 +72,11 @@ if ($mode === 'admin' || $mode === 'scoped') {
           WHERE ({$where}) AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL",
         $params
     );
+    // Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+    [$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
+                s.class_number, s.class_letter, {$catsql}, {$ovzsql}, s.difficulty_level,
                 o.name AS org_name,
                 NULL AS teacher_lastname, NULL AS teacher_firstname
          FROM {unics_students} s
@@ -95,9 +97,11 @@ if ($mode === 'admin' || $mode === 'scoped') {
           WHERE ts.teacher_id = :teacher_id AND u.deleted = 0 AND s.graduated_at IS NULL AND s.archived_at IS NULL",
         ['teacher_id' => $teacher_record->id]
     );
+    // Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+    [$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
     $students = $DB->get_records_sql(
         "SELECT s.id AS student_id, u.lastname, u.firstname, u.middlename, u.email,
-                s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
+                s.class_number, s.class_letter, {$catsql}, {$ovzsql}, s.difficulty_level,
                 o.name AS org_name,
                 ts.id AS ts_id
          FROM {unics_teacher_student} ts

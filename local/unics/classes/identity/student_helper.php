@@ -168,24 +168,27 @@ class student_helper {
     }
 
     /**
-     * SQL-фрагмент «category содержит данный id» - для фильтров.
-     * Использует FIND_IN_SET (MariaDB/MySQL).
-     * Пример: WHERE {$frag} → ["FIND_IN_SET(:cat, s.category)", ['cat' => 1]]
+     * SQL-фрагмент «у ученика есть данная категория» - для фильтров (WHERE {$frag}).
+     * EXISTS по нормализованной unics_student_category (этап 2.6-B).
      *
      * @return array [sql_fragment, params]
      */
     public static function sql_has_category(int $category, string $alias = 's', string $param_name = 'unics_cat'): array {
+        // Этап 2.6 (инкремент B): EXISTS по нормализованной таблице вместо
+        // FIND_IN_SET по CSV-колонке (индекс (student_id, category) работает).
         return [
-            "FIND_IN_SET(:{$param_name}, {$alias}.category)",
-            [$param_name => (string)$category],
+            "EXISTS (SELECT 1 FROM {unics_student_category} jc
+                      WHERE jc.student_id = {$alias}.id AND jc.category = :{$param_name})",
+            [$param_name => $category],
         ];
     }
 
     /** Аналогично для ovz_type. */
     public static function sql_has_ovz_type(int $ovz, string $alias = 's', string $param_name = 'unics_ovz'): array {
         return [
-            "FIND_IN_SET(:{$param_name}, {$alias}.ovz_type)",
-            [$param_name => (string)$ovz],
+            "EXISTS (SELECT 1 FROM {unics_student_ovz} jo
+                      WHERE jo.student_id = {$alias}.id AND jo.ovz_type = :{$param_name})",
+            [$param_name => $ovz],
         ];
     }
 
@@ -209,5 +212,26 @@ class student_helper {
                   JOIN {user} u ON u.id = s.mdl_user_id AND u.deleted = 0
                  WHERE " . implode(' AND ', $where);
         return (int)$DB->count_records_sql($sql, $params);
+    }
+
+    /**
+     * SQL-фрагменты «категории/ОВЗ ученика как CSV» из нормализованных таблиц
+     * (этап 2.6, инкремент B). Подзапросы с прежними алиасами сохраняют форму
+     * строки - parse_csv и категорийные хелперы работают без изменений.
+     * Нет строк -> NULL (для parse_csv эквивалентно пустому CSV).
+     *
+     * @param string $alias  алиас unics_students во внешнем запросе
+     * @param string $cat_as алиас колонки категорий в результате
+     * @param string $ovz_as алиас колонки видов ОВЗ в результате
+     * @return array{0:string,1:string} [фрагмент категорий, фрагмент ОВЗ]
+     */
+    public static function taxonomy_select_sql(string $alias = 's', string $cat_as = 'category',
+                                               string $ovz_as = 'ovz_type'): array {
+        global $DB;
+        $cat = '(SELECT ' . $DB->sql_group_concat('jc.category', ',', 'jc.category ASC')
+             . " FROM {unics_student_category} jc WHERE jc.student_id = {$alias}.id) AS {$cat_as}";
+        $ovz = '(SELECT ' . $DB->sql_group_concat('jo.ovz_type', ',', 'jo.ovz_type ASC')
+             . " FROM {unics_student_ovz} jo WHERE jo.student_id = {$alias}.id) AS {$ovz_as}";
+        return [$cat, $ovz];
     }
 }

@@ -289,9 +289,11 @@ class unics_user_manager {
     public static function get_students(int $org_id): array {
         global $DB;
 
+        // Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+        [$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
         if ($org_id > 0) {
             $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
-                           s.id AS student_id, s.category, s.ovz_type, s.difficulty_level,
+                           s.id AS student_id, {$catsql}, {$ovzsql}, s.difficulty_level,
                            s.class_number, s.class_letter
                     FROM {user} u
                     JOIN {unics_students} s ON s.mdl_user_id = u.id
@@ -301,7 +303,7 @@ class unics_user_manager {
         }
 
         $sql = "SELECT u.id AS mdl_user_id, u.firstname, u.lastname,
-                       s.id AS student_id, s.category, s.difficulty_level,
+                       s.id AS student_id, {$catsql}, s.difficulty_level,
                        s.class_number, s.class_letter
                 FROM {user} u
                 JOIN {unics_students} s ON s.mdl_user_id = u.id
@@ -557,9 +559,11 @@ class unics_user_manager {
     public static function get_user_profile(int $mdl_user_id): ?object {
         global $DB;
 
+        // Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+        [$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s', 'student_category', 'ovz_type');
         $sql = "SELECT u.id, u.firstname, u.lastname, u.middlename, u.email, u.username,
                        uo.unics_role, uo.organization_id,
-                       s.id AS student_id, s.category AS student_category, s.ovz_type,
+                       s.id AS student_id, {$catsql}, {$ovzsql},
                        s.difficulty_level, s.class_number, s.class_letter, s.special_needs,
                        t.id AS teacher_id, t.subjects, t.qualification,
                        t.grade_from, t.grade_to, t.teacher_type

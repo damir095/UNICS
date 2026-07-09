@@ -49,10 +49,12 @@ $levels = [1 => 'Базовый', 2 => 'Стандарт', 3 => 'Продвин�
 // ----------------------------------------------------------------
 // Активные учащиеся, записанные на курс.
 // ----------------------------------------------------------------
+// Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+[$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
 $students = $DB->get_records_sql(
     "SELECT DISTINCT s.id AS student_id, s.mdl_user_id,
             u.lastname, u.firstname, u.middlename,
-            s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level
+            s.class_number, s.class_letter, {$catsql}, {$ovzsql}, s.difficulty_level
        FROM {unics_students} s
        JOIN {user} u ON u.id = s.mdl_user_id AND u.deleted = 0
        JOIN {user_enrolments} ue ON ue.userid = s.mdl_user_id

@@ -188,7 +188,9 @@ class stats_manager {
             $params = $inparams;
         }
 
-        $sql = "SELECT s.id AS student_id, s.mdl_user_id, s.category, s.ovz_type, s.class_number,
+        // Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+        [$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
+        $sql = "SELECT s.id AS student_id, s.mdl_user_id, {$catsql}, {$ovzsql}, s.class_number,
                        s.organization_id, o.name AS organization_name,
                        o.district_id, d.name AS district_name, d.region_id, r.name AS region_name,
                        COALESCE(SUM(st.views), 0)                AS views,
@@ -206,7 +208,7 @@ class stats_manager {
              LEFT JOIN {unics_regions} r ON r.id = d.region_id
              LEFT JOIN {unics_stats_student_course} st ON st.student_id = s.id
                  WHERE s.archived_at IS NULL $orgwhere
-              GROUP BY s.id, s.mdl_user_id, s.category, s.ovz_type, s.class_number,
+              GROUP BY s.id, s.mdl_user_id, s.class_number,
                        s.organization_id, o.name, o.district_id, d.name, d.region_id, r.name";
 
         $rows = array_values($DB->get_records_sql($sql, $params));

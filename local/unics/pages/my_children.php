@@ -11,10 +11,12 @@ $PAGE->set_title('Мои дети - УНИКС');
 $PAGE->set_heading('Мои дети');
 $PAGE->set_pagelayout('standard');
 
+// Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+[$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
 $children = $DB->get_records_sql(
     "SELECT ps.student_id,
             u.lastname, u.firstname, u.middlename, u.email,
-            s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level,
+            s.class_number, s.class_letter, {$catsql}, {$ovzsql}, s.difficulty_level,
             o.name AS org_name
      FROM {unics_parent_student} ps
      JOIN {unics_students} s        ON s.id  = ps.student_id

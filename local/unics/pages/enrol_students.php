@@ -236,10 +236,12 @@ if ($filter_letter !== '') {
     $sql_params['class_let'] = $filter_letter;
 }
 
+// Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+[$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
 $students = $DB->get_records_sql(
     "SELECT s.id AS student_id, u.id AS mdl_user_id,
             u.lastname, u.firstname, u.middlename,
-            s.class_number, s.category, s.ovz_type,
+            s.class_number, {$catsql}, {$ovzsql},
             o.name AS org_name
      FROM {unics_students} s
      JOIN {user} u ON u.id = s.mdl_user_id

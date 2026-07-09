@@ -99,10 +99,12 @@ if (!$org) {
 echo '<h5 class="mb-3">' . s($org->name) . '</h5>';
 echo local_unics_export_buttons($PAGE->url);
 
+// Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
+[$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
 $students = $DB->get_records_sql(
     "SELECT s.id AS student_id, s.mdl_user_id,
             u.lastname, u.firstname, u.middlename,
-            s.class_number, s.class_letter, s.category, s.ovz_type, s.difficulty_level
+            s.class_number, s.class_letter, {$catsql}, {$ovzsql}, s.difficulty_level
      FROM {unics_students} s
      JOIN {user} u ON u.id = s.mdl_user_id
      WHERE s.organization_id = :orgid AND u.deleted = 0
