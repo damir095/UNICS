@@ -43,9 +43,10 @@ class ai_generator {
     }
 
     // ----------------------------------------------------------------
-    // Формирование промпта на основе полного профиля учащегося
+    // Критерии генерации по профилю учащегося (без вызова ИИ).
+    // Единственный источник правды: превью (A3) и build_prompt.
     // ----------------------------------------------------------------
-    public function build_prompt(array $profile, string $topic, string $extra_context = ''): string {
+    public function build_criteria(array $profile): array {
         $categories = [1 => 'ОВЗ', 2 => 'семейное обучение', 3 => 'длительное лечение', 4 => 'одарённый'];
         $levels     = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
 
@@ -104,13 +105,16 @@ class ai_generator {
             $word_count = '250–350'; // длительное лечение - короткие модули
         }
 
+        // Валидные типы ОВЗ (с известными метками): в критериях - всегда,
+        // в особые указания попадают только при категории 1 (как раньше).
+        $valid_ovz_types = array_values(array_filter($ovz_type_ids, fn($t) => isset($ovz_labels[$t])));
+        $type_labels     = array_map(fn($t) => $ovz_labels[$t], $valid_ovz_types);
+
         // Блок особых указаний - union по всем категориям и видам ОВЗ.
         $special_parts = [];
 
         if (in_array(1, $category_ids, true)) {
-            $valid_ovz_types = array_values(array_filter($ovz_type_ids, fn($t) => isset($ovz_labels[$t])));
             if (!empty($valid_ovz_types)) {
-                $type_labels = array_map(fn($t) => $ovz_labels[$t], $valid_ovz_types);
                 $special_parts[] = 'Типы ОВЗ учащегося: ' . implode('; ', $type_labels) . '.';
                 foreach ($valid_ovz_types as $t) {
                     $special_parts[] = $ovz_instructions[$t];
@@ -133,15 +137,42 @@ class ai_generator {
             $special_parts[] = "Дополнительные особенности учащегося: {$special_needs}";
         }
 
+        $level_change_reason = null;
         if ($eff_level < $base_level) {
-            $special_parts[] = "Уровень автоматически снижен (средний балл {$avg_score}% < 50%) - материал должен быть проще базового.";
+            $level_change_reason = "Уровень автоматически снижен (средний балл {$avg_score}% < 50%) - материал должен быть проще базового.";
         } elseif ($eff_level > $base_level) {
-            $special_parts[] = "Уровень автоматически повышен (средний балл {$avg_score}% > 85%) - материал должен быть сложнее стандартного.";
+            $level_change_reason = "Уровень автоматически повышен (средний балл {$avg_score}% > 85%) - материал должен быть сложнее стандартного.";
+        }
+        if ($level_change_reason !== null) {
+            $special_parts[] = $level_change_reason;
         }
 
+        return [
+            'base_level'          => $base_level,
+            'eff_level'           => $eff_level,
+            'level_label'         => $level_label,
+            'level_change_reason' => $level_change_reason,
+            'avg_score'           => $avg_score,
+            'class_str'           => $class_str,
+            'category_ids'        => array_values(array_map('intval', $category_ids)),
+            'category_label'      => $category_label,
+            'ovz_type_ids'        => $valid_ovz_types,
+            'ovz_labels'          => $type_labels,
+            'word_count'          => $word_count,
+            'special_parts'       => $special_parts,
+        ];
+    }
+
+    // ----------------------------------------------------------------
+    // Формирование промпта на основе полного профиля учащегося.
+    // Строка ЗАМОРОЖЕНА (golden-тест) - вычисления в build_criteria.
+    // ----------------------------------------------------------------
+    public function build_prompt(array $profile, string $topic, string $extra_context = ''): string {
+        $c = $this->build_criteria($profile);
+
         $special_block = '';
-        if (!empty($special_parts)) {
-            $special_block = "\nОсобые указания:\n- " . implode("\n- ", $special_parts) . "\n";
+        if (!empty($c['special_parts'])) {
+            $special_block = "\nОсобые указания:\n- " . implode("\n- ", $c['special_parts']) . "\n";
         }
 
         $extra_block = '';
@@ -151,18 +182,18 @@ class ai_generator {
 
         return "Ты - опытный педагог, создающий учебные материалы для российских школьников.
 
-Задача: напиши учебный текст по теме «{$topic}» для ученика {$class_str}.
+Задача: напиши учебный текст по теме «{$topic}» для ученика {$c['class_str']}.
 
 Профиль учащегося:
-- Категория: {$category_label}
-- Уровень подготовки: {$level_label}
-- Средний балл за последние 5 тестов: {$avg_score}%
+- Категория: {$c['category_label']}
+- Уровень подготовки: {$c['level_label']}
+- Средний балл за последние 5 тестов: {$c['avg_score']}%
 {$special_block}{$extra_block}
 Требования:
-- Объём: {$word_count} слов
+- Объём: {$c['word_count']} слов
 - Язык: русский, доступный для возраста учащегося
 - Структура: краткое введение → 3–4 смысловых абзаца → вывод
-- Сложность строго соответствует уровню «{$level_label}»
+- Сложность строго соответствует уровню «{$c['level_label']}»
 - Включи 2–3 примера из реальной жизни или природы
 - Используй markdown: #### для заголовков разделов, **жирный** для ключевых понятий, - для коротких списков
 - Для формул и математических выражений используй нотацию \(...\) (например: \(x^2 + y^2\)), НЕ используй знак доллара \$";
