@@ -59,8 +59,9 @@ class process_ai_queue extends \core\task\scheduled_task {
                 $umk_level  = (int)$umk->difficulty_level;
                 $avg_score  = $generator->get_avg_score((int)$first_student->mdl_user_id);
 
-                $cats_arr = \local_unics\identity\student_helper::get_categories($first_student);
-                $ovz_arr  = \local_unics\identity\student_helper::get_ovz_types($first_student);
+                // Категории/ОВЗ - из нормализованных таблиц по id (этап 2.6-C).
+                $cats_arr = \local_unics\identity\student_helper::categories_of((int)$first_student->id);
+                $ovz_arr  = \local_unics\identity\student_helper::ovz_types_of((int)$first_student->id);
 
                 $profile = [
                     // Бэк-компат - первая категория как скаляр.

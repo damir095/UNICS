@@ -69,8 +69,6 @@ class provider implements
 
         $collection->add_database_table('unics_students', [
             'mdl_user_id' => $u,
-            'category' => 'privacy:metadata:unics_students:category',
-            'ovz_type' => 'privacy:metadata:unics_students:ovz_type',
             'diagnosed' => 'privacy:metadata:unics_students:diagnosed',
             'special_needs' => 'privacy:metadata:unics_students:special_needs',
             'birth_date' => 'privacy:metadata:unics_students:birth_date',

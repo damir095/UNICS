@@ -1449,5 +1449,20 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026070900, 'local', 'unics');
     }
 
+    if ($oldversion < 2026070901) {
+        // Этап 2.6, инкремент C: CSV-колонки категорий/ОВЗ удаляются -
+        // единственное хранение теперь unics_student_category / unics_student_ovz
+        // (данные перенесены backfill'ом 2026070900, читатели переведены в B).
+        $table = new xmldb_table('unics_students');
+        foreach (['category', 'ovz_type'] as $fname) {
+            $field = new xmldb_field($fname);
+            if ($dbman->field_exists($table, $field)) {
+                $dbman->drop_field($table, $field);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026070901, 'local', 'unics');
+    }
+
     return true;
 }

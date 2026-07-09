@@ -52,14 +52,31 @@ class student_helper {
         return implode(',', $ids);
     }
 
-    /** Категории учащегося как массив int. */
+    /**
+     * Категории учащегося как массив int - из строки выборки с CSV-алиасом
+     * (taxonomy_select_sql). Для записи без алиаса используйте categories_of().
+     */
     public static function get_categories(\stdClass $student): array {
         return self::parse_csv($student->category ?? null);
     }
 
-    /** Виды ОВЗ учащегося как массив int. */
+    /** Виды ОВЗ учащегося как массив int (строка выборки с CSV-алиасом). */
     public static function get_ovz_types(\stdClass $student): array {
         return self::parse_csv($student->ovz_type ?? null);
+    }
+
+    /** Категории учащегося по id - из нормализованной таблицы (этап 2.6-C). */
+    public static function categories_of(int $student_id): array {
+        global $DB;
+        return array_map('intval', $DB->get_fieldset_select(
+            'unics_student_category', 'category', 'student_id = ?', [$student_id]));
+    }
+
+    /** Виды ОВЗ учащегося по id - из нормализованной таблицы (этап 2.6-C). */
+    public static function ovz_types_of(int $student_id): array {
+        global $DB;
+        return array_map('intval', $DB->get_fieldset_select(
+            'unics_student_ovz', 'ovz_type', 'student_id = ?', [$student_id]));
     }
 
     /** Есть ли у ученика данная категория. */

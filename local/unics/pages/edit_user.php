@@ -78,8 +78,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         if (!empty($ovz_raw)) { $cats[] = 1; }
         if (!empty($gifted))  { $cats[] = 4; }
         // Legacy-категории (2=семейное, 3=лечение) из выбора убраны, но молча терять
-        // их при сохранении нельзя — переносим, если были.
-        $existing = \local_unics\identity\student_helper::get_categories($profile);
+        // их при сохранении нельзя — переносим, если были. В профиле поле называется
+        // student_category (get_categories искал category и всегда видел пусто -
+        // латентный баг до 2.6-C: legacy-категории терялись при каждом сохранении).
+        $existing = \local_unics\identity\student_helper::parse_csv($profile->student_category ?? null);
         foreach ([2, 3] as $legacy) {
             if (in_array($legacy, $existing, true)) { $cats[] = $legacy; }
         }

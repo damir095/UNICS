@@ -18,13 +18,11 @@ final class student_helper_taxonomy_test extends \advanced_testcase {
         $this->resetAfterTest();
     }
 
-    /** Ученик с junction-строками (как dual-write из user_manager). */
+    /** Ученик с junction-строками (как запись из user_manager). */
     private function student(string $catcsv, string $ovzcsv): int {
         global $DB;
         $u = $this->getDataGenerator()->create_user();
-        $sid = (int)$DB->insert_record('unics_students', (object)[
-            'mdl_user_id' => $u->id, 'category' => $catcsv, 'ovz_type' => $ovzcsv ?: null,
-        ]);
+        $sid = (int)$DB->insert_record('unics_students', (object)['mdl_user_id' => $u->id]);
         \unics_user_manager::sync_student_taxonomies($sid, $catcsv, $ovzcsv);
         return $sid;
     }

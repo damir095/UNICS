@@ -67,14 +67,13 @@ class unics_user_manager {
                 $new_student_id = $DB->insert_record('unics_students', (object)[
                     'mdl_user_id'      => $mdl_user_id,
                     'organization_id'  => $data['organization_id'],
-                    'category'         => $category_csv, // пусто = обычный учащийся
-                    'ovz_type'         => $ovz_csv !== '' ? $ovz_csv : null,
                     'difficulty_level' => $data['difficulty_level'] ?? 2, // при создании всегда «средний»
                     'class_number'     => $data['class_number'] ?? null,
                     'class_letter'     => !empty($data['class_letter']) ? $data['class_letter'] : null,
                     'special_needs'    => $data['special_needs'] ?? null,
                 ]);
-                // Нормализованные таблицы категорий/ОВЗ (этап 2.6, dual-write).
+                // Категории/ОВЗ - только нормализованные таблицы (этап 2.6-C,
+                // CSV-колонки удалены; пусто = обычный учащийся).
                 self::sync_student_taxonomies((int)$new_student_id, $category_csv, $ovz_csv);
                 break;
 
@@ -430,25 +429,31 @@ class unics_user_manager {
         // Обновить расширенный профиль учащегося
         $student = $DB->get_record('unics_students', ['mdl_user_id' => $mdl_user_id]);
         if ($student) {
+            // Категории/ОВЗ живут в нормализованных таблицах (этап 2.6-C).
+            // Семантика прежняя: ключ не пришел - набор не меняется; ОВЗ
+            // осмысленны только при категории 1 (ОВЗ) в итоговом наборе.
+            $cat_csv = \local_unics\identity\student_helper::to_csv(
+                \local_unics\identity\student_helper::categories_of((int)$student->id));
             if (array_key_exists('student_category', $data)) {
-                $student->category = is_array($data['student_category'])
+                $cat_csv = is_array($data['student_category'])
                     ? \local_unics\identity\student_helper::to_csv($data['student_category'])
                     : (string)$data['student_category'];
             }
+            $ovz_csv = \local_unics\identity\student_helper::to_csv(
+                \local_unics\identity\student_helper::ovz_types_of((int)$student->id));
             if (array_key_exists('ovz_type', $data)) {
-                $ovz_csv = is_array($data['ovz_type'])
+                $new_ovz = is_array($data['ovz_type'])
                     ? \local_unics\identity\student_helper::to_csv($data['ovz_type'])
                     : (string)($data['ovz_type'] ?? '');
-                $cats = \local_unics\identity\student_helper::parse_csv($student->category);
-                $student->ovz_type = (in_array(1, $cats, true) && $ovz_csv !== '') ? $ovz_csv : null;
+                $cats = \local_unics\identity\student_helper::parse_csv($cat_csv);
+                $ovz_csv = (in_array(1, $cats, true) && $new_ovz !== '') ? $new_ovz : '';
             }
             $student->difficulty_level = $data['difficulty_level'] ?? $student->difficulty_level;
             $student->class_number     = $data['class_number'] ?? $student->class_number;
             $student->class_letter     = $data['class_letter'] ?? $student->class_letter;
             $student->special_needs    = $data['special_needs'] ?? $student->special_needs;
             $DB->update_record('unics_students', $student);
-            // Нормализованные таблицы категорий/ОВЗ (этап 2.6, dual-write).
-            self::sync_student_taxonomies((int)$student->id, $student->category, $student->ovz_type);
+            self::sync_student_taxonomies((int)$student->id, $cat_csv, $ovz_csv);
             self::set_student_level($mdl_user_id, (int)$student->difficulty_level);
         }
 

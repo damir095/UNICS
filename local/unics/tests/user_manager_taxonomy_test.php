@@ -28,9 +28,7 @@ final class user_manager_taxonomy_test extends \advanced_testcase {
     public function test_sync_writes_and_replaces(): void {
         global $DB;
         $u = $this->getDataGenerator()->create_user();
-        $sid = (int)$DB->insert_record('unics_students', (object)[
-            'mdl_user_id' => $u->id, 'category' => '1,3', 'ovz_type' => '4',
-        ]);
+        $sid = (int)$DB->insert_record('unics_students', (object)['mdl_user_id' => $u->id]);
 
         \unics_user_manager::sync_student_taxonomies($sid, '1,3', '4');
         $this->assertSame([1, 3], $this->junction('unics_student_category', $sid, 'category'));
@@ -45,6 +43,34 @@ final class user_manager_taxonomy_test extends \advanced_testcase {
         // null допустим (колонка ovz_type nullable).
         \unics_user_manager::sync_student_taxonomies($sid, '4,4, 1', null);
         $this->assertSame([1, 4], $this->junction('unics_student_category', $sid, 'category'));
+        $this->assertSame([], $this->junction('unics_student_ovz', $sid, 'ovz_type'));
+    }
+
+    public function test_update_user_taxonomy_semantics(): void {
+        global $DB;
+        $u = $this->getDataGenerator()->create_user();
+        $sid = (int)$DB->insert_record('unics_students', (object)['mdl_user_id' => $u->id]);
+        \unics_user_manager::sync_student_taxonomies($sid, '1', '3');
+
+        // Ключ не пришел - набор не меняется.
+        \unics_user_manager::update_user((int)$u->id, ['class_number' => 5]);
+        $this->assertSame([1], $this->junction('unics_student_category', $sid, 'category'));
+        $this->assertSame([3], $this->junction('unics_student_ovz', $sid, 'ovz_type'));
+
+        // ОВЗ меняется при категории 1 в текущем наборе.
+        \unics_user_manager::update_user((int)$u->id, ['ovz_type' => ['4']]);
+        $this->assertSame([4], $this->junction('unics_student_ovz', $sid, 'ovz_type'));
+
+        // Смена категории без ключа ovz_type НЕ трогает сохраненные ОВЗ
+        // (прежняя семантика: гейт применяется только при явном ovz_type).
+        \unics_user_manager::update_user((int)$u->id, ['student_category' => ['4']]);
+        $this->assertSame([4], $this->junction('unics_student_category', $sid, 'category'));
+        $this->assertSame([4], $this->junction('unics_student_ovz', $sid, 'ovz_type'));
+
+        // Явный ovz_type без категории 1 в итоговом наборе - чистится гейтом.
+        \unics_user_manager::update_user((int)$u->id,
+            ['student_category' => ['2'], 'ovz_type' => ['5']]);
+        $this->assertSame([2], $this->junction('unics_student_category', $sid, 'category'));
         $this->assertSame([], $this->junction('unics_student_ovz', $sid, 'ovz_type'));
     }
 
