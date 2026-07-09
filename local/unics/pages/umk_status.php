@@ -123,6 +123,13 @@ if ($publish_id && confirm_sesskey()) {
     }
     $DB->set_field('unics_umk', 'published_at', time(), ['id' => $umk->id]);
 
+    // Событие в штатный журнал (этап 2.4 аудита).
+    \local_unics\event\umk_published::create([
+        'context'  => context_course::instance((int)$umk->mdl_course_id),
+        'objectid' => (int)$umk->id,
+        'other'    => ['title' => $umk->title, 'topic' => $umk->topic],
+    ])->trigger();
+
     // Баллы + уведомление учащимся (перенесено со сборки на момент публикации).
     $course_rec  = $DB->get_record('course', ['id' => $umk->mdl_course_id]);
     $course_name = $course_rec ? $course_rec->fullname : '';

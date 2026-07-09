@@ -90,6 +90,14 @@ class adaptive_engine {
         // Поле профиля Moodle (как в evaluate_student).
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $level);
 
+        // Событие в штатный журнал (этап 2.4 аудита).
+        \local_unics\event\level_changed::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => $student_id,
+            'relateduserid' => (int)$student->mdl_user_id,
+            'other'         => ['old_level' => $cur, 'new_level' => $level, 'source' => 'placement'],
+        ])->trigger();
+
         return $level;
     }
 
@@ -239,6 +247,14 @@ class adaptive_engine {
         }
 
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $new_lvl);
+
+        // Событие в штатный журнал (этап 2.4 аудита).
+        \local_unics\event\level_changed::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => $student_id,
+            'relateduserid' => (int)$student->mdl_user_id,
+            'other'         => ['old_level' => $cur_lvl, 'new_level' => $new_lvl, 'source' => 'apply'],
+        ])->trigger();
 
         $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
         $direction   = $new_lvl > $cur_lvl ? 'повышен' : 'понижен';

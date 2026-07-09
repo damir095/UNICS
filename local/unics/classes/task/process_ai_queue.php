@@ -274,6 +274,14 @@ class process_ai_queue extends \core\task\scheduled_task {
                     if ($s_eff !== $s_base) {
                         $DB->set_field('unics_students', 'difficulty_level', $s_eff, ['id' => $student->id]);
                         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $s_eff);
+                        // Событие в штатный журнал (этап 2.4 аудита). ИЗВЕСТНЫЙ ПРОБЕЛ:
+                        // этот путь не пишет unics_level_history (пред-сущ., чинится отдельно).
+                        \local_unics\event\level_changed::create([
+                            'context'       => \context_system::instance(),
+                            'objectid'      => (int)$student->id,
+                            'relateduserid' => (int)$student->mdl_user_id,
+                            'other'         => ['old_level' => $s_base, 'new_level' => $s_eff, 'source' => 'umk_adapt'],
+                        ])->trigger();
                         mtrace("  Уровень учащегося #{$student->id}: {$s_base}→{$s_eff}");
                     }
 

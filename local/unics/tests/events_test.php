@@ -6,6 +6,7 @@ use local_unics\event\points_spent;
 use local_unics\event\level_changed;
 use local_unics\event\umk_published;
 use local_unics\social\points_manager;
+use local_unics\learning\adaptive_engine;
 
 /**
  * Тесты событий local_unics (этап 2.4 аудита): классы и эмиссия из менеджеров.
@@ -127,5 +128,28 @@ final class events_test extends \advanced_testcase {
         $this->assertCount(0, array_filter($sink2->get_events(),
             static fn($e) => $e instanceof points_spent));
         $sink2->close();
+    }
+
+    public function test_apply_level_emits_event(): void {
+        global $CFG;
+        // Легаси-глобальный класс без неймспейса - автолоадер его не видит.
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $this->resetAfterTest();
+        [$sid, $uid] = $this->make_student();
+
+        $this->redirectMessages(); // apply_level шлет уведомления
+        $sink = $this->redirectEvents();
+        adaptive_engine::apply_level($sid, 1, 45.0); // понижение 2->1: без начисления баллов
+        $events = array_values(array_filter($sink->get_events(),
+            static fn($e) => $e instanceof level_changed));
+        $sink->close();
+
+        $this->assertCount(1, $events);
+        $e = $events[0];
+        $this->assertSame($sid, (int)$e->objectid);
+        $this->assertSame($uid, (int)$e->relateduserid);
+        $this->assertSame(2, (int)$e->other['old_level']);
+        $this->assertSame(1, (int)$e->other['new_level']);
+        $this->assertSame('apply', $e->other['source']);
     }
 }
