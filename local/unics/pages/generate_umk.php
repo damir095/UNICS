@@ -50,6 +50,10 @@ $PAGE->set_pagelayout('admin');
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
+    // A3: превью перед запуском. 'preview' (default, с формы) - страница
+    // подтверждения; 'confirm' (с превью) - постановка в очередь.
+    $action = optional_param('action', 'preview', PARAM_ALPHA);
+
     $course_id      = required_param('course_id', PARAM_INT);
     $student_ids    = optional_param_array('student_ids', [], PARAM_INT);
     $generate_audio      = optional_param('generate_audio',      0, PARAM_INT);
@@ -90,50 +94,244 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $level_groups[(int)$st->difficulty_level][] = (int)$student_id;
     }
 
-    $queued = 0;
-    foreach ($level_groups as $level => $sids) {
-        $umk_id = $DB->insert_record('unics_umk', (object)[
-            'difficulty_level' => $level,
-            'mdl_course_id'    => (int)$course_id,
-            'title'            => $title,
-            'topic'            => $topic,
-            'target_section'   => (int)$target_section,
-            'extra_prompt'     => $extra_prompt,
-            'status'           => 1,
-            'generated_at'     => time(),
-        ]);
-        $DB->insert_record('unics_ai_queue', (object)[
-            'umk_id'              => $umk_id,
-            'student_ids'         => json_encode(array_values($sids)),
-            'generate_text'       => 1,
-            'generate_audio'      => (int)$generate_audio,
-            'generate_quiz'       => (int)$generate_quiz,
-            'generate_assignment' => (int)$generate_assignment,
-            'generate_video'      => (int)$generate_video,
-            'status'              => 1,
-            'created_at'          => time(),
-        ]);
-        $queued++;
+    if ($action === 'confirm') {
+        $queued = 0;
+        foreach ($level_groups as $level => $sids) {
+            $umk_id = $DB->insert_record('unics_umk', (object)[
+                'difficulty_level' => $level,
+                'mdl_course_id'    => (int)$course_id,
+                'title'            => $title,
+                'topic'            => $topic,
+                'target_section'   => (int)$target_section,
+                'extra_prompt'     => $extra_prompt,
+                'status'           => 1,
+                'generated_at'     => time(),
+            ]);
+            $DB->insert_record('unics_ai_queue', (object)[
+                'umk_id'              => $umk_id,
+                'student_ids'         => json_encode(array_values($sids)),
+                'generate_text'       => 1,
+                'generate_audio'      => (int)$generate_audio,
+                'generate_quiz'       => (int)$generate_quiz,
+                'generate_assignment' => (int)$generate_assignment,
+                'generate_video'      => (int)$generate_video,
+                'status'              => 1,
+                'created_at'          => time(),
+            ]);
+            $queued++;
+        }
+
+        $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
+        $summary = [];
+        foreach ($level_groups as $lvl => $sids) {
+            $summary[] = ($level_names[$lvl] ?? 'Ур.' . $lvl) . ': ' . count($sids) . ' уч.';
+        }
+
+        $msg  = $queued > 0
+            ? "Создано {$queued} задач по уровням (" . implode(', ', $summary) . "). Материалы появятся в курсе автоматически в ближайшее время."
+            : 'Не удалось добавить задачи - проверьте права доступа к учащимся.';
+        $type = $queued > 0
+            ? \core\output\notification::NOTIFY_SUCCESS
+            : \core\output\notification::NOTIFY_WARNING;
+
+        // Педагог не имеет доступа к umk_status.php (требует local/unics:manage) - редиректим в «Мои учащиеся».
+        $after_url = $is_admin
+            ? new moodle_url('/local/unics/pages/umk_status.php')
+            : new moodle_url('/local/unics/pages/my_students.php');
+        redirect($after_url, $msg, null, $type);
     }
 
+    // ------------------------------------------------------------
+    // action=preview: превью материала перед запуском (A3).
+    // Live-вызовов ИИ здесь НЕТ - только build_criteria/build_prompt.
+    // ------------------------------------------------------------
+    if (empty($level_groups)) {
+        redirect(new moodle_url('/local/unics/pages/generate_umk.php'),
+            'Не удалось сформировать группы - проверьте права доступа к учащимся.',
+            null, \core\output\notification::NOTIFY_WARNING);
+    }
+
+    $generator   = new \local_unics\ai\ai_generator();
     $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
-    $summary = [];
-    foreach ($level_groups as $lvl => $sids) {
-        $summary[] = ($level_names[$lvl] ?? 'Ур.' . $lvl) . ': ' . count($sids) . ' уч.';
+    $course      = get_course($course_id);
+
+    // Имя раздела (нормализация как в get_sections.php).
+    $section_name = 'новый раздел (будет создан)';
+    if ((int)$target_section >= 0) {
+        $sec_row = $DB->get_record('course_sections',
+            ['course' => $course_id, 'section' => (int)$target_section], 'section, name');
+        if ($sec_row) {
+            $section_name = trim((string)$sec_row->name) !== ''
+                ? trim($sec_row->name)
+                : ((int)$sec_row->section === 0 ? 'Введение (раздел 0)' : 'Раздел ' . $sec_row->section);
+        }
     }
 
-    $msg  = $queued > 0
-        ? "Создано {$queued} задач по уровням (" . implode(', ', $summary) . "). Материалы появятся в курсе автоматически в ближайшее время."
-        : 'Не удалось добавить задачи - проверьте права доступа к учащимся.';
-    $type = $queued > 0
-        ? \core\output\notification::NOTIFY_SUCCESS
-        : \core\output\notification::NOTIFY_WARNING;
+    $materials = ['учебный текст'];
+    if ($generate_quiz)       { $materials[] = 'тест'; }
+    if ($generate_assignment) { $materials[] = 'письменное задание'; }
+    if ($generate_audio)      { $materials[] = 'аудиоматериал'; }
+    if ($generate_video)      { $materials[] = 'видеопрезентация'; }
 
-    // Педагог не имеет доступа к umk_status.php (требует local/unics:manage) - редиректим в «Мои учащиеся».
-    $after_url = $is_admin
-        ? new moodle_url('/local/unics/pages/umk_status.php')
-        : new moodle_url('/local/unics/pages/my_students.php');
-    redirect($after_url, $msg, null, $type);
+    echo $OUTPUT->header();
+    echo local_unics_dashboard_button();
+    echo $OUTPUT->heading('Превью материала перед запуском');
+
+    echo '<div class="card p-3 mb-3">';
+    echo '<p class="mb-1"><strong>Тема:</strong> ' . s($topic) . '</p>';
+    echo '<p class="mb-1"><strong>Название материала:</strong> ' . s($title) . '</p>';
+    echo '<p class="mb-1"><strong>Курс:</strong> ' . s($course->fullname) . '</p>';
+    echo '<p class="mb-1"><strong>Раздел:</strong> ' . s($section_name) . '</p>';
+    echo '<p class="mb-1"><strong>Материалы:</strong> ' . s(implode(', ', $materials)) . '</p>';
+    if (trim($extra_prompt) !== '') {
+        echo '<p class="mb-0"><strong>Дополнительные указания:</strong> ' . s($extra_prompt) . '</p>';
+    }
+    echo '</div>';
+
+    foreach ($level_groups as $level => $sids) {
+        // Профили учеников группы; представитель - ПЕРВЫЙ (ровно как в process_ai_queue).
+        $infos = [];
+        foreach ($sids as $sid) {
+            $st = $DB->get_record('unics_students', ['id' => $sid]);
+            if (!$st) {
+                continue;
+            }
+            $u    = $DB->get_record('user', ['id' => $st->mdl_user_id],
+                'id, firstname, lastname, middlename');
+            $cats = \local_unics\identity\student_helper::categories_of((int)$st->id);
+            $ovz  = \local_unics\identity\student_helper::ovz_types_of((int)$st->id);
+            sort($cats);
+            sort($ovz);
+            $avg = $generator->get_avg_score((int)$st->mdl_user_id);
+            $infos[$sid] = [
+                'student' => $st,
+                'fio'     => $u ? trim("{$u->lastname} {$u->firstname} " . ($u->middlename ?? ''))
+                                : ('Ученик #' . $sid),
+                'cls'     => $st->class_number
+                    ? $st->class_number . ($st->class_letter ? " «{$st->class_letter}»" : '')
+                    : '-',
+                'cats'    => $cats,
+                'ovz'     => $ovz,
+                'avg'     => $avg,
+                'eff'     => $generator->adapt_level((int)$level, $avg),
+            ];
+        }
+        if (empty($infos)) {
+            continue;
+        }
+
+        $rep_sid = array_key_first($infos);
+        $rep     = $infos[$rep_sid];
+        $profile = [
+            'category'         => $rep['cats'][0] ?? 2,
+            'categories'       => $rep['cats'],
+            'ovz_types'        => $rep['ovz'],
+            'difficulty_level' => (int)$level,
+            'class_number'     => (int)($rep['student']->class_number ?? 5),
+            'class_letter'     => $rep['student']->class_letter ?? '',
+            'ovz_type'         => $rep['ovz'][0] ?? 0,
+            'special_needs'    => $rep['student']->special_needs ?? '',
+            'avg_score'        => $rep['avg'],
+        ];
+        $crit   = $generator->build_criteria($profile);
+        $prompt = $generator->build_prompt($profile, $topic, $extra_prompt);
+
+        echo '<div class="card p-3 mb-3">';
+        echo '<h5>' . s(($level_names[$level] ?? ('Уровень ' . $level))
+            . ' уровень - ' . count($infos) . ' уч.') . '</h5>';
+
+        echo '<ul class="mb-2">';
+        echo '<li>Категория: ' . s($crit['category_label']) . '</li>';
+        if (!empty($crit['ovz_labels'])) {
+            echo '<li>Типы ОВЗ: ' . s(implode('; ', $crit['ovz_labels'])) . '</li>';
+        }
+        $lvl_line = 'Уровень материала: ' . s($crit['level_label']);
+        if ($crit['level_change_reason'] !== null) {
+            $lvl_line .= ' <span class="text-muted">(' . s($crit['level_change_reason']) . ')</span>';
+        }
+        echo '<li>' . $lvl_line . '</li>';
+        echo '<li>Средний балл представителя: ' . s((string)$crit['avg_score']) . '%</li>';
+        echo '<li>Объем: ' . s($crit['word_count']) . ' слов</li>';
+        if (!empty($crit['special_parts'])) {
+            echo '<li>Особые указания:<ul>';
+            foreach ($crit['special_parts'] as $p) {
+                echo '<li>' . s($p) . '</li>';
+            }
+            echo '</ul></li>';
+        }
+        echo '</ul>';
+
+        $has_divergence = false;
+        echo '<p class="mb-1"><strong>Ученики группы:</strong></p><ul class="mb-2">';
+        foreach ($infos as $sid => $info) {
+            $diff = [];
+            if ($info['cats'] !== $rep['cats']) {
+                $diff[] = 'другие категории';
+            }
+            if ($info['ovz'] !== $rep['ovz']) {
+                $diff[] = 'другие типы ОВЗ';
+            }
+            if ($info['eff'] !== $rep['eff']) {
+                $diff[] = 'расчетный уровень: ' . ($level_names[$info['eff']] ?? $info['eff']);
+            }
+            $line = s($info['fio']) . ' - ' . s($info['cls']);
+            if ($sid === $rep_sid) {
+                $line .= ' <span class="badge badge-info">представитель</span>';
+            } else if (!empty($diff)) {
+                $has_divergence = true;
+                $line .= ' <span class="badge badge-warning">'
+                       . s('отличается: ' . implode(', ', $diff)) . '</span>';
+            }
+            echo '<li>' . $line . '</li>';
+        }
+        echo '</ul>';
+
+        if ($has_divergence) {
+            echo $OUTPUT->notification(
+                'В группе есть ученики с отличающимся профилем. Материал группы будет создан '
+                . 'по профилю представителя: ' . s($rep['fio']) . '.', 'warning');
+        }
+
+        echo '<details class="mt-2"><summary>Полный текст промта</summary>'
+           . '<pre class="p-2 bg-light border rounded" style="white-space:pre-wrap">'
+           . s($prompt) . '</pre></details>';
+        echo '</div>';
+    }
+
+    // Форма подтверждения: те же параметры + action=confirm.
+    echo html_writer::start_tag('form', ['method' => 'post',
+        'action' => new moodle_url('/local/unics/pages/generate_umk.php')]);
+    $hidden = [
+        'action'              => 'confirm',
+        'sesskey'             => sesskey(),
+        'course_id'           => (int)$course_id,
+        'title'               => $title,
+        'topic'               => $topic,
+        'target_section'      => (int)$target_section,
+        'extra_prompt'        => $extra_prompt,
+        'generate_audio'      => (int)$generate_audio,
+        'generate_quiz'       => (int)$generate_quiz,
+        'generate_assignment' => (int)$generate_assignment,
+        'generate_video'      => (int)$generate_video,
+    ];
+    foreach ($hidden as $hn => $hv) {
+        echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => $hn, 'value' => $hv]);
+    }
+    foreach ($level_groups as $sids) {
+        foreach ($sids as $sid) {
+            echo html_writer::empty_tag('input',
+                ['type' => 'hidden', 'name' => 'student_ids[]', 'value' => (int)$sid]);
+        }
+    }
+    echo html_writer::tag('button', 'Подтвердить и запустить',
+        ['type' => 'submit', 'class' => 'btn btn-primary mr-2']);
+    echo html_writer::tag('button', 'Назад',
+        ['type' => 'button', 'class' => 'btn btn-outline-secondary',
+         'onclick' => 'history.back()']);
+    echo html_writer::end_tag('form');
+
+    echo $OUTPUT->footer();
+    exit;
 }
 
 // ----------------------------------------------------------------
@@ -537,8 +735,10 @@ echo html_writer::tag('small',
 );
 echo html_writer::end_tag('div');
 
-echo html_writer::tag('button', 'Запустить генерацию',
+echo html_writer::tag('button', 'Продолжить',
     ['type' => 'submit', 'class' => 'btn btn-primary mt-3 mr-2']);
+echo html_writer::tag('small', 'На следующем шаге - превью материала перед запуском.',
+    ['class' => 'form-text text-muted d-block']);
 echo html_writer::link(
     new moodle_url('/local/unics/pages/umk_status.php'),
     'Отмена', ['class' => 'btn btn-outline-secondary mt-3']
