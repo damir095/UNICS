@@ -79,6 +79,17 @@ class provider implements
             'points' => 'privacy:metadata:unics_students:points',
         ], 'privacy:metadata:unics_students');
 
+        // Нормализованные таблицы категорий/ОВЗ (этап 2.6): та же особая категория
+        // ПДн, что и CSV-поля выше - декларируем и выгружаем наравне с ними.
+        $collection->add_database_table('unics_student_category', [
+            'student_id' => $s,
+            'category' => 'privacy:metadata:unics_students:category',
+        ], 'privacy:metadata:unics_student_category');
+        $collection->add_database_table('unics_student_ovz', [
+            'student_id' => $s,
+            'ovz_type' => 'privacy:metadata:unics_students:ovz_type',
+        ], 'privacy:metadata:unics_student_ovz');
+
         $collection->add_database_table('unics_teachers', [
             'mdl_user_id' => $u,
             'subjects' => 'privacy:metadata:unics_teachers:subjects',
@@ -283,6 +294,8 @@ class provider implements
         ];
         if ($sid !== null) {
             $sets = array_merge($sets, [
+                ['profile', 'unics_student_category', ['student_id' => $sid]],
+                ['profile', 'unics_student_ovz', ['student_id' => $sid]],
                 ['links', 'unics_teacher_student', ['student_id' => $sid]],
                 ['links', 'unics_parent_student', ['student_id' => $sid]],
                 ['learning', 'unics_level_history', ['student_id' => $sid]],

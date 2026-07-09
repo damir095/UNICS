@@ -1403,5 +1403,51 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026070603, 'local', 'unics');
     }
 
+    if ($oldversion < 2026070900) {
+        // Этап 2.6 аудита, инкремент A: нормализация CSV-полей категорий/ОВЗ.
+        // Junction-таблицы + backfill из CSV. CSV-колонки unics_students.category/
+        // ovz_type живут до инкремента C; согласованность держит dual-write в
+        // unics_user_manager::sync_student_taxonomies().
+        $defs = [
+            'unics_student_category' => ['category', 'ux_studcat'],
+            'unics_student_ovz'      => ['ovz_type', 'ux_studovz'],
+        ];
+        foreach ($defs as $tname => [$col, $uxname]) {
+            $table = new xmldb_table($tname);
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+            $table->add_field('student_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+            $table->add_field($col, XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL);
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+            $table->add_index($uxname, XMLDB_INDEX_UNIQUE, ['student_id', $col]);
+            if (!$dbman->table_exists($table)) {
+                $dbman->create_table($table);
+            }
+        }
+
+        // Backfill из CSV; идемпотентно (guard record_exists - прерванный прогон доливается).
+        require_once(__DIR__ . '/../classes/identity/student_helper.php');
+        $rs = $DB->get_recordset('unics_students', null, '', 'id, category, ovz_type');
+        foreach ($rs as $s) {
+            foreach (\local_unics\identity\student_helper::parse_csv($s->category) as $cat) {
+                if (!$DB->record_exists('unics_student_category',
+                        ['student_id' => $s->id, 'category' => $cat])) {
+                    $DB->insert_record('unics_student_category',
+                        (object)['student_id' => $s->id, 'category' => $cat]);
+                }
+            }
+            foreach (\local_unics\identity\student_helper::parse_csv($s->ovz_type) as $ovz) {
+                if (!$DB->record_exists('unics_student_ovz',
+                        ['student_id' => $s->id, 'ovz_type' => $ovz])) {
+                    $DB->insert_record('unics_student_ovz',
+                        (object)['student_id' => $s->id, 'ovz_type' => $ovz]);
+                }
+            }
+        }
+        $rs->close();
+
+        upgrade_plugin_savepoint(true, 2026070900, 'local', 'unics');
+    }
+
     return true;
 }

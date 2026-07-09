@@ -64,7 +64,7 @@ class unics_user_manager {
                     $ovz_csv = '';
                 }
 
-                $DB->insert_record('unics_students', (object)[
+                $new_student_id = $DB->insert_record('unics_students', (object)[
                     'mdl_user_id'      => $mdl_user_id,
                     'organization_id'  => $data['organization_id'],
                     'category'         => $category_csv, // пусто = обычный учащийся
@@ -74,6 +74,8 @@ class unics_user_manager {
                     'class_letter'     => !empty($data['class_letter']) ? $data['class_letter'] : null,
                     'special_needs'    => $data['special_needs'] ?? null,
                 ]);
+                // Нормализованные таблицы категорий/ОВЗ (этап 2.6, dual-write).
+                self::sync_student_taxonomies((int)$new_student_id, $category_csv, $ovz_csv);
                 break;
 
             case 4: // Методист организации (скоуп: организация)
@@ -443,6 +445,8 @@ class unics_user_manager {
             $student->class_letter     = $data['class_letter'] ?? $student->class_letter;
             $student->special_needs    = $data['special_needs'] ?? $student->special_needs;
             $DB->update_record('unics_students', $student);
+            // Нормализованные таблицы категорий/ОВЗ (этап 2.6, dual-write).
+            self::sync_student_taxonomies((int)$student->id, $student->category, $student->ovz_type);
             self::set_student_level($mdl_user_id, (int)$student->difficulty_level);
         }
 
@@ -633,5 +637,30 @@ class unics_user_manager {
      */
     public static function ensure_profile_field(): int {
         return \local_unics\ai\course_template::ensure_profile_field();
+    }
+
+    /**
+     * Синхронизация нормализованных таблиц категорий/ОВЗ с CSV-полями ученика
+     * (этап 2.6, инкремент A: dual-write - обе формы хранятся согласованно,
+     * CSV-колонки уйдут в инкременте C). Полная замена набора: delete + insert.
+     *
+     * @param int   $student_id   id в unics_students
+     * @param mixed $category_csv CSV/int/null - значение поля category
+     * @param mixed $ovz_csv      CSV/int/null - значение поля ovz_type
+     */
+    public static function sync_student_taxonomies(int $student_id, $category_csv, $ovz_csv): void {
+        global $DB;
+        $map = [
+            'unics_student_category' => ['category',
+                \local_unics\identity\student_helper::parse_csv($category_csv)],
+            'unics_student_ovz'      => ['ovz_type',
+                \local_unics\identity\student_helper::parse_csv($ovz_csv)],
+        ];
+        foreach ($map as $table => [$col, $ids]) {
+            $DB->delete_records($table, ['student_id' => $student_id]);
+            foreach ($ids as $v) {
+                $DB->insert_record($table, (object)['student_id' => $student_id, $col => $v]);
+            }
+        }
     }
 }

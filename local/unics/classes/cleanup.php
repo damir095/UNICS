@@ -98,7 +98,8 @@ class cleanup {
                 'unics_learning_path', 'unics_skill_mastery', 'unics_mastery_history',
                 'unics_adaptive_suggestion', 'unics_cat_session', 'unics_reports',
                 'unics_comments', 'unics_comment_seen', 'unics_level_history',
-                'unics_stats_student_course'] as $table) {
+                'unics_stats_student_course',
+                'unics_student_category', 'unics_student_ovz'] as $table) {
                 $DB->delete_records($table, ['student_id' => $sid]);
             }
         }
