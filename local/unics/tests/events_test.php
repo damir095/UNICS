@@ -5,6 +5,7 @@ use local_unics\event\points_awarded;
 use local_unics\event\points_spent;
 use local_unics\event\level_changed;
 use local_unics\event\umk_published;
+use local_unics\social\points_manager;
 
 /**
  * Тесты событий local_unics (этап 2.4 аудита): классы и эмиссия из менеджеров.
@@ -79,5 +80,52 @@ final class events_test extends \advanced_testcase {
             'relateduserid' => 2,
             'other'         => ['points' => 5], // нет student_id/reason_type
         ]);
+    }
+
+    public function test_points_award_emits_event(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [$sid, $uid] = $this->make_student();
+
+        $sink = $this->redirectEvents();
+        points_manager::award($sid, 10, points_manager::REASON_QUIZ_PASS, 'тест сдан');
+        $events = array_values(array_filter($sink->get_events(),
+            static fn($e) => $e instanceof points_awarded));
+        $sink->close();
+
+        $this->assertCount(1, $events);
+        $e = $events[0];
+        $this->assertSame($uid, (int)$e->relateduserid);
+        $this->assertSame($sid, (int)$e->other['student_id']);
+        $this->assertSame(10, (int)$e->other['points']);
+        $this->assertSame(points_manager::REASON_QUIZ_PASS, (int)$e->other['reason_type']);
+        $this->assertTrue($DB->record_exists('unics_points_log', ['id' => $e->objectid]));
+    }
+
+    public function test_points_spend_emits_event(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [$sid, $uid] = $this->make_student();
+        points_manager::award($sid, 50, points_manager::REASON_BADGE, 'значок');
+
+        $sink = $this->redirectEvents();
+        $ok = points_manager::spend($sid, 30, 'покупка стикера');
+        $events = array_values(array_filter($sink->get_events(),
+            static fn($e) => $e instanceof points_spent));
+        $sink->close();
+
+        $this->assertTrue($ok);
+        $this->assertCount(1, $events);
+        $e = $events[0];
+        $this->assertSame($uid, (int)$e->relateduserid);
+        $this->assertSame($sid, (int)$e->other['student_id']);
+        $this->assertSame(30, (int)$e->other['points']);
+        $this->assertTrue($DB->record_exists('unics_points_log', ['id' => $e->objectid]));
+        // Отказ по балансу события не эмитит.
+        $sink2 = $this->redirectEvents();
+        $this->assertFalse(points_manager::spend($sid, 999, 'дорого'));
+        $this->assertCount(0, array_filter($sink2->get_events(),
+            static fn($e) => $e instanceof points_spent));
+        $sink2->close();
     }
 }

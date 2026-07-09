@@ -27,7 +27,7 @@ class points_manager {
     public static function award(int $student_id, int $points, int $reason_type, string $reason_text): int {
         global $DB;
 
-        $DB->insert_record('unics_points_log', (object)[
+        $log_id = $DB->insert_record('unics_points_log', (object)[
             'student_id'  => $student_id,
             'points'      => $points,
             'reason_type' => $reason_type,
@@ -39,6 +39,21 @@ class points_manager {
             "UPDATE {unics_students} SET points = points + :pts WHERE id = :sid",
             ['pts' => $points, 'sid' => $student_id]
         );
+
+        // Событие в штатный журнал (этап 2.4 аудита); ПДн в other не кладем.
+        $mdl_user_id = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+        if ($mdl_user_id) {
+            \local_unics\event\points_awarded::create([
+                'context'       => \context_system::instance(),
+                'objectid'      => $log_id,
+                'relateduserid' => $mdl_user_id,
+                'other'         => [
+                    'student_id'  => $student_id,
+                    'points'      => $points,
+                    'reason_type' => $reason_type,
+                ],
+            ])->trigger();
+        }
 
         return self::get_balance($student_id);
     }
@@ -53,7 +68,7 @@ class points_manager {
             return false;
         }
 
-        $DB->insert_record('unics_points_log', (object)[
+        $log_id = $DB->insert_record('unics_points_log', (object)[
             'student_id'  => $student_id,
             'points'      => -$cost,
             'reason_type' => self::REASON_PURCHASE,
@@ -65,6 +80,20 @@ class points_manager {
             "UPDATE {unics_students} SET points = points - :pts WHERE id = :sid",
             ['pts' => $cost, 'sid' => $student_id]
         );
+
+        // Событие в штатный журнал (этап 2.4 аудита); points = положительный размер списания.
+        $mdl_user_id = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+        if ($mdl_user_id) {
+            \local_unics\event\points_spent::create([
+                'context'       => \context_system::instance(),
+                'objectid'      => $log_id,
+                'relateduserid' => $mdl_user_id,
+                'other'         => [
+                    'student_id' => $student_id,
+                    'points'     => $cost,
+                ],
+            ])->trigger();
+        }
 
         return true;
     }
