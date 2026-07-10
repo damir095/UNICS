@@ -74,18 +74,7 @@ class adaptive_engine {
         $DB->set_field('unics_students', 'difficulty_level', $level, ['id' => $student_id]);
 
         // История уровней (как evaluate_student) - честный переход cur -> level.
-        try {
-            $DB->insert_record('unics_level_history', (object)[
-                'student_id'  => $student_id,
-                'mdl_user_id' => (int)$student->mdl_user_id,
-                'old_level'   => $cur,
-                'new_level'   => $level,
-                'avg_score'   => round($pct, 2),
-                'changed_at'  => time(),
-            ]);
-        } catch (\Throwable $e) {
-            debugging('local_unics: запись стартовой диагностики не удалась: ' . $e->getMessage(), DEBUG_DEVELOPER);
-        }
+        self::record_level_history($student_id, (int)$student->mdl_user_id, $cur, $level, $pct);
 
         // Поле профиля Moodle (как в evaluate_student).
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $level);
@@ -212,6 +201,27 @@ class adaptive_engine {
     }
 
     /**
+     * Строка в unics_level_history. Нефатально: ошибка гасится debugging'ом
+     * (как в исходных инлайн-блоках apply_level/diagnose_student).
+     */
+    public static function record_level_history(int $student_id, int $mdl_user_id,
+            int $old, int $new, ?float $avg): void {
+        global $DB;
+        try {
+            $DB->insert_record('unics_level_history', (object)[
+                'student_id'  => $student_id,
+                'mdl_user_id' => $mdl_user_id,
+                'old_level'   => $old,
+                'new_level'   => $new,
+                'avg_score'   => $avg !== null ? round($avg, 2) : null,
+                'changed_at'  => time(),
+            ]);
+        } catch (\Throwable $e) {
+            debugging('local_unics: запись unics_level_history не удалась: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+    }
+
+    /**
      * Применить новый уровень учащемуся: difficulty_level + история + поле профиля +
      * уведомления (ученик/родители/педагоги) + баллы за повышение. Чистое применение,
      * БЕЗ вычисления и БЕЗ гейта - используется и evaluate_student (мгновенно), и
@@ -233,18 +243,7 @@ class adaptive_engine {
 
         $DB->set_field('unics_students', 'difficulty_level', $new_lvl, ['id' => $student_id]);
 
-        try {
-            $DB->insert_record('unics_level_history', (object)[
-                'student_id'  => $student_id,
-                'mdl_user_id' => (int)$student->mdl_user_id,
-                'old_level'   => $cur_lvl,
-                'new_level'   => $new_lvl,
-                'avg_score'   => $avg !== null ? round($avg, 2) : null,
-                'changed_at'  => time(),
-            ]);
-        } catch (\Throwable $e) {
-            debugging('local_unics: запись unics_level_history не удалась: ' . $e->getMessage(), DEBUG_DEVELOPER);
-        }
+        self::record_level_history($student_id, (int)$student->mdl_user_id, $cur_lvl, $new_lvl, $avg);
 
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $new_lvl);
 
