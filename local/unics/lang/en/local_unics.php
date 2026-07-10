@@ -214,3 +214,5 @@ $string['eventparentstudentassigned'] = 'Parent assigned to student';
 $string['eventorganizationcreated'] = 'Organization created';
 $string['eventorganizationupdated'] = 'Organization updated';
 $string['eventorganizationdeleted'] = 'Organization deleted';
+$string['eventteacherstudentunassigned'] = 'Teacher unassigned from student';
+$string['eventparentstudentunassigned'] = 'Parent unassigned from student';

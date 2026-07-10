@@ -431,7 +431,20 @@ class unics_user_manager {
      */
     public static function remove_teacher_student(int $id): void {
         global $DB;
+        $row = $DB->get_record('unics_teacher_student', ['id' => $id]);
+        if (!$row) {
+            return;
+        }
         $DB->delete_records('unics_teacher_student', ['id' => $id]);
+
+        // Аудит (этап 4.4, отвязка).
+        $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $row->student_id]);
+        \local_unics\event\teacher_student_unassigned::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => (int)$row->student_id,
+            'relateduserid' => $s_uid ?: null,
+            'other'         => ['teacher_id' => (int)$row->teacher_id, 'student_id' => (int)$row->student_id],
+        ])->trigger();
     }
 
     /**
@@ -439,7 +452,20 @@ class unics_user_manager {
      */
     public static function remove_parent_student(int $id): void {
         global $DB;
+        $row = $DB->get_record('unics_parent_student', ['id' => $id]);
+        if (!$row) {
+            return;
+        }
         $DB->delete_records('unics_parent_student', ['id' => $id]);
+
+        // Аудит (этап 4.4, отвязка).
+        $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $row->student_id]);
+        \local_unics\event\parent_student_unassigned::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => (int)$row->student_id,
+            'relateduserid' => $s_uid ?: null,
+            'other'         => ['parent_mdl_user_id' => (int)$row->parent_mdl_user_id, 'student_id' => (int)$row->student_id],
+        ])->trigger();
     }
 
     /**

@@ -12,6 +12,8 @@ use local_unics\event\parent_student_assigned;
 use local_unics\event\organization_created;
 use local_unics\event\organization_updated;
 use local_unics\event\organization_deleted;
+use local_unics\event\teacher_student_unassigned;
+use local_unics\event\parent_student_unassigned;
 use local_unics\social\points_manager;
 use local_unics\learning\adaptive_engine;
 
@@ -31,6 +33,8 @@ use local_unics\learning\adaptive_engine;
 #[\PHPUnit\Framework\Attributes\CoversClass(organization_created::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(organization_updated::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(organization_deleted::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(teacher_student_unassigned::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(parent_student_unassigned::class)]
 final class events_test extends \advanced_testcase {
 
     /** Временный ученик: [unics_students.id, mdl_user_id]. */
@@ -292,6 +296,46 @@ final class events_test extends \advanced_testcase {
         $this->assertSame('Аудит-орг', $created[0]->other['name']);
         $this->assertCount(1, $updated);
         $this->assertCount(1, $deleted);
+    }
+
+    public function test_unassign_links_emit_events(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $this->resetAfterTest();
+        $tu = $this->getDataGenerator()->create_user();
+        $su = $this->getDataGenerator()->create_user();
+        $pu = $this->getDataGenerator()->create_user();
+        $tid = $DB->insert_record('unics_teachers', (object)['mdl_user_id' => $tu->id]);
+        $sid = $DB->insert_record('unics_students', (object)['mdl_user_id' => $su->id, 'difficulty_level' => 2]);
+        $ts_id = $DB->insert_record('unics_teacher_student',
+            (object)['teacher_id' => $tid, 'student_id' => $sid, 'assigned_by' => $tu->id, 'assigned_at' => time()]);
+        $ps_id = $DB->insert_record('unics_parent_student',
+            (object)['parent_mdl_user_id' => $pu->id, 'student_id' => $sid]);
+
+        $sink = $this->redirectEvents();
+        \unics_user_manager::remove_teacher_student((int)$ts_id);
+        \unics_user_manager::remove_parent_student((int)$ps_id);
+        $te = array_values(array_filter($sink->get_events(), static fn($e) => $e instanceof teacher_student_unassigned));
+        $pe = array_values(array_filter($sink->get_events(), static fn($e) => $e instanceof parent_student_unassigned));
+        $sink->close();
+
+        $this->assertCount(1, $te);
+        $this->assertSame((int)$tid, (int)$te[0]->other['teacher_id']);
+        $this->assertSame((int)$sid, (int)$te[0]->other['student_id']);
+        $this->assertSame((int)$su->id, (int)$te[0]->relateduserid);
+        $this->assertCount(1, $pe);
+        $this->assertSame((int)$pu->id, (int)$pe[0]->other['parent_mdl_user_id']);
+    }
+
+    public function test_unassign_missing_link_no_event(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $this->resetAfterTest();
+        $sink = $this->redirectEvents();
+        \unics_user_manager::remove_teacher_student(999999); // нет такой связи
+        $ev = array_filter($sink->get_events(), static fn($e) => $e instanceof teacher_student_unassigned);
+        $sink->close();
+        $this->assertCount(0, $ev);
     }
 
     public function test_organization_delete_blocked_no_event(): void {

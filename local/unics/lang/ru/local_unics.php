@@ -227,3 +227,5 @@ $string['eventparentstudentassigned'] = 'Родитель привязан к у
 $string['eventorganizationcreated'] = 'Организация создана';
 $string['eventorganizationupdated'] = 'Организация обновлена';
 $string['eventorganizationdeleted'] = 'Организация удалена';
+$string['eventteacherstudentunassigned'] = 'Педагог отвязан от учащегося';
+$string['eventparentstudentunassigned'] = 'Родитель отвязан от учащегося';
