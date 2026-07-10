@@ -571,6 +571,13 @@ JS;
         $errors = parent::validation($data, $files);
         $role   = (int)($data['unics_role'] ?? 0);
 
+        // Запрет HTML-разметки в ФИО (follow-up 4.4): ядровые отчеты не экранируют ФИО.
+        foreach (['lastname', 'firstname', 'middlename'] as $f) {
+            if (\local_unics\identity\name_validator::has_markup($data[$f] ?? null)) {
+                $errors[$f] = 'Имя не должно содержать символы < или >';
+            }
+        }
+
         if (!empty($data['username']) && $DB->record_exists('user', ['username' => $data['username']])) {
             $errors['username'] = 'Пользователь с таким логином уже существует';
         }

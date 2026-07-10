@@ -141,6 +141,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             }
         }
 
+        // Запрет HTML-разметки в ФИО (follow-up 4.4).
+        foreach (['lastname', 'firstname', 'middlename'] as $nf) {
+            if (\local_unics\identity\name_validator::has_markup($data[$nf] ?? null)) {
+                $errors[] = "Поле «{$nf}» содержит недопустимые символы < или >";
+            }
+        }
+
         // Валидация роли
         $role = (int)($data['unics_role'] ?? 0);
         if (!isset($ROLES[$role])) {
