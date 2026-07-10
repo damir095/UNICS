@@ -14,7 +14,6 @@ use local_unics\event\organization_updated;
 use local_unics\event\organization_deleted;
 use local_unics\social\points_manager;
 use local_unics\learning\adaptive_engine;
-use local_unics\identity\organization_manager;
 
 /**
  * Тесты событий local_unics (этап 2.4 + 4.4 аудита): классы и эмиссия из менеджеров.
@@ -269,5 +268,48 @@ final class events_test extends \advanced_testcase {
         $this->assertSame((int)$tid, (int)$te[0]->other['teacher_id']);
         $this->assertCount(1, $pe);
         $this->assertSame((int)$sid, (int)$pe[0]->other['student_id']);
+    }
+
+    public function test_organization_events(): void {
+        global $DB, $CFG;
+        // Легаси-глобальный класс без неймспейса - автолоадер не видит.
+        require_once($CFG->dirroot . '/local/unics/classes/identity/organization_manager.php');
+        $this->resetAfterTest();
+        $did = $DB->insert_record('unics_districts', (object)['name' => 'Тест-район', 'region_id' => 0]);
+
+        $sink = $this->redirectEvents();
+        $oid = \unics_organization_manager::create_organization((int)$did, 'Аудит-орг', 'АО', 1);
+        \unics_organization_manager::update_organization($oid, ['name' => 'Аудит-орг 2']);
+        $res = \unics_organization_manager::delete_organization($oid); // нет пользователей -> успех
+        $created = array_values(array_filter($sink->get_events(), static fn($e) => $e instanceof organization_created));
+        $updated = array_values(array_filter($sink->get_events(), static fn($e) => $e instanceof organization_updated));
+        $deleted = array_values(array_filter($sink->get_events(), static fn($e) => $e instanceof organization_deleted));
+        $sink->close();
+
+        $this->assertTrue($res === true);
+        $this->assertCount(1, $created);
+        $this->assertSame($oid, (int)$created[0]->objectid);
+        $this->assertSame('Аудит-орг', $created[0]->other['name']);
+        $this->assertCount(1, $updated);
+        $this->assertCount(1, $deleted);
+    }
+
+    public function test_organization_delete_blocked_no_event(): void {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/organization_manager.php');
+        $this->resetAfterTest();
+        $did = $DB->insert_record('unics_districts', (object)['name' => 'Тест-район2', 'region_id' => 0]);
+        $oid = \unics_organization_manager::create_organization((int)$did, 'Занятая орг', 'ЗО', 1);
+        // Активный пользователь в орг -> удаление блокируется.
+        $u = $this->getDataGenerator()->create_user();
+        $DB->insert_record('unics_user_org', (object)['mdl_user_id' => $u->id,
+            'organization_id' => $oid, 'unics_role' => 5]);
+
+        $sink = $this->redirectEvents();
+        $res = \unics_organization_manager::delete_organization($oid);
+        $deleted = array_filter($sink->get_events(), static fn($e) => $e instanceof organization_deleted);
+        $sink->close();
+        $this->assertIsString($res); // строка-отказ
+        $this->assertCount(0, $deleted);
     }
 }

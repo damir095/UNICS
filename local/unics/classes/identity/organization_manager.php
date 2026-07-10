@@ -88,7 +88,7 @@ class unics_organization_manager {
     ): int {
         global $DB;
 
-        return $DB->insert_record('unics_organizations', (object)[
+        $id = $DB->insert_record('unics_organizations', (object)[
             'district_id' => $district_id,
             'name'        => $name,
             'short_name'  => $short_name,
@@ -98,12 +98,28 @@ class unics_organization_manager {
             'email'       => $email,
             'is_active'   => 1,
         ]);
+
+        // Аудит (этап 4.4).
+        \local_unics\event\organization_created::create([
+            'context'  => \context_system::instance(),
+            'objectid' => $id,
+            'other'    => ['name' => $name, 'district_id' => $district_id],
+        ])->trigger();
+
+        return $id;
     }
 
     public static function update_organization(int $id, array $data): void {
         global $DB;
         $data['id'] = $id;
         $DB->update_record('unics_organizations', (object)$data);
+
+        // Аудит (этап 4.4).
+        \local_unics\event\organization_updated::create([
+            'context'  => \context_system::instance(),
+            'objectid' => $id,
+            'other'    => ['name' => (string)($data['name'] ?? '')],
+        ])->trigger();
     }
 
     // ----------------------------------------------------------------
@@ -137,6 +153,14 @@ class unics_organization_manager {
         }
 
         $DB->set_field('unics_organizations', 'is_active', 0, ['id' => $id]);
+
+        // Аудит (этап 4.4): только при фактическом удалении.
+        \local_unics\event\organization_deleted::create([
+            'context'  => \context_system::instance(),
+            'objectid' => $id,
+            'other'    => [],
+        ])->trigger();
+
         return true;
     }
 
