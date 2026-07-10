@@ -218,3 +218,12 @@ $string['eventpointsawarded'] = 'Баллы начислены';
 $string['eventpointsspent'] = 'Баллы списаны';
 $string['eventlevelchanged'] = 'Уровень учащегося изменен';
 $string['eventumkpublished'] = 'УМК опубликован';
+
+// События аудита админ-мутаций (этап 4.4).
+$string['eventusercreated'] = 'Пользователь создан';
+$string['eventuserupdated'] = 'Пользователь обновлен';
+$string['eventteacherstudentassigned'] = 'Педагог привязан к учащемуся';
+$string['eventparentstudentassigned'] = 'Родитель привязан к учащемуся';
+$string['eventorganizationcreated'] = 'Организация создана';
+$string['eventorganizationupdated'] = 'Организация обновлена';
+$string['eventorganizationdeleted'] = 'Организация удалена';

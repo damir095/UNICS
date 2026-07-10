@@ -5,11 +5,19 @@ use local_unics\event\points_awarded;
 use local_unics\event\points_spent;
 use local_unics\event\level_changed;
 use local_unics\event\umk_published;
+use local_unics\event\user_created;
+use local_unics\event\user_updated;
+use local_unics\event\teacher_student_assigned;
+use local_unics\event\parent_student_assigned;
+use local_unics\event\organization_created;
+use local_unics\event\organization_updated;
+use local_unics\event\organization_deleted;
 use local_unics\social\points_manager;
 use local_unics\learning\adaptive_engine;
+use local_unics\identity\organization_manager;
 
 /**
- * Тесты событий local_unics (этап 2.4 аудита): классы и эмиссия из менеджеров.
+ * Тесты событий local_unics (этап 2.4 + 4.4 аудита): классы и эмиссия из менеджеров.
  *
  * @package local_unics
  */
@@ -17,6 +25,13 @@ use local_unics\learning\adaptive_engine;
 #[\PHPUnit\Framework\Attributes\CoversClass(points_spent::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(level_changed::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(umk_published::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(user_created::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(user_updated::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(teacher_student_assigned::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(parent_student_assigned::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(organization_created::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(organization_updated::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(organization_deleted::class)]
 final class events_test extends \advanced_testcase {
 
     /** Временный ученик: [unics_students.id, mdl_user_id]. */
@@ -151,5 +166,45 @@ final class events_test extends \advanced_testcase {
         $this->assertSame(2, (int)$e->other['old_level']);
         $this->assertSame(1, (int)$e->other['new_level']);
         $this->assertSame('apply', $e->other['source']);
+    }
+
+    // ---- Этап 4.4: аудит админ-мутаций ----
+
+    public function test_audit_event_classes_create_and_describe(): void {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $uid = (int)$user->id;
+        $ctx = \context_system::instance();
+        $sink = $this->redirectEvents();
+
+        user_created::create(['context' => $ctx, 'objectid' => $uid, 'relateduserid' => $uid,
+            'other' => ['unics_role' => 7, 'region_id' => null, 'district_id' => null,
+                        'organization_id' => 3]])->trigger();
+        user_updated::create(['context' => $ctx, 'objectid' => $uid, 'relateduserid' => $uid,
+            'other' => ['changed' => ['firstname', 'email']]])->trigger();
+        teacher_student_assigned::create(['context' => $ctx, 'objectid' => $uid, 'relateduserid' => $uid,
+            'other' => ['teacher_id' => 5, 'student_id' => 9]])->trigger();
+        parent_student_assigned::create(['context' => $ctx, 'objectid' => $uid, 'relateduserid' => $uid,
+            'other' => ['parent_mdl_user_id' => $uid, 'student_id' => 9]])->trigger();
+        organization_created::create(['context' => $ctx, 'objectid' => 7,
+            'other' => ['name' => 'Тест-орг', 'district_id' => 2]])->trigger();
+        organization_updated::create(['context' => $ctx, 'objectid' => 7,
+            'other' => ['name' => 'Тест-орг 2']])->trigger();
+        organization_deleted::create(['context' => $ctx, 'objectid' => 7, 'other' => []])->trigger();
+
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertCount(7, $events);
+        foreach ($events as $e) {
+            $this->assertNotSame('', (string)$e->get_name());
+            $this->assertNotSame('', (string)$e->get_description());
+        }
+    }
+
+    public function test_user_created_requires_role(): void {
+        $this->resetAfterTest();
+        $this->expectException(\coding_exception::class);
+        user_created::create(['context' => \context_system::instance(), 'objectid' => 1,
+            'relateduserid' => 1, 'other' => ['organization_id' => 3]]); // нет unics_role
     }
 }
