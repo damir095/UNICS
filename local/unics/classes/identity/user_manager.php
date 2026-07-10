@@ -116,7 +116,7 @@ class unics_user_manager {
         }
 
         // 5. Устанавливаем кастомное поле профиля unics_level (для учащихся)
-        if ((int)$data['unics_role'] === role_manager::ROLE_STUDENT) {
+        if ((int)$data['unics_role'] === \local_unics\identity\role_manager::ROLE_STUDENT) {
             self::set_student_level($mdl_user_id, (int)($data['difficulty_level'] ?? 2));
         }
 
@@ -125,9 +125,22 @@ class unics_user_manager {
         // районного админа — роль 2 — этого не делаем, её существование под вопросом).
         // При удалении/архиве siteadmin НЕ отзывается автоматически — потребуется
         // ручная чистка через Site administration → Permissions → Site administrators.
-        if ((int)$data['unics_role'] === role_manager::ROLE_REGION_ADMIN) {
+        if ((int)$data['unics_role'] === \local_unics\identity\role_manager::ROLE_REGION_ADMIN) {
             self::add_to_siteadmins($mdl_user_id);
         }
+
+        // Аудит (этап 4.4): создание пользователя с ролью и скоупом.
+        \local_unics\event\user_created::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => $mdl_user_id,
+            'relateduserid' => $mdl_user_id,
+            'other'         => [
+                'unics_role'      => (int)$data['unics_role'],
+                'region_id'       => !empty($data['region_id'])       ? (int)$data['region_id']       : null,
+                'district_id'     => !empty($data['district_id'])     ? (int)$data['district_id']     : null,
+                'organization_id' => !empty($data['organization_id']) ? (int)$data['organization_id'] : null,
+            ],
+        ])->trigger();
 
         return $mdl_user_id;
     }
@@ -374,6 +387,15 @@ class unics_user_manager {
             debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
 
+        // Аудит (этап 4.4): привязка педагог-ученик.
+        $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+        \local_unics\event\teacher_student_assigned::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => $student_id,
+            'relateduserid' => $s_uid ?: null,
+            'other'         => ['teacher_id' => $teacher_id, 'student_id' => $student_id],
+        ])->trigger();
+
         return true;
     }
 
@@ -391,6 +413,15 @@ class unics_user_manager {
             'parent_mdl_user_id' => $parent_mdl_user_id,
             'student_id'         => $student_id,
         ]);
+
+        // Аудит (этап 4.4): привязка родитель-ученик.
+        $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+        \local_unics\event\parent_student_assigned::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => $student_id,
+            'relateduserid' => $s_uid ?: null,
+            'other'         => ['parent_mdl_user_id' => $parent_mdl_user_id, 'student_id' => $student_id],
+        ])->trigger();
 
         return true;
     }
@@ -483,6 +514,14 @@ class unics_user_manager {
             }
             $DB->update_record('unics_teachers', $teacher);
         }
+
+        // Аудит (этап 4.4): обновление пользователя. В other - только КЛЮЧИ полей.
+        \local_unics\event\user_updated::create([
+            'context'       => \context_system::instance(),
+            'objectid'      => $mdl_user_id,
+            'relateduserid' => $mdl_user_id,
+            'other'         => ['changed' => array_values(array_keys($data))],
+        ])->trigger();
     }
 
     /**

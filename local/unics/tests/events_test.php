@@ -207,4 +207,67 @@ final class events_test extends \advanced_testcase {
         user_created::create(['context' => \context_system::instance(), 'objectid' => 1,
             'relateduserid' => 1, 'other' => ['organization_id' => 3]]); // нет unics_role
     }
+
+    public function test_create_user_emits_event(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $this->resetAfterTest();
+        $sink = $this->redirectEvents();
+        $uid = \unics_user_manager::create_user([
+            'firstname' => 'Тест', 'lastname' => 'Педагогов',
+            'email' => 'auditprobe1@demo.unics.local', 'username' => 'auditprobe1',
+            'password' => 'Pass123!x', 'unics_role' => 5, 'organization_id' => null,
+        ]);
+        // create_user ставит lang='ru'; в phpunit-среде пакет ru отсутствует -> ядро чистит
+        // и дебажит (в проде ru установлен, дебага нет). Чистим буфер - артефакт среды.
+        $this->resetDebugging();
+        $events = array_values(array_filter($sink->get_events(),
+            static fn($e) => $e instanceof user_created));
+        $sink->close();
+        $this->assertCount(1, $events);
+        $this->assertSame($uid, (int)$events[0]->objectid);
+        $this->assertSame(5, (int)$events[0]->other['unics_role']);
+    }
+
+    public function test_update_user_emits_event(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $this->resetAfterTest();
+        $uid = \unics_user_manager::create_user([
+            'firstname' => 'Тест', 'lastname' => 'Родителев',
+            'email' => 'auditprobe2@demo.unics.local', 'username' => 'auditprobe2',
+            'password' => 'Pass123!x', 'unics_role' => 8, 'organization_id' => null,
+        ]);
+        $this->resetDebugging(); // lang=ru чистится в phpunit-среде (нет ru-пакета)
+        $sink = $this->redirectEvents();
+        \unics_user_manager::update_user($uid, ['firstname' => 'Изменен', 'email' => 'auditprobe2b@demo.unics.local']);
+        $events = array_values(array_filter($sink->get_events(),
+            static fn($e) => $e instanceof user_updated));
+        $sink->close();
+        $this->assertCount(1, $events);
+        $this->assertContains('firstname', $events[0]->other['changed']);
+        $this->assertContains('email', $events[0]->other['changed']);
+    }
+
+    public function test_assign_links_emit_events(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $this->resetAfterTest();
+        $tu = $this->getDataGenerator()->create_user();
+        $su = $this->getDataGenerator()->create_user();
+        $pu = $this->getDataGenerator()->create_user();
+        $tid = $DB->insert_record('unics_teachers', (object)['mdl_user_id' => $tu->id]);
+        $sid = $DB->insert_record('unics_students', (object)['mdl_user_id' => $su->id, 'difficulty_level' => 2]);
+
+        $sink = $this->redirectEvents();
+        \unics_user_manager::assign_teacher_student((int)$tid, (int)$sid, (int)$tu->id);
+        \unics_user_manager::assign_parent_student((int)$pu->id, (int)$sid);
+        $te = array_values(array_filter($sink->get_events(), static fn($e) => $e instanceof teacher_student_assigned));
+        $pe = array_values(array_filter($sink->get_events(), static fn($e) => $e instanceof parent_student_assigned));
+        $sink->close();
+        $this->assertCount(1, $te);
+        $this->assertSame((int)$tid, (int)$te[0]->other['teacher_id']);
+        $this->assertCount(1, $pe);
+        $this->assertSame((int)$sid, (int)$pe[0]->other['student_id']);
+    }
 }
