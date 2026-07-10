@@ -133,7 +133,7 @@ if ($is_admin_user) {
            WHERE o.is_active = 1 AND ({$org_where})
            ORDER BY o.name", $org_params);
 }
-foreach ($orgs_rows as $o) { $orgs_menu[$o->id] = $o->name; }
+foreach ($orgs_rows as $o) { $orgs_menu[$o->id] = s($o->name); }
 
 $classes_menu = [0 => '- все классы -'];
 for ($i = 1; $i <= 11; $i++) {
@@ -212,18 +212,18 @@ if ($is_admin_user) {
 
 $teachers_menu = ['' => get_string('select_teacher', 'local_unics')];
 foreach ($teachers as $t) {
-    $teachers_menu[$t->teacher_id] = "{$t->lastname} {$t->firstname}";
+    $teachers_menu[$t->teacher_id] = s("{$t->lastname} {$t->firstname}");
 }
 
 $parents_menu = ['' => get_string('select_parent', 'local_unics')];
 foreach ($parents_raw as $p) {
-    $parents_menu[$p->id] = "{$p->lastname} {$p->firstname}";
+    $parents_menu[$p->id] = s("{$p->lastname} {$p->firstname}");
 }
 
 $students_menu = ['' => get_string('select_student', 'local_unics')];
 foreach ($students as $s) {
     $cls = $s->class_number ? " ({$s->class_number}" . ($s->class_letter ?? '') . " кл.)" : '';
-    $students_menu[$s->student_id] = "{$s->lastname} {$s->firstname}" . $cls;
+    $students_menu[$s->student_id] = s("{$s->lastname} {$s->firstname}" . $cls);
 }
 
 // ----------------------------------------------------------------

@@ -54,7 +54,7 @@ if ($is_admin_user) {
     foreach ($DB->get_records_sql(
         "SELECT o.id, o.name FROM {unics_organizations} o
           WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp) as $r) {
-        $orgs[$r->id] = $r->name;
+        $orgs[$r->id] = s($r->name);
     }
 }
 

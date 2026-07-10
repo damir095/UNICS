@@ -298,7 +298,7 @@ if (!$is_admin_user && $methodist_org_id) {
 $courses_raw  = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
 $courses_menu = [0 => '- выберите курс -'];
 foreach ($courses_raw as $c) {
-    $courses_menu[$c->id] = $c->fullname;
+    $courses_menu[$c->id] = format_string($c->fullname);
 }
 
 // Организации — фильтр по скоупу для не-админа.
@@ -313,14 +313,14 @@ if ($is_admin_user) {
 }
 $orgs_menu = [0 => '- все организации -'];
 foreach ($orgs_raw as $o) {
-    $orgs_menu[$o->id] = $o->name;
+    $orgs_menu[$o->id] = s($o->name);
 }
 
 // Группы выбранного курса
 $groups_menu = [0 => '- без группы -'];
 if ($selected_course > 0) {
     foreach (groups_get_all_groups($selected_course) as $g) {
-        $groups_menu[$g->id] = $g->name;
+        $groups_menu[$g->id] = s($g->name);
     }
 }
 

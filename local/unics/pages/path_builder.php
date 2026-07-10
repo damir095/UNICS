@@ -122,7 +122,7 @@ foreach ($DB->get_records_sql(
       WHERE ue.userid = :uid AND ue.status = 0 AND c.id <> 1
       ORDER BY c.fullname",
     ['uid' => $student->mdl_user_id]) as $c) {
-    $courses_menu[(int)$c->id] = $c->fullname;
+    $courses_menu[(int)$c->id] = format_string($c->fullname);
 }
 
 $umk_menu = [0 => '- без УМК -'];

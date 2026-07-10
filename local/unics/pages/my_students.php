@@ -159,7 +159,7 @@ if ($mode === 'admin' || $mode === 'scoped') {
               WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp);
     }
     $orgs_menu = [0 => 'Все организации'];
-    foreach ($orgs_rows as $o) { $orgs_menu[$o->id] = $o->name; }
+    foreach ($orgs_rows as $o) { $orgs_menu[$o->id] = s($o->name); }
 
     $class_menu = [0 => 'Все классы'];
     for ($i = 1; $i <= 11; $i++) { $class_menu[$i] = $i . ' класс'; }

@@ -164,7 +164,7 @@ if ($deleg_course_ids !== null) {
 }
 $courses_menu = [0 => '- выберите курс -'];
 foreach ($courses_raw as $c) {
-    $courses_menu[$c->id] = $c->fullname;
+    $courses_menu[$c->id] = format_string($c->fullname);
 }
 
 // Районы — фильтр по скоупу.
@@ -181,7 +181,7 @@ if ($is_admin_user) {
 }
 $districts_menu = [0 => '- все муниципалитеты -'];
 foreach ($districts_raw as $d) {
-    $districts_menu[$d->id] = $d->name;
+    $districts_menu[$d->id] = s($d->name);
 }
 
 // Организации (зависят от района) — фильтр по скоупу, если выбран не админ.
@@ -191,7 +191,7 @@ if ($filter_district > 0) {
     foreach ($DB->get_records('unics_organizations', $org_filters, 'name ASC', 'id, name') as $o) {
         if ($is_admin_user
             || \local_unics\identity\scope_checker::user_can_access_org((int)$USER->id, (int)$o->id)) {
-            $orgs_menu[$o->id] = $o->name;
+            $orgs_menu[$o->id] = s($o->name);
         }
     }
 }
@@ -208,7 +208,7 @@ $letters_menu = ['' => '- все буквы -', 'А' => 'А', 'Б' => 'Б', 'В'
 $groups_menu = [0 => '- без группы -'];
 if ($selected_course > 0) {
     foreach (groups_get_all_groups($selected_course) as $g) {
-        $groups_menu[$g->id] = $g->name;
+        $groups_menu[$g->id] = s($g->name);
     }
 }
 

@@ -111,7 +111,7 @@ foreach ($course_rows as $cr) {
     if ($filter_cat > 0 && (int)$cr->catid !== $filter_cat) {
         continue;
     }
-    $course_menu[(int)$cr->id] = $cr->fullname;
+    $course_menu[(int)$cr->id] = format_string($cr->fullname);
 }
 
 $class_menu = [0 => 'Все классы'];

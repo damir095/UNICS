@@ -168,7 +168,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 // ----------------------------------------------------------------
 // GET: фильтры + список с предпросмотром
 // ----------------------------------------------------------------
-$orgs_menu  = unics_user_manager::get_organizations_menu();
+// get_organizations_menu отдает сырые имена - для html_writer::select экранируем.
+$orgs_menu  = array_map('s', unics_user_manager::get_organizations_menu());
 $class_menu = [];
 for ($i = 1; $i <= 11; $i++) { $class_menu[$i] = $i . ' класс'; }
 $letters_menu = ['А' => 'А', 'Б' => 'Б', 'В' => 'В', 'Г' => 'Г',

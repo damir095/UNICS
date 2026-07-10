@@ -349,7 +349,7 @@ if ($is_methodist && $methodist_org_id) {
 // Меню организаций
 $orgs_menu = [0 => '- все организации -'];
 foreach ($DB->get_records('unics_organizations', ['is_active' => 1], 'name ASC', 'id, name') as $o) {
-    $orgs_menu[$o->id] = $o->name;
+    $orgs_menu[$o->id] = s($o->name);
 }
 
 // Меню классов

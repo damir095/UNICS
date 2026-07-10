@@ -118,7 +118,9 @@ $perpage = 25;
 if ($is_full_admin) {
     $where = implode(' AND ', $extra);
     $query_params = $extra_params;
-    $orgs  = unics_user_manager::get_organizations_menu();
+    // get_organizations_menu отдает сырые имена (его же использует formslib-форма,
+    // где ядро экранирует само) - для html_writer::select экранируем на месте.
+    $orgs  = array_map('s', unics_user_manager::get_organizations_menu());
 } else {
     // Скоуп-фильтр: только пользователи района/региона/организации смотрящего.
     // Доп. фильтры комбинируются со скоупом через AND — обойти территорию нельзя.
@@ -133,7 +135,7 @@ if ($is_full_admin) {
         "SELECT o.id, o.name FROM {unics_organizations} o
           WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp);
     $orgs = [];
-    foreach ($orgs_rows as $o) { $orgs[$o->id] = $o->name; }
+    foreach ($orgs_rows as $o) { $orgs[$o->id] = s($o->name); }
 }
 
 $total = unics_user_manager::count_users($filter_org, $filter_role, $where, $query_params);
@@ -325,7 +327,7 @@ if (empty($users)) {
             s($user->username),
             $role_label,
             $type_cell,
-            $user->org_name,
+            s($user->org_name),
             $class_cell,
             $actions_cell,
         ];
