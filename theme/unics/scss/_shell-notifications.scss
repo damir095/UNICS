@@ -1,0 +1,211 @@
+// =============================================================================
+// УНИКС - Оболочка: центр уведомлений (G3 per-role-shell, срез "Центр уведомлений").
+//
+// Фирменная подача ЯДРОВОЙ выпадашки колокола уведомлений (Moodle popover-region):
+// мы переиспользуем core как бэкенд данных (список, непрочитанные, пометка
+// прочитанным, счётчик, "Смотреть все") и только перекрашиваем её под Scandinavian
+// на токенах --unics-notif-*. Свой UI/таблицу не плодим (события УНИКС уже падают
+// в ядровые notifications через notification_manager + message_send).
+//
+// На мобильном (<768) панель = лист на весь экран. Тёмная/контраст наследуются
+// автоматически: фон/тинты заданы токенами, A1 переопределяет их последним.
+// =============================================================================
+
+.popover-region-notifications {
+
+    // --- Сам выпадающий короб (ядро позиционирует его абсолютно; мы только красим). ---
+    .popover-region-container {
+        width: var(--unics-notif-panel-width);
+        max-width: 95vw;
+        background: var(--unics-notif-panel-bg);
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius);
+        box-shadow: var(--unics-shadow-md);
+        overflow: hidden;
+        z-index: var(--unics-notif-z);
+    }
+
+    // --- Шапка: заголовок + действия (отметить всё прочитанным и пр.). ---
+    .popover-region-header-container {
+        padding: var(--unics-space-3) var(--unics-space-4);
+        border-bottom: 1px solid var(--unics-notif-divider);
+    }
+
+    .popover-region-header-text {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--unics-text);
+    }
+
+    // --- Прокручиваемый список. ---
+    .popover-region-content-container {
+        background: var(--unics-notif-panel-bg);
+    }
+
+    // --- Карточка уведомления (иконка + текст + время). ---
+    .content-item-container.notification {
+        border-bottom: 1px solid var(--unics-notif-divider);
+
+        .context-link {
+            display: block;
+            padding: var(--unics-space-3) var(--unics-space-4);
+            color: var(--unics-text);
+            text-decoration: none;
+        }
+
+        &:hover .context-link,
+        .context-link:hover {
+            background: var(--unics-neutral-bg);
+            text-decoration: none;
+        }
+
+        .context-link:focus-visible {
+            outline: none;
+            box-shadow: inset var(--unics-focus-ring);
+        }
+
+        .notification-image .icon {
+            color: var(--unics-primary-text);
+        }
+
+        // Время/мета - приглушённо, мельче.
+        .content-item-footer {
+            color: var(--unics-notif-meta);
+            font-size: 0.8125rem;
+        }
+
+        // Ядровый расширитель "показать полностью" (.view-more): ядро ставит его
+        // position:absolute -> налезает на время ("...назадПросмотреть...") + высота
+        // ~12px = фейл WCAG 2.5.8 (target-size). Возвращаем в нормальный поток своей
+        // строкой под текстом + цель >=24px (не трогая DOM ядра, только наш скин).
+        .view-more {
+            position: static;
+            display: flex;
+            align-items: center;
+            width: fit-content;
+            min-height: 24px;
+            margin: 0 var(--unics-space-4) var(--unics-space-3);
+
+            // Единый фокус оболочки.
+            &:focus-visible {
+                outline: none;
+                box-shadow: var(--unics-focus-ring);
+                border-radius: var(--unics-radius);
+            }
+        }
+
+        // Непрочитанное: тинт + левый маркер (не только цвет - есть и вес у ядра).
+        &.unread {
+            background: var(--unics-notif-unread-bg);
+            border-left: 3px solid var(--unics-notif-unread-dot);
+
+            .context-link:hover,
+            &:hover .context-link {
+                background: var(--unics-notif-unread-bg);
+            }
+        }
+    }
+
+    // --- Подвал "Смотреть все". ---
+    .see-all-link {
+        display: block;
+        padding: var(--unics-space-3);
+        text-align: center;
+        font-weight: 600;
+        color: var(--unics-primary-text);
+        border-top: 1px solid var(--unics-notif-divider);
+
+        &:hover {
+            background: var(--unics-neutral-bg);
+            text-decoration: none;
+        }
+
+        // Единый фокус оболочки (Interactions): тот же ring, что у рельса/карточек.
+        &:focus-visible {
+            outline: none;
+            box-shadow: inset var(--unics-focus-ring);
+        }
+    }
+}
+
+// --- Бейдж-счётчик на колоколе. ---
+.popover-region-notifications .count-container {
+    background-color: var(--unics-notif-badge-bg);
+    color: #fff;
+}
+
+// --- Мобильный (<768): панель раскрывается листом на весь экран. ---
+@media (max-width: 767.98px) {
+    .popover-region-notifications .popover-region-container {
+        position: fixed;
+        top: var(--navbar-height, 60px);
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        // Ядро ставит max-height:80vh -> лист не доходит до низа (видна часть
+        // дашборда). Снимаем, чтобы лист был на весь экран (fixed top..bottom).
+        max-height: none;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+}
+
+// =============================================================================
+// Toast-всплывашки (G3): фирменная подача ЯДРОВЫХ core/toast (их шлёт
+// `toast_poller` на новые уведомления). Белая поверхность + левый акцент по тону,
+// стопка (ядро), auto-dismiss + крестик (closeButton в поллере). Один визуальный
+// паттерн с `.unics-toast` / `.unics-welcome` (левая акцентная полоса).
+// =============================================================================
+.toast-wrapper.fixed-top {
+    top: calc(var(--navbar-height, 60px) + var(--unics-space-3));
+    z-index: var(--unics-toast-z);
+    pointer-events: none;   // пустой контейнер не перехватывает клики по странице
+}
+
+.toast-wrapper .toast {
+    pointer-events: auto;
+    max-width: var(--unics-toast-max-width);
+    background-color: var(--unics-toast-bg);
+    color: var(--unics-text);
+    border: 1px solid var(--unics-toast-border);
+    border-left: 4px solid var(--unics-primary);
+    border-radius: var(--unics-radius);
+    box-shadow: var(--unics-toast-shadow);
+
+    .toast-body,
+    .toast-message {
+        color: var(--unics-text);
+    }
+
+    // Крестик виден на белом фоне (ядро для цветных тостов могло ставить светлый).
+    .btn-close {
+        filter: none;
+        opacity: 0.7;
+
+        &:hover {
+            opacity: 1;
+        }
+
+        // Единый фокус оболочки (Interactions).
+        &:focus-visible {
+            outline: none;
+            box-shadow: var(--unics-focus-ring);
+            opacity: 1;
+        }
+    }
+
+    // Семантика - левым акцентом (а не заливкой); текст остаётся тёмным.
+    &.toast-success { border-left-color: var(--unics-success); }
+    &.toast-info    { border-left-color: var(--unics-info); }
+    &.toast-warning { border-left-color: var(--unics-warning); }
+    &.toast-danger  { border-left-color: var(--unics-error); }
+
+    @media (prefers-reduced-motion: reduce) {
+        &.fade {
+            transition: none;
+        }
+    }
+}

@@ -1,0 +1,334 @@
+// =============================================================================
+// УНИКС - Оболочка: боковой рельс (G3 per-role-shell, Срез "Рельс v1")
+//
+// Постоянная левая колонка навигации под роль. HTML эмитит callback темы
+// theme_unics_before_standard_top_of_body_html() из local_unics_get_shell_nav()
+// (единый источник пунктов с local_unics_extend_navigation). Рельс - position:
+// fixed ниже навбара; основной контейнер #page сдвигается вправо РОВНО когда
+// рельс на странице, через body:has(.unics-shell-rail) - без форка layout-mustache.
+//
+// Охват v1: десктоп (>=1024px) на страницах /local/unics/*. Планшет/мобильный
+// (off-canvas) и страница курса - отдельные срезы. Светлая тема; тёмная/контраст -
+// A1-заходом в _accessibility. Все значения - var(--unics-rail-*) (DESIGN_TOKENS).
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Базовый короб рельса - фиксированная левая колонка (все ширины). Десктоп
+// (>=1024) = постоянный; планшет/мобильный (<1024) = off-canvas: спрятан за левым
+// краем, выезжает по гамбургеру (.is-open) с подложкой.
+// -----------------------------------------------------------------------------
+.unics-shell-rail {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: var(--navbar-height, 60px);
+    left: 0;
+    bottom: 0;
+    width: var(--unics-rail-width);
+    max-width: 85vw;
+    z-index: var(--unics-rail-z);
+    padding: var(--unics-space-4) var(--unics-space-3);
+    background-color: var(--unics-rail-bg);
+    border-right: 1px solid var(--unics-rail-border);
+    overflow: hidden;
+    // Мобильный/планшет по умолчанию: за краем экрана.
+    transform: translateX(-100%);
+    transition: transform var(--unics-duration-normal) var(--unics-ease-default);
+}
+
+.unics-shell-rail.is-open {
+    transform: translateX(0);
+    box-shadow: var(--unics-shadow-md);
+}
+
+// Список групп прокручивается; кнопки (тоггл) закреплены.
+.unics-shell-rail__groups {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+// Подложка под off-canvas рельсом (мобильный). По умолчанию скрыта ([hidden]).
+.unics-shell-rail__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--unics-rail-z) - 1);
+    border: 0;
+    background: var(--unics-rail-backdrop);
+    opacity: 0;
+    transition: opacity var(--unics-duration-normal) var(--unics-ease-default);
+
+    &[hidden] {
+        display: none;
+    }
+
+    &.is-visible {
+        opacity: 1;
+    }
+}
+
+// Гамбургер в навбаре (рендерит local_unics_render_navbar_output) - кнопка-сброс.
+.unics-shell-rail__burger {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+
+    // Единый фокус оболочки (вместо UA-outline по умолчанию - консистентность).
+    &:focus-visible {
+        outline: none;
+        box-shadow: var(--unics-focus-ring);
+        border-radius: var(--unics-radius);
+    }
+}
+
+// Убираем двойную навигацию: штатный левый дровер Boost и его кнопку прячем на
+// ВСЕХ ширинах, когда есть наш рельс (на наших страницах его меню заменяет рельс).
+body:has(.unics-shell-rail) .drawer-toggler-start,
+body:has(.unics-shell-rail) [data-region="fixed-drawer"].drawer-left,
+body:has(.unics-shell-rail) .drawer.drawer-left {
+    display: none;
+}
+
+// -----------------------------------------------------------------------------
+// Десктоп (>=1024): рельс постоянный, контент сдвинут, гамбургер/подложка скрыты.
+// -----------------------------------------------------------------------------
+@media (min-width: 1024px) {
+    .unics-shell-rail {
+        transform: none;
+        max-width: none;
+        box-shadow: none;
+        transition: width var(--unics-duration-fast) var(--unics-ease-default);
+    }
+
+    // Свёрнутый рельс - узкий столбец иконок.
+    .unics-shell-rail--collapsed {
+        width: var(--unics-rail-width-collapsed);
+        padding-left: var(--unics-space-2);
+        padding-right: var(--unics-space-2);
+    }
+
+    // Сдвигаем основной контейнер вправо ровно когда рельс на странице.
+    body:has(.unics-shell-rail) #page {
+        margin-left: var(--unics-rail-width);
+        transition: margin-left var(--unics-duration-fast) var(--unics-ease-default);
+    }
+    // Свёрнутый - сдвиг по узкой ширине (та же специфичность, правило ПОЗЖЕ - выигрывает).
+    body:has(.unics-shell-rail--collapsed) #page {
+        margin-left: var(--unics-rail-width-collapsed);
+    }
+
+    // На десктопе off-canvas-механика не нужна.
+    .unics-shell-rail__burger,
+    .unics-shell-rail__backdrop {
+        display: none !important;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Планшет/мобильный (<1024): десктопная кнопка-сворачивания не нужна (off-canvas
+// всегда полной ширины) - прячем её.
+// -----------------------------------------------------------------------------
+@media (max-width: 1023.98px) {
+    // Префикс .unics-shell-rail повышает специфичность над базовым display:flex
+    // (тот объявлен ниже по файлу) - иначе кнопка осталась бы видимой.
+    .unics-shell-rail .unics-shell-rail__toggle {
+        display: none;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Группа (смысловой блок: «Учащиеся», «Курсы», «Аналитика», ...).
+// -----------------------------------------------------------------------------
+.unics-shell-rail__group + .unics-shell-rail__group {
+    margin-top: var(--unics-space-5);
+}
+
+// «Связь» (последняя группа) прижата к низу рельса.
+.unics-shell-rail__group:last-child {
+    margin-top: auto;
+    padding-top: var(--unics-space-4);
+}
+
+.unics-shell-rail__label {
+    padding: 0 var(--unics-space-3) var(--unics-space-2);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--unics-rail-group-label);
+}
+
+.unics-shell-rail__group-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.unics-shell-rail__li {
+    margin: 0;
+}
+
+// -----------------------------------------------------------------------------
+// Пункт - кликабельный ряд иконка+текст, сенсорная цель >=44px.
+// -----------------------------------------------------------------------------
+.unics-shell-rail__item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--unics-space-3);
+    min-height: var(--unics-touch-min);
+    padding: var(--unics-space-2) var(--unics-space-3);
+    margin-bottom: 2px;
+    border-radius: var(--unics-radius);
+    color: var(--unics-rail-item-text);
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color var(--unics-duration-fast) var(--unics-ease-default),
+                color var(--unics-duration-fast) var(--unics-ease-default);
+
+    .unics-shell-rail__icon {
+        margin: 0;
+        flex: 0 0 auto;
+        width: 1.25rem;
+        font-size: 1.05rem;
+        text-align: center;
+        color: var(--unics-rail-item-icon);
+    }
+
+    &:hover,
+    &:focus {
+        background-color: var(--unics-rail-item-hover-bg);
+        color: var(--unics-rail-item-text);
+        text-decoration: none;
+    }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: var(--unics-focus-ring);
+    }
+}
+
+// Активный пункт - тинт + ЛЕВЫЙ маркер + вес + aria-current (не только цвет).
+.unics-shell-rail__item.is-active {
+    background-color: var(--unics-rail-item-active-bg);
+    color: var(--unics-rail-item-active-text);
+    font-weight: 600;
+
+    .unics-shell-rail__icon {
+        color: var(--unics-rail-item-active-text);
+    }
+
+    &::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        bottom: 6px;
+        width: 3px;
+        border-radius: var(--unics-radius-pill);
+        background-color: var(--unics-rail-item-active-marker);
+    }
+}
+
+// Длинные названия (курсы) усекаются многоточием; полное имя - в title (tooltip) и в дереве
+// доступности. В свернутом режиме перекрывается sr-only-правилом ниже (большая специфичность).
+.unics-shell-rail__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+// -----------------------------------------------------------------------------
+// Кнопка свернуть/развернуть - закреплена сверху рельса.
+// -----------------------------------------------------------------------------
+.unics-shell-rail__toggle {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--unics-space-3);
+    width: 100%;
+    min-height: var(--unics-touch-min);
+    margin-bottom: var(--unics-space-3);
+    padding: var(--unics-space-2) var(--unics-space-3);
+    border: 0;
+    border-radius: var(--unics-radius);
+    background: transparent;
+    color: var(--unics-rail-group-label);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--unics-duration-fast) var(--unics-ease-default);
+
+    .unics-shell-rail__toggle-icon {
+        margin: 0;
+        flex: 0 0 auto;
+        width: 1.25rem;
+        font-size: 1.05rem;
+        text-align: center;
+        transition: transform var(--unics-duration-fast) var(--unics-ease-default);
+    }
+
+    &:hover,
+    &:focus {
+        background-color: var(--unics-rail-item-hover-bg);
+        color: var(--unics-rail-item-text);
+    }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: var(--unics-focus-ring);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Свёрнутый режим: только иконки. Текст пунктов визуально скрыт, но остаётся в
+// дереве доступности (имя читается screen reader; hover-подсказку даёт title);
+// метки групп и подпись кнопки убраны; иконки по центру; стрелка развёрнута.
+// -----------------------------------------------------------------------------
+.unics-shell-rail--collapsed {
+    .unics-shell-rail__toggle {
+        justify-content: center;
+        gap: 0;
+    }
+    .unics-shell-rail__toggle-icon {
+        transform: rotate(180deg);
+    }
+    .unics-shell-rail__toggle-text,
+    .unics-shell-rail__label {
+        display: none;
+    }
+    .unics-shell-rail__item {
+        justify-content: center;
+        gap: 0;
+        padding-left: var(--unics-space-2);
+        padding-right: var(--unics-space-2);
+    }
+    .unics-shell-rail__text {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+}
+
+// Уважение к prefers-reduced-motion: без переходов.
+@media (prefers-reduced-motion: reduce) {
+    .unics-shell-rail,
+    .unics-shell-rail__item,
+    .unics-shell-rail__toggle,
+    .unics-shell-rail__toggle-icon,
+    .unics-shell-rail__backdrop,
+    body:has(.unics-shell-rail) #page {
+        transition: none;
+    }
+}

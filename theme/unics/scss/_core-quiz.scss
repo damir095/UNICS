@@ -1,0 +1,208 @@
+// =============================================================================
+// Core-страницы Moodle — тест quiz (G2, Срез 3) [РИСК: сложная разметка ядра]
+//
+// Прохождение и просмотр теста: блок вопроса, варианты ответа, навигация теста.
+// Высокая когнитивная нагрузка у детей с ОВЗ -> просторно, крупно, спокойно.
+// КЛЮЧЕВОЕ требование WCAG 1.4.1: состояние кнопок навигации (отвечен / верно /
+// неверно) различимо НЕ только цветом - добавляем глиф-метку + форму, а фоны
+// берём из семантических токенов (светлый тинт + тёмный текст = AA).
+//
+// Разметка (Moodle 5.0 Boost, подтверждено живым DOM курса 21):
+//   .que.<qtype>.<state>            (state: correct/incorrect/partiallycorrect/notanswered)
+//     .info  > h3.no + .state + .questionflag
+//     .content > .formulation(.qtext) + .answer + .outcome
+//       .answer > .rN[.correct/.incorrect] > input[radio|checkbox] + [data-region=answer-label]
+//   #mod_quiz_navblock .qnbutton.<state>  (notyetanswered/answersaved/complete/
+//       correct/incorrect/notanswered/flagged/thispage) > .trafficlight + номер + .flagstate
+//
+// Все значения - var(--unics-*). Тёмная/контраст - позже в _accessibility (A1).
+// Навигация теста префиксована .path-mod-quiz - ядро красит a.qnbutton.STATE с
+// высокой специфичностью, наш префикс перебивает её по числу классов.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Блок вопроса .que - спокойная карточка-поверхность, воздух между вопросами.
+// -----------------------------------------------------------------------------
+.que {
+    margin-bottom: var(--unics-section-gap);
+
+    // Формулировка вопроса + варианты - на мягкой поверхности с рамкой/радиусом.
+    .formulation {
+        background-color: var(--unics-surface);
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius);
+        box-shadow: var(--unics-shadow-sm);
+        padding: var(--unics-density-child);
+    }
+
+    // Текст вопроса - читаемая ширина и крупно (база 1.125rem из pre-scss).
+    .qtext {
+        max-width: var(--unics-readable-width);
+        margin-bottom: var(--unics-space-4);
+    }
+
+    // Левая мета-колонка (номер / состояние / флаг) - приглушённо, читаемо.
+    .info {
+        .state {
+            color: var(--unics-text-muted);
+            font-size: 0.9375rem;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Варианты ответа - крупные кликабельные ряды, цель >= 44px, ясный hover.
+    // -------------------------------------------------------------------------
+    .answer > div {
+        position: relative;
+        min-height: var(--unics-touch-min);
+        padding: var(--unics-space-2) var(--unics-space-3);
+        margin-bottom: var(--unics-space-2);
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius);
+        background-color: var(--unics-surface);
+        transition: background-color .12s ease, border-color .12s ease;
+
+        &:hover {
+            background-color: var(--unics-activity-hover);
+            border-color: var(--unics-primary);
+        }
+
+        // Выбранный вариант (radio/checkbox отмечен) - фирменная подсветка.
+        &:has(input:checked) {
+            border-color: var(--unics-primary);
+            background-color: var(--unics-neutral-bg);
+        }
+    }
+
+    // Сам контрол крупнее - моторика, ОВЗ.
+    .answer input[type="radio"],
+    .answer input[type="checkbox"] {
+        width: 1.15rem;
+        height: 1.15rem;
+        margin-top: 0.15rem;
+    }
+
+    // Просмотр: верный/неверный вариант - семантический тинт + рамка. Ядро
+    // дополнительно рисует иконку правильности в строке -> не только цвет.
+    .answer > div.correct {
+        background-color: var(--unics-success-bg);
+        border-color: var(--unics-success);
+    }
+    .answer > div.incorrect {
+        background-color: var(--unics-error-bg);
+        border-color: var(--unics-error);
+    }
+
+    // Блок отзыва/правильного ответа - карточка с инфо-акцентом слева. Фон БЕЛЫЙ
+    // (--unics-surface), НЕ info-bg: ядро красит текст отзыва (.specificfeedback/
+    // .rightanswer) в #90682f, который на info-bg даёт лишь 4.34:1 (axe), а на
+    // белом - 5.0:1 (AA). Левая полоса --unics-info сохраняет "инфо"-семантику.
+    .outcome,
+    .feedback {
+        background-color: var(--unics-surface);
+        border: 1px solid var(--unics-info);
+        border-left-width: 4px;
+        border-radius: var(--unics-radius);
+        padding: var(--unics-space-3) var(--unics-space-4);
+        margin-top: var(--unics-space-3);
+        max-width: var(--unics-readable-width);
+    }
+
+    // Бейдж балла вопроса (.badge.bg-primary): ядро красит сырым $primary #F26545
+    // -> светлый текст лишь 2.96:1. Перекрашиваем в --unics-primary-btn (#C44A2F):
+    // светлый текст = 4.68:1 (AA). Утилита .bg-primary у Bootstrap идёт с !important.
+    .badge.bg-primary {
+        background-color: var(--unics-primary-btn) !important;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Навигация по тесту (#mod_quiz_navblock) - кнопки-цифры как сенсорные цели,
+// состояние формой + ГЛИФОМ, а не только цветом (WCAG 1.4.1). Фоны - из
+// семантических токенов (светлый тинт), текст/глиф - тёмный семантический (AA).
+// -----------------------------------------------------------------------------
+.path-mod-quiz #mod_quiz_navblock {
+    .qnbutton {
+        position: relative;
+        min-width: var(--unics-touch-min);    // 44px цель
+        min-height: var(--unics-touch-min);
+        margin: 0 var(--unics-space-1) var(--unics-space-1) 0;
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius);
+        font-weight: 600;
+    }
+
+    // Глиф-метка состояния в правом нижнем углу (флаг ядра сидит сверху-справа,
+    // поэтому угол снизу-справа свободен). Маленький, но различимый.
+    .qnbutton::after {
+        position: absolute;
+        right: 2px;
+        bottom: 0;
+        font-size: 0.7rem;
+        line-height: 1;
+        font-weight: 700;
+    }
+
+    // Не отвечен - светлая поверхность, пустой угол.
+    .qnbutton.notyetanswered {
+        background-color: var(--unics-surface);
+        color: var(--unics-text);
+    }
+
+    // Отвечен (сохранён) - нейтральный тинт + галочка "сделано".
+    .qnbutton.answersaved,
+    .qnbutton.complete {
+        background-color: var(--unics-neutral-bg);
+        color: var(--unics-text);
+
+        &::after {
+            content: "\2713";   // ✓
+            color: var(--unics-success);
+        }
+    }
+
+    // Просмотр: верно - зелёный тинт + ✓; неверно - красный тинт + ✗.
+    .qnbutton.correct {
+        background-color: var(--unics-success-bg);
+        color: var(--unics-success);
+
+        &::after { content: "\2713"; color: var(--unics-success); }   // ✓
+    }
+    .qnbutton.incorrect {
+        background-color: var(--unics-error-bg);
+        color: var(--unics-error);
+
+        &::after { content: "\2717"; color: var(--unics-error); }     // ✗
+    }
+    // Просмотр: вопрос без ответа - нейтральный + тире.
+    .qnbutton.notanswered {
+        background-color: var(--unics-warning-bg);
+        color: var(--unics-warning);
+
+        &::after { content: "\2013"; color: var(--unics-warning); }   // –
+    }
+
+    // Текущая страница/вопрос - сильная фирменная рамка (форма, не только цвет).
+    .qnbutton.thispage {
+        border: 2px solid var(--unics-primary);
+        box-shadow: var(--unics-focus-ring);
+    }
+
+    // Клавиатурный фокус по кнопке навигации.
+    .qnbutton:focus-visible {
+        outline: none;
+        box-shadow: var(--unics-focus-ring);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Кнопки прохождения теста (Следующая страница / Закончить) - .btn-primary
+// уже в палитре (_buttons). Здесь только воздух вокруг блока кнопок.
+// -----------------------------------------------------------------------------
+.path-mod-quiz {
+    .submitbtns,
+    .mod_quiz-next-nav,
+    [id^="mod_quiz"] .submitbtns {
+        margin-top: var(--unics-space-4);
+    }
+}

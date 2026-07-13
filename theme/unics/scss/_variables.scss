@@ -14,6 +14,9 @@
     --unics-primary-deep:   #A93D24;  // 6.0:1 — близко к AAA, для текста на светло-оранжевых поверхностях
     --unics-primary-btn:       #C44A2F;  // фон .btn-primary: белый текст = 4.6:1 (AA при любом размере)
     --unics-primary-btn-hover: #A93D24;  // hover/focus .btn-primary: 6:1
+    --unics-success-btn:       #1e7e34;  // фон .btn-success: белый текст 5.14:1 (AA), не ремапится
+    --unics-danger-btn:        #a52022;  // фон .btn-danger:  белый текст 7.42:1
+    --unics-info-btn:          #1565c0;  // фон .btn-info:    белый текст 5.75:1
     --unics-header-bg:         #C44A2F;  // фон баннера #page-header: белый текст = 4.81:1 во всех светлых темах (темная тема ставит свой темный фон)
     --unics-bg:             #F5F6F9;
     --unics-surface:        #FFFFFF;
@@ -77,4 +80,77 @@
     // Touch targets.
     --unics-touch-min:      44px;   // Apple HIG / WCAG 2.5.5 AAA
     --unics-touch-cta:      60px;   // увеличенный CTA для детских страниц (моторика, ОВЗ)
+
+    // -------------------------------------------------------------------------
+    // Core-страницы Moodle (G2, [[roadmap-global-2026-06-17]],
+    // .design/unified-theme-core-pages/DESIGN_BRIEF.md): единый стиль курса,
+    // активностей, теста и журнала. Значения переиспользуют палитру выше.
+    // Философия Scandinavian: сдержанные нейтральные поверхности, фирменный акцент точечно.
+    // Тёмная/контраст-вариант этих токенов добавляется ПОЗЖЕ в _accessibility.scss
+    // (per-user A1, селекторы html.unics-a11y-dark / .unics-a11y-contrast) - сейчас светлая.
+    // -------------------------------------------------------------------------
+
+    // Плотность по контексту (принцип "дети важнее, но без вреда staff").
+    --unics-density-child:    var(--unics-space-5);  // 24px - просторные детские поверхности (курс, тест, материалы)
+    --unics-density-staff:    var(--unics-space-3);  // 12px - плотные staff-поверхности (журнал, ростер, отчёты)
+
+    // Карточная секция курса и строка активности.
+    --unics-section-bg:       var(--unics-surface);
+    --unics-section-pad:      var(--unics-density-child);
+    --unics-activity-hover:   #eef0f4;   // = neutral-bg: подсветка строки активности при наведении
+    --unics-current-marker:   var(--unics-primary);  // маркер текущей секции/активности (всегда в паре с меткой/иконкой)
+
+    // Таблицы журнала/оценок/отчётов (staff-плотность).
+    --unics-table-head-bg:    #eef0f4;   // нейтральный фирменный заголовок (текст #1F2430 = ~13:1)
+    --unics-table-head-text:  var(--unics-text);
+    --unics-table-border:     var(--unics-border);
+    --unics-table-stripe:     #f7f8fb;   // zebra: очень мягкая
+    --unics-table-row-hover:  #e9ecf2;   // заметный hover строки
+    --unics-table-cell-y:     var(--unics-space-2);  // 8px вертикальный padding ячейки
+    --unics-table-cell-x:     var(--unics-space-3);  // 12px горизонтальный padding ячейки
+    --unics-row-min:          2.5rem;    // минимальная высота строки staff-таблицы (40px)
+
+    // -------------------------------------------------------------------------
+    // Оболочка под роль (G3, per-role-shell, .design/per-role-shell/DESIGN_TOKENS.md):
+    // боковой рельс, центр уведомлений, toast. Значения переиспользуют палитру выше.
+    // Философия Scandinavian: тихий рельс, акцент только на активном/непрочитанном.
+    // Тёмная/контраст-варианты добавляются ПОЗЖЕ в _accessibility.scss (A1, как core G2).
+    // -------------------------------------------------------------------------
+
+    // Боковой рельс.
+    --unics-rail-width:              16rem;    // 256px - развёрнутый (группы + метки)
+    --unics-rail-width-collapsed:    4rem;     // 64px  - свёрнутый (иконки + tooltip)
+    --unics-rail-bg:                 var(--unics-surface);     // белая навигационная поверхность
+    --unics-rail-border:             var(--unics-border);      // правая граница рельса
+    --unics-rail-group-label:        var(--unics-text-muted);  // заголовок группы (мелкий, приглушённый)
+    --unics-rail-item-text:          var(--unics-text);        // пункт по умолчанию
+    --unics-rail-item-icon:          var(--unics-text-muted);  // иконка пункта по умолчанию
+    --unics-rail-item-hover-bg:      var(--unics-neutral-bg);  // hover пункта (#eef0f4, как в core G2)
+    --unics-rail-item-active-bg:     #fdeee9;                  // активный пункт - мягкий бренд-тинт (текст #A93D24 = 6.5:1)
+    --unics-rail-item-active-text:   var(--unics-primary-deep); // #A93D24 на тинте - AA
+    --unics-rail-item-active-marker: var(--unics-primary);     // левый маркер активного (не только цвет: +тинт +вес +aria-current)
+    --unics-rail-z:                  1020;     // рельс над контентом, под выпадашками навбара
+    --unics-rail-backdrop:           rgba(41, 47, 59, 0.45);   // подложка off-canvas рельса (мобильный)
+
+    // Центр уведомлений (выпадающая панель из навбара).
+    --unics-notif-panel-bg:          var(--unics-surface);
+    --unics-notif-panel-width:       22rem;    // 352px (десктоп; на мобильном - на всю ширину)
+    --unics-notif-unread-bg:         var(--unics-info-bg);     // #e8f0fa - подсветка непрочитанного
+    --unics-notif-unread-dot:        var(--unics-primary);     // точка-маркер непрочитанного (в паре с весом/текстом)
+    --unics-notif-badge-bg:          var(--unics-error);       // бейдж-счётчик на колоколе (белый текст = AA)
+    --unics-notif-meta:              var(--unics-text-muted);  // время/мета
+    --unics-notif-divider:           var(--unics-border);      // разделители (по датам)
+    --unics-notif-z:                 1040;     // панель над рельсом
+
+    // Toast (всплывашка). Семантика - через success/info/warning/error (левый акцент).
+    --unics-toast-bg:                var(--unics-surface);
+    --unics-toast-border:            var(--unics-border);
+    --unics-toast-shadow:            var(--unics-shadow-md);
+    --unics-toast-max-width:         22rem;
+    --unics-toast-z:                 1050;     // тосты поверх всего
+
+    // Движение оболочки (рельс-коллапс, выезд панели, тосты). reduced-motion гасит.
+    --unics-duration-fast:           150ms;
+    --unics-duration-normal:         250ms;
+    --unics-ease-default:            cubic-bezier(.4, 0, .2, 1);
 }

@@ -1,0 +1,118 @@
+// =============================================================================
+// Core-страницы Moodle — mod-страницы (G2, Срез 2)
+//
+// Единый стиль внутренних страниц активностей: материал (page/resource/book),
+// задание (assign), форум (forum). Заголовок и вкладки уже едины (_navbar +
+// _core-shared). Здесь: шапка активности, описание/intro, читаемая ширина
+// основного текста (детям с трудностями чтения), посты форума, кнопки.
+//
+// Разметка (Moodle 5.0 Boost, подтверждено живым DOM курса 21):
+//   #region-main-box > #region-main
+//     .activity-header[data-for=page-activity-header]
+//       .activity-information           (условия завершения)
+//       .activity-description#intro      (описание активности — assign/quiz/...)
+//         .box.generalbox > .no-overflow
+//     [role=main]
+//       .box.generalbox(.center)         (контент страницы — page/book/lesson)
+//         .no-overflow > ...текст...
+//   Форум: article.forum-post-container > .forumpost.border.p-2 >
+//          [data-region-content=forum-post-core] > header.header + тело
+//
+// Все значения — var(--unics-*). Тёмная/контраст — позже в _accessibility (A1).
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Шапка активности — воздух снизу, чтобы отделить от основного контента.
+// -----------------------------------------------------------------------------
+.activity-header {
+    margin-bottom: var(--unics-space-5);
+
+    // Внутри шапки intro не должен слипаться с условиями завершения.
+    .activity-information:not(:empty) {
+        margin-bottom: var(--unics-space-3);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Описание/intro активности (assign, quiz, и т.п.) — карточка с левым акцентом,
+// единый паттерн с .unics-welcome / .unics-toast. Текст в читаемой ширине.
+// Сбрасываем серый бокс ядра (.box.generalbox внутри) — фон даёт сама карточка.
+// -----------------------------------------------------------------------------
+.activity-description,
+#intro {
+    background-color: var(--unics-surface);
+    border: 1px solid var(--unics-border);
+    border-left: 4px solid var(--unics-primary);
+    border-radius: var(--unics-radius);
+    box-shadow: var(--unics-shadow-sm);
+    padding: var(--unics-space-4) var(--unics-space-5);
+    margin-bottom: var(--unics-space-5);
+
+    // Внутренний box ядра не дублирует фон/паддинг карточки.
+    > .box.generalbox,
+    .box.generalbox {
+        padding: 0;
+        margin: 0;
+        background: transparent;
+    }
+
+    // Длинные строки описания держим читаемыми.
+    .no-overflow {
+        max-width: var(--unics-readable-width);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Читаемая ширина основного контента — ТОЛЬКО для текстовых модулей (чтение):
+// page / book / lesson / resource. Не трогаем assign/quiz/forum (там таблицы,
+// формы, посты во всю ширину). Контент центрируем колонкой ~70ch.
+// -----------------------------------------------------------------------------
+body.path-mod-page,
+body.path-mod-book,
+body.path-mod-lesson,
+body.path-mod-resource {
+    [role="main"] > .box.generalbox > .no-overflow,
+    [role="main"] .box.generalbox.center > .no-overflow {
+        max-width: var(--unics-readable-width);
+        margin-inline: auto;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Форум — посты как поверхности-карточки (Scandinavian), читаемо и спокойно.
+// Ядро даёт .forumpost.border.p-2 (плоская bootstrap-рамка) — заменяем на наш
+// радиус/границу/тень/паддинг. Стартовый пост чуть выделен левым акцентом.
+// Кнопки .btn-link/.btn-outline-secondary уже стилизованы (_buttons/_layout).
+// -----------------------------------------------------------------------------
+.path-mod-forum {
+    .forumpost {
+        border: 1px solid var(--unics-border) !important;  // перебиваем .border ядра, чтобы цвет был наш
+        border-radius: var(--unics-radius);
+        box-shadow: var(--unics-shadow-sm);
+        padding: var(--unics-space-4) !important;          // .p-2 ядра слишком тесно для чтения
+        background-color: var(--unics-surface);
+    }
+
+    // Стартовый (первый) пост обсуждения — левый фирменный акцент.
+    .forumpost.starter,
+    .forumpost.firstpost {
+        border-left: 4px solid var(--unics-primary) !important;
+    }
+
+    // Заголовок поста (аватар + автор + дата) — отделяем тонкой линией.
+    .forumpost .header {
+        padding-bottom: var(--unics-space-2);
+        border-bottom: 1px solid var(--unics-border);
+    }
+
+    // Тело сообщения — читаемая ширина для длинных постов.
+    .forumpost [data-region-content="forum-post-core"] .post-content-container,
+    .forumpost .post-content-container {
+        max-width: var(--unics-readable-width);
+    }
+
+    // Вертикальный ритм между постами в обсуждении.
+    .forum-post-container + .forum-post-container {
+        margin-top: var(--unics-space-3);
+    }
+}

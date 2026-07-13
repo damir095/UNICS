@@ -36,6 +36,55 @@ html.unics-a11y-dark {
     --unics-d-warning-bg: #3a331c; --unics-d-warning-tx: #ecd07e;
     --unics-d-info-bg:    #1e333b; --unics-d-info-tx:    #8ccbe0;
 
+    // -------------------------------------------------------------------------
+    // G2 core-страницы (курс/mod/тест/журнал): токены, оставшиеся в светлой
+    // палитре литералами (#eef0f4 и т.п.). Без этих переключений новые core-
+    // поверхности дают светлые пятна на тёмном (заголовки/zebra таблиц журнала,
+    // hover активностей/строк, строка средних, тинты тестов). Переводим на
+    // тёмные поверхности/тинты. dark+contrast и dark+accent наследуют эти значения.
+    // -------------------------------------------------------------------------
+    // Нейтральные поверхности -> тёмная приподнятая поверхность / лёгкий оверлей.
+    --unics-neutral-bg:      var(--unics-surface-2);
+    --unics-activity-hover:  var(--unics-surface-2);
+    --unics-table-head-bg:   var(--unics-surface-2);
+    --unics-table-stripe:    rgba(255, 255, 255, .045);
+    --unics-table-row-hover: rgba(255, 255, 255, .08);
+    // Семантика: ФОН (`-bg`) -> тёмный тинт; "цвет" (используется как текст /
+    // бордер / глиф ✓✗) -> СВЕТЛЫЙ тинт, читаемый на тёмном тинте (AA).
+    // Единственное место, где `--unics-error` - это ФОН (с белым текстом), -
+    // `.unics-contact__badge` мессенджера; оно правится отдельным правилом ниже.
+    --unics-success: var(--unics-d-success-tx); --unics-success-bg: var(--unics-d-success-bg);
+    --unics-error:   var(--unics-d-danger-tx);  --unics-error-bg:   var(--unics-d-danger-bg);
+    --unics-warning: var(--unics-d-warning-tx); --unics-warning-bg: var(--unics-d-warning-bg);
+    --unics-info:    var(--unics-d-info-tx);    --unics-info-bg:    var(--unics-d-info-bg);
+    --unics-neutral: var(--unics-text-muted);
+
+    // -------------------------------------------------------------------------
+    // Оболочка G3 (рельс / центр уведомлений / тосты).
+    // Большинство токенов оболочки наследуют тёмные базовые автоматически
+    // (rail-bg/border/group-label/item-text/icon -> surface/border/text-muted/
+    // text; item-hover-bg -> neutral-bg=surface-2; notif-panel-bg -> surface;
+    // notif-unread-bg -> info-bg=d-info-bg тёмный тинт; notif-meta/divider;
+    // toast-bg/border -> surface/border; левые акценты тостов -> семантика,
+    // в тёмной = светлые тинты). Точечно правим только те, что в светлой теме -
+    // ЛИТЕРАЛ или используют семантический токен КАК ФОН (где A1 переключает его
+    // на светлый тинт для текста).
+    // -------------------------------------------------------------------------
+    // Активный пункт рельса: светлый бренд-тинт #fdeee9 на тёмном светится, а его
+    // текст = primary-deep (в тёмной = #ff8a6e, светлый) -> светлое-на-светлом.
+    // Тёмный бренд-тинт; текст #ff8a6e читается на нём (~5.9:1, AA).
+    --unics-rail-item-active-bg: #3b2a1c;
+    // Бейдж-счётчик колокола: --unics-error в тёмной = СВЕТЛЫЙ тинт (для текста),
+    // а здесь это ФОН с белым текстом -> возвращаем насыщенный красный (бел. AA).
+    // То же решение, что для .unics-contact__badge мессенджера.
+    --unics-notif-badge-bg: #c62828;
+
+    // Bootstrap body-переменные: ядро/Boost красят часть поверхностей через
+    // var(--bs-body-bg) (напр. `.generaltable` = body-bg) - без этого они остаются
+    // светлым #F5F6F9 на тёмной теме. Привязываем к нашим тёмным токенам.
+    --bs-body-bg: var(--unics-bg);
+    --bs-body-color: var(--unics-text);
+
     background-color: var(--unics-bg);
     color: var(--unics-text);
 
@@ -154,6 +203,32 @@ html.unics-a11y-dark {
         color: var(--unics-text);
     }
 
+    // Отчёт по пользователю (журнал ученика): ядро grade-report-user красит ячейки
+    // россыпью ОЧЕНЬ специфичных правил ((0,4,1): th.column-itemname:not(...) = white
+    // и др.) на разных тегах/обёртках - точечно/специфичностью не перебить. Берём
+    // поддерево таблицы под контроль scoped-!important: ячейки прозрачные (садятся на
+    // тёмную страницу) + светлый текст; pass/fail-спаны держат свой цвет (заданы
+    // конкретнее). Заголовки/категории/итоги - приподнятая поверхность.
+    .path-grade-report-user .user-grade tbody tr,
+    .path-grade-report-user .user-grade th,
+    .path-grade-report-user .user-grade td {
+        background-color: transparent !important;
+        color: var(--unics-text);
+    }
+    .path-grade-report-user .user-grade thead th,
+    .path-grade-report-user .user-grade th.category,
+    .path-grade-report-user .user-grade .baggt {
+        background-color: var(--unics-surface-2) !important;
+    }
+
+    // Скрытые от студентов активности: ядро красит .hiddenactivity светлым #f8f9fa
+    // (приглушение на светлом фоне) -> на тёмной теме они светятся. Делаем
+    // прозрачной (садится на тёмную секцию-карточку); сигнал "скрыто" остаётся
+    // бейджем ядра + приглушённым (dimmed) текстом.
+    .activity-item.hiddenactivity {
+        background-color: transparent;
+    }
+
     // Текст и приглушённый текст.
     a:not(.btn) {
         color: var(--unics-primary-text);
@@ -202,6 +277,11 @@ html.unics-a11y-dark {
         --bs-table-border-color: var(--unics-border);
         color: var(--unics-text);
         border-color: var(--unics-border);
+        // Сам ЭЛЕМЕНТ таблицы: ядро/foundation красят generaltable литералом
+        // #f5f6f9 (компилят body-bg) поверх --bs-table-bg -> на тёмном светится
+        // сквозь прозрачные ячейки. Гасим фон элемента: ячейки садятся на тёмную
+        // страницу, thead/striped-оверлеи остаются.
+        background-color: transparent;
     }
     .table th,
     .table td {
@@ -270,6 +350,29 @@ html.unics-a11y-dark {
         background-color: #4a525b !important;
         color: #fff !important;
     }
+    // Семантические бейджи (success/danger/warning/info): в светлой теме у них
+    // фирменный фон + контрастный текст (тёмный на янтаре warning, белый на
+    // насыщенных). В тёмной общий правило `span{color:--unics-text}` делает текст
+    // светлым -> на светлом янтаре warning светлое-на-светлом, на красном danger
+    // марг. фейл. Переводим на тёмный тинт + светлый тинт текста (как .alert-*/
+    // .table-*; пары --unics-d-* уже проверены на AA). Бейджи .bg-primary -
+    // отдельно (фон = бренд, белый текст держит AA на --unics-primary-btn).
+    .badge-success, .badge.bg-success, .text-bg-success {
+        background-color: var(--unics-d-success-bg) !important;
+        color: var(--unics-d-success-tx) !important;
+    }
+    .badge-danger, .badge.bg-danger, .text-bg-danger {
+        background-color: var(--unics-d-danger-bg) !important;
+        color: var(--unics-d-danger-tx) !important;
+    }
+    .badge-warning, .badge.bg-warning, .text-bg-warning {
+        background-color: var(--unics-d-warning-bg) !important;
+        color: var(--unics-d-warning-tx) !important;
+    }
+    .badge-info, .badge.bg-info, .text-bg-info {
+        background-color: var(--unics-d-info-bg) !important;
+        color: var(--unics-d-info-tx) !important;
+    }
 
     // Нейтральные кнопки перекрашиваем; цветные (.btn-primary/success/danger) — нет.
     .btn-secondary,
@@ -314,6 +417,98 @@ html.unics-a11y-dark {
     tr.unics-note-row td {
         background-color: #1f2a3a !important;
         color: var(--unics-text);
+    }
+
+    // --- Тест (quiz) ---------------------------------------------------------
+    // Ядро красит мета-колонку .info, отзыв .comment и таблицу истории ответов
+    // светлым (#f8f9fa/#d7e4d6/#f5f6f9) - на тёмной теме светятся (G2 их не вводил,
+    // это давний A1-пробел, всплывший на стилизованном тесте). Блок .formulation и
+    // варианты уже идут от токенов (тёмные). Семантику отзыва сохраняем тинтами.
+    .que .info {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+    }
+    .que .comment {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+    }
+    .que.correct .comment {
+        background-color: var(--unics-d-success-bg);
+        color: var(--unics-d-success-tx);
+    }
+    .que.incorrect .comment {
+        background-color: var(--unics-d-danger-bg);
+        color: var(--unics-d-danger-tx);
+    }
+    .que.partiallycorrect .comment {
+        background-color: var(--unics-d-warning-bg);
+        color: var(--unics-d-warning-tx);
+    }
+    // Таблицы внутри вопроса (история ответов и пр.): тёмные поверхности. Берём
+    // ЛЮБУЮ `.que table` (ядро красит ячейки #fafafa/#f5f6f9 разными классами).
+    .que table {
+        background-color: transparent;
+    }
+    .que table th {
+        background-color: var(--unics-surface-2);
+        color: var(--unics-text);
+    }
+    .que table td {
+        background-color: transparent;
+        color: var(--unics-text);
+    }
+    // Сводка попытки сверху (.quizreviewsummary = generaltable.generalbox):
+    // ядро красит её ячейки #fafafa -> на тёмном светятся.
+    .quizreviewsummary,
+    .quizreviewsummary th,
+    .quizreviewsummary td {
+        background-color: transparent;
+        color: var(--unics-text);
+    }
+
+    // Липкий футер сохранения (#sticky-footer.bg-white, есть на mod-формах, журнале
+    // и пр.): у ядра фон задан по ID (#sticky-footer) - перебивает наше .bg-white
+    // правило (класс), поэтому остаётся белым с ID-специфичностью. Бьём по ID.
+    #sticky-footer {
+        background-color: var(--unics-surface) !important;
+        border-color: var(--unics-border) !important;
+        color: var(--unics-text);
+    }
+
+    // Бейдж непрочитанного мессенджера. В светлой теме фон = --unics-error; в тёмной
+    // этот токен переключён на светлый тинт (для текста на тёмном), поэтому фону
+    // даём насыщенный красный (белый текст-литерал держит AA, ~5:1). На активном
+    // (белом) контакте бейдж = белый фон + тёмно-красный текст (--unics-error там
+    // тоже стал светлым тинтом -> вернули тёмный, 5.9:1 на белом).
+    .unics-contact__badge {
+        background-color: #c62828;
+    }
+    .unics-contact--active .unics-contact__badge {
+        color: #a52022;
+    }
+
+    // Бейджи уровня (.unics-lvl-1/2/3) на дашборде: светлые пастельные фоны
+    // (#E3ECFA/#FCE3D9/#E9DEF2) + общий текст-руль делает текст светлым -> light-
+    // on-light. Тёмные тинты, сохраняя 3 разных оттенка (синий/оранжевый/фиолет), AA.
+    .unics-lvl-1 {
+        background-color: var(--unics-d-info-bg);
+        color: var(--unics-d-info-tx);
+    }
+    .unics-lvl-2 {
+        background-color: #3b2a1c;
+        color: #ffb38f;
+    }
+    .unics-lvl-3 {
+        background-color: #2e2440;
+        color: #c4a5e8;
+    }
+
+    // --- Оболочка G3: крестик ядрового тоста --------------------------------
+    // _shell-notifications ставит .btn-close{filter:none} (крестик виден на белой
+    // поверхности светлой темы). В тёмной поверхность стала тёмной, а btn-close -
+    // тёмный SVG ядра -> невидим. Инвертируем в светлый (рецепт btn-close-white).
+    .toast-wrapper .toast .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
     }
 }
 
@@ -429,6 +624,12 @@ html.unics-a11y-dark.unics-a11y-contrast {
     --unics-primary-deep:   #{$deep};
     --unics-header-bg:      #{$base};  // баннер #page-header = базовый акцент (темный, белый текст проходит)
 
+    // Оболочка G3: активный пункт рельса по умолчанию = бренд-розовый тинт
+    // (#fdeee9). При выбранном акценте оранжевый тинт спорит с акцентом -> делаем
+    // тинт нейтральным; «активность» несут акцентный левый маркер (--unics-primary
+    // следует акценту) + акцентный текст (--unics-primary-deep) + вес.
+    --unics-rail-item-active-bg: var(--unics-neutral-bg);
+
     .btn-primary {
         background-color: #{$base};
         border-color: #{$base};
@@ -450,6 +651,51 @@ html.unics-a11y-accent-purple { @include unics-accent(#6b3fa0, #58348a, #6b3fa0,
 
 // На тёмном фоне акцентный текст нужно осветлить, иначе тёмно-синий/фиолетовый
 // проваливаются по контрасту. Перекрываем только цвет ссылок и -text токен.
-html.unics-a11y-dark.unics-a11y-accent-blue   { --unics-primary-text: #6ab0ff; a:not(.btn) { color: #6ab0ff; } }
-html.unics-a11y-dark.unics-a11y-accent-green  { --unics-primary-text: #5fcf7a; a:not(.btn) { color: #5fcf7a; } }
-html.unics-a11y-dark.unics-a11y-accent-purple { --unics-primary-text: #b18ad9; a:not(.btn) { color: #b18ad9; } }
+// На тёмном фоне «глубокий» бренд (--unics-primary-deep, текст на поверхностях:
+// активный пункт рельса, .stat-value карты баллов и пр.) нужен СВЕТЛЫЙ. Базовый
+// .dark-блок держит его светлым (#ff8a6e), но акцент-миксин (позже по источнику)
+// перебивает его светло-тематическим $deep (тёмным) -> тёмное-на-тёмном.
+// Возвращаем primary-deep к ОСВЕТЛЁННОМУ акценту (тому же, что у ссылок); этим
+// чинятся все его потребители разом. Маркер активного пункта = --unics-primary
+// ($base, тёмный - он нужен фоном у .btn-primary), поэтому маркер осветляем
+// отдельным rail-токеном.
+html.unics-a11y-dark.unics-a11y-accent-blue {
+    --unics-primary-text: #6ab0ff;
+    --unics-primary-deep: #6ab0ff;
+    --unics-rail-item-active-marker: #6ab0ff;
+    a:not(.btn) { color: #6ab0ff; }
+}
+html.unics-a11y-dark.unics-a11y-accent-green {
+    --unics-primary-text: #5fcf7a;
+    --unics-primary-deep: #5fcf7a;
+    --unics-rail-item-active-marker: #5fcf7a;
+    a:not(.btn) { color: #5fcf7a; }
+}
+html.unics-a11y-dark.unics-a11y-accent-purple {
+    --unics-primary-text: #b18ad9;
+    --unics-primary-deep: #b18ad9;
+    --unics-rail-item-active-marker: #b18ad9;
+    a:not(.btn) { color: #b18ad9; }
+}
+
+// -----------------------------------------------------------------------------
+// Оболочка G3 во ВСЕХ A1-схемах: контентное правило `a:not(.btn)` (перекрашивает
+// ссылки в primary-text/акцент и в контраст-режимах подчёркивает) НЕ должно
+// затрагивать навигационную «хромированную» оболочку - пункты рельса = ссылки,
+// но это chrome, а не контент. Без этого в тёмной/контраст/акцент ВЕСЬ рельс
+// становился сплошь оранжевым/акцентным и подчёркнутым (нейтральность теряется,
+// активный пункт переставал выделяться). Возвращаем токен-цвета адресно: пункт =
+// нейтральный --unics-rail-item-text; активный = бренд/акцент --…-active-text;
+// без подчёркивания (активность несут маркер + вес + aria-current, не цвет).
+// Специфичность (0,4,1) перебивает самый сильный конкурент
+// html.unics-a11y-dark.unics-a11y-contrast a:not(.btn) = (0,3,2). Один блок
+// покрывает все схемы - селектор завязан на схему через [class*="unics-a11y"].
+// -----------------------------------------------------------------------------
+html[class*="unics-a11y"] .unics-shell-rail .unics-shell-rail__groups .unics-shell-rail__item {
+    color: var(--unics-rail-item-text);
+    text-decoration: none;
+
+    &.is-active {
+        color: var(--unics-rail-item-active-text);
+    }
+}

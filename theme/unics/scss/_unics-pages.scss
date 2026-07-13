@@ -203,6 +203,160 @@
 }
 
 // -----------------------------------------------------------------------------
+// Карточки быстрых действий дашборда (G3 per-role-shell, дашборд-каркас).
+// Иконка + метка, ведут в раздел/задачу. Сетка авто-заполнения; единый стиль
+// поверхности/hover/focus с рельсом (Scandinavian, всё на var(--unics-*)).
+// -----------------------------------------------------------------------------
+.unics-action-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: var(--unics-space-3);
+    margin-bottom: var(--unics-space-5);
+}
+
+.unics-action-card {
+    display: flex;
+    align-items: center;
+    gap: var(--unics-space-3);
+    min-height: var(--unics-touch-min);
+    padding: var(--unics-space-3) var(--unics-space-4);
+    background: var(--unics-surface);
+    border: 1px solid var(--unics-border);
+    border-radius: var(--unics-radius);
+    color: var(--unics-text);
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: var(--unics-shadow-sm);
+    transition: border-color var(--unics-duration-fast) var(--unics-ease-default),
+                box-shadow var(--unics-duration-fast) var(--unics-ease-default),
+                transform var(--unics-duration-fast) var(--unics-ease-default);
+
+    .unics-action-card__icon {
+        margin: 0;
+        flex: 0 0 auto;
+        width: 1.5rem;
+        font-size: 1.25rem;
+        text-align: center;
+        color: var(--unics-primary-text);
+    }
+
+    .unics-action-card__label {
+        flex: 1 1 auto;
+        line-height: 1.3;
+    }
+
+    .unics-action-card__badge {
+        flex: 0 0 auto;
+    }
+
+    &:hover,
+    &:focus {
+        text-decoration: none;
+        color: var(--unics-text);
+        border-color: var(--unics-primary);
+        box-shadow: var(--unics-shadow-md);
+        transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: var(--unics-focus-ring);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .unics-action-card {
+        transition: none;
+
+        &:hover,
+        &:focus {
+            transform: none;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Блок «Требует внимания» (G3, сигналы v1). Карточки-действия как action-card,
+// но с цветным левым акцентом по тону (warning/info/success) и красным бейджем-
+// счётчиком. Появляются, только когда есть что показать (рендер прячет пустой блок).
+// -----------------------------------------------------------------------------
+.unics-attention {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--unics-space-3);
+    margin-bottom: var(--unics-space-5);
+}
+
+.unics-attention-card {
+    display: flex;
+    align-items: center;
+    gap: var(--unics-space-3);
+    min-height: var(--unics-touch-min);
+    padding: var(--unics-space-3) var(--unics-space-4);
+    background: var(--unics-surface);
+    border: 1px solid var(--unics-border);
+    border-left: 4px solid var(--unics-primary);
+    border-radius: var(--unics-radius);
+    color: var(--unics-text);
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: var(--unics-shadow-sm);
+    transition: box-shadow var(--unics-duration-fast) var(--unics-ease-default),
+                transform var(--unics-duration-fast) var(--unics-ease-default);
+
+    .unics-attention-card__icon {
+        margin: 0;
+        flex: 0 0 auto;
+        width: 1.5rem;
+        font-size: 1.25rem;
+        text-align: center;
+        color: var(--unics-primary-text);
+    }
+
+    .unics-attention-card__label {
+        flex: 1 1 auto;
+        line-height: 1.3;
+    }
+
+    &:hover,
+    &:focus {
+        text-decoration: none;
+        color: var(--unics-text);
+        box-shadow: var(--unics-shadow-md);
+        transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: var(--unics-focus-ring);
+    }
+
+    &--warning {
+        border-left-color: var(--unics-warning);
+        .unics-attention-card__icon { color: var(--unics-warning); }
+    }
+    &--info {
+        border-left-color: var(--unics-info);
+        .unics-attention-card__icon { color: var(--unics-info); }
+    }
+    &--success {
+        border-left-color: var(--unics-success);
+        .unics-attention-card__icon { color: var(--unics-success); }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .unics-attention-card {
+        transition: none;
+
+        &:hover,
+        &:focus {
+            transform: none;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Ряд кнопок (users.php — «Создать пользователя | Привязки | Организации»).
 // Без gap-класса от Bootstrap кнопки прилипают друг к другу.
 // -----------------------------------------------------------------------------
@@ -653,4 +807,27 @@
 // -----------------------------------------------------------------------------
 .text-primary {
     color: var(--unics-primary-text) !important;
+}
+
+// -----------------------------------------------------------------------------
+// Полоса прогресса (codifier_report: % по элементу содержания).
+// Цвет заливки и трека - из семантических токенов; модификатор ОБЯЗАТЕЛЕН
+// (полоса рисуется только при наличии значения, всегда success/warning/danger).
+// Зеркало идиома .unics-badge выше. Темная/контрастная A1-темы ремапят токены.
+// -----------------------------------------------------------------------------
+.unics-meter {
+    width: 100%;
+    max-width: 220px;
+    height: 10px;
+    border-radius: var(--unics-radius-pill);
+    overflow: hidden;
+
+    .unics-meter__fill {
+        height: 100%;
+        border-radius: inherit;
+    }
+
+    &.is-success { background: var(--unics-success-bg); .unics-meter__fill { background: var(--unics-success); } }
+    &.is-warning { background: var(--unics-warning-bg); .unics-meter__fill { background: var(--unics-warning); } }
+    &.is-danger  { background: var(--unics-error-bg);   .unics-meter__fill { background: var(--unics-error); } }
 }

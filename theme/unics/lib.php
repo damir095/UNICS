@@ -84,6 +84,19 @@ function theme_unics_get_extra_scss($theme): string {
         '_layout',
         '_login',
         '_unics-pages',
+        // Оболочка под роль (G3): боковой рельс + центр уведомлений (toast - позже).
+        // После _unics-pages (наши страницы — эталон), перед core/accessibility.
+        '_shell-rail',
+        '_shell-notifications', // фирменная подача ядрового колокола уведомлений
+
+        // Core-страницы Moodle (G2): единый стиль курса, активностей, теста, журнала.
+        // Идут ПОСЛЕ _unics-pages (наши страницы — эталон) и ПЕРЕД _accessibility
+        // (per-user A1-темы перекрывают эти правила последними по cascade order).
+        '_core-shared',     // сквозные примитивы ядра: page-header, generaltable, mform, alert, secondary-nav
+        '_core-course',     // страница курса: секции-карточки, строка активности, course index
+        '_core-mod',        // mod-страницы: заголовок, readable-width, intro, assign/forum
+        '_core-quiz',       // прохождение/просмотр теста: блок вопроса, варианты, навигация теста
+        '_core-gradebook',  // журнал/оценки: staff-таблицы, липкий заголовок, бейджи
         '_accessibility',  // per-user темы (dark/contrast/accent) — должен идти ПОСЛЕ остальных,
                            // чтобы перекрывать базовые правила по cascade order.
     ];
@@ -129,4 +142,114 @@ function theme_unics_pluginfile($course, $cm, $context, $filearea, $args, $force
         return $theme->setting_file_serve($filearea, $args, $forcedownload, $options);
     }
     send_file_not_found();
+}
+
+/**
+ * Боковой рельс под роль (G3 per-role-shell, Срез "Рельс v1").
+ *
+ * Эмитит постоянную левую навигацию в начале <body> из структуры
+ * {@see local_unics_get_shell_nav()} (единый источник пунктов с
+ * local_unics_extend_navigation). Сдвиг #page и позиционирование - в
+ * scss/_shell-rail.scss (через body:has(.unics-shell-rail), без форка layout).
+ *
+ * Охват v1: только страницы /local/unics/* (страница курса + сосуществование с
+ * course-index Boost - следующий срез).
+ *
+ * @return string HTML рельса (пустая строка, если рельс не нужен).
+ */
+function theme_unics_before_standard_top_of_body_html(): string {
+    global $PAGE, $OUTPUT, $CFG;
+
+    if (during_initial_install() || !isloggedin() || isguestuser()) {
+        return '';
+    }
+
+    // Только наши страницы (охват курса - позже, после решения по course-index).
+    $onunics = $PAGE->has_set_url()
+        && strpos($PAGE->url->out_omit_querystring(), '/local/unics/') !== false;
+    if (!$onunics) {
+        return '';
+    }
+
+    if (!function_exists('local_unics_get_shell_nav')) {
+        $lib = $CFG->dirroot . '/local/unics/lib.php';
+        if (!file_exists($lib)) {
+            return '';
+        }
+        require_once($lib);
+    }
+
+    $nav = local_unics_get_shell_nav();
+    if (empty($nav['groups'])) {
+        return '';
+    }
+
+    $groupshtml = '';
+    foreach ($nav['groups'] as $group) {
+        $itemshtml = '';
+        foreach ($group['items'] as $it) {
+            $icon = !empty($it['icon'])
+                ? $OUTPUT->pix_icon($it['icon'], '', 'moodle', ['class' => 'icon unics-shell-rail__icon'])
+                : '';
+            $text = html_writer::span(s($it['label']), 'unics-shell-rail__text');
+            // title - подсказка при наведении в свёрнутом режиме (текст визуально скрыт,
+            // но остаётся в дереве доступности; title даёт hover-tooltip).
+            $linkattrs = [
+                'class' => 'unics-shell-rail__item' . (!empty($it['active']) ? ' is-active' : ''),
+                'title' => $it['label'],
+            ];
+            if (!empty($it['active'])) {
+                $linkattrs['aria-current'] = 'page';
+            }
+            $itemshtml .= html_writer::tag('li',
+                html_writer::link($it['url'], $icon . $text, $linkattrs),
+                ['class' => 'unics-shell-rail__li']);
+        }
+
+        $labelhtml = !empty($group['label'])
+            ? html_writer::div(s($group['label']), 'unics-shell-rail__label')
+            : '';
+
+        $groupshtml .= html_writer::tag('div',
+            $labelhtml . html_writer::tag('ul', $itemshtml, ['class' => 'unics-shell-rail__group-list']),
+            ['class' => 'unics-shell-rail__group']);
+    }
+
+    // Свёрнутый режим - per-user предпочтение (local_unics_user_preferences),
+    // серверный рендер = источник истины (без мигания); AMD-тоггл сохраняет его
+    // через core_user/repository + localStorage для мгновенности.
+    $collapsed   = (int) get_user_preferences('local_unics_shell_rail_collapsed', 0);
+    $togglelabel = $collapsed ? 'Развернуть меню' : 'Свернуть меню';
+
+    $toggle = html_writer::tag('button',
+        $OUTPUT->pix_icon('i/arrow-left', '', 'moodle', ['class' => 'icon unics-shell-rail__toggle-icon']) .
+        html_writer::span('Свернуть', 'unics-shell-rail__toggle-text'),
+        [
+            'type'          => 'button',
+            'class'         => 'unics-shell-rail__toggle',
+            'aria-expanded' => $collapsed ? 'false' : 'true',
+            'aria-controls' => 'unics-shell-rail-groups',
+            'aria-label'    => $togglelabel,
+            'title'         => $togglelabel,
+        ]);
+
+    $groupswrap = html_writer::div($groupshtml, 'unics-shell-rail__groups', ['id' => 'unics-shell-rail-groups']);
+
+    // Подключаем тоггл-логику только когда рельс реально отрисован.
+    $PAGE->requires->js_call_amd('local_unics/shell_rail', 'init');
+
+    $railhtml = html_writer::tag('nav', $toggle . $groupswrap, [
+        'class'      => 'unics-shell-rail' . ($collapsed ? ' unics-shell-rail--collapsed' : ''),
+        'id'         => 'unics-shell-rail',
+        'aria-label' => 'Основная навигация УНИКС',
+    ]);
+
+    // Подложка для мобильного off-canvas (на десктопе скрыта CSS). Скрыта по
+    // умолчанию; AMD shell_rail показывает её при открытии рельса гамбургером.
+    $railhtml .= html_writer::div('', 'unics-shell-rail__backdrop', [
+        'hidden'      => 'hidden',
+        'data-region' => 'unics-shell-rail-backdrop',
+    ]);
+
+    return $railhtml;
 }

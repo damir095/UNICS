@@ -1,0 +1,286 @@
+// =============================================================================
+// Core-страницы Moodle - журнал/оценки (G2, Срез 4) [staff-плотность]
+//
+// Две поверхности журнала, разная разметка ядра:
+//   1. Отчет по оценкам (grader)  - таблица педагога/админа: #user-grades
+//      .gradereport-grader-table. БЕЗ <thead> - заголовки колонок лежат в
+//      tr.heading внутри tbody; первая колонка (имя) уже sticky-left (ядро),
+//      строка средних tr.avg.pinned - sticky-bottom (ядро). Таблица шире вьюпорта
+//      и скроллится на уровне СТРАНИЦЫ (.gradeparent overflow:visible), поэтому
+//      sticky считается от вьюпорта -> липкий заголовок ставим top:navbar-height.
+//   2. Отчет по пользователю (user) - что видит ученик/родитель:
+//      table.generaltable.user-grade в .table-responsive. Заголовок/ячейки/zebra/
+//      рамка-карточка уже приходят из Foundation (_core-shared). Здесь только
+//      специфика журнала: категории/итоги, акцент на колонке оценки, pass/fail.
+//
+// Принцип плотности (DESIGN_BRIEF): grader = staff (плотно, цель 44px,
+// --unics-table-cell-*); user-report ученика - чуть просторнее (дети важнее).
+// Цвет НЕ единственный сигнал (WCAG 1.4.1): оценка всегда показана числом-текстом,
+// семантический тинт pass/fail - только дополнение к нему.
+//
+// Все значения - var(--unics-*). Тёмная/контраст - позже в _accessibility (A1).
+// Разметка подтверждена живым DOM курса 21 (grader + user, userid 61).
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// 1. Отчет по оценкам (grader) - #user-grades. Фирменные заголовки, staff-
+//    плотность, hover строки, zebra, опрятная замороженная колонка имени,
+//    липкий заголовок колонок, выделенная строка средних.
+// -----------------------------------------------------------------------------
+.path-grade-report-grader #user-grades {
+
+    // Ячейки, которых касаемся (имя/email/средние/заголовки) - staff-плотность из
+    // токенов. Внутренности td.gradecell ядро верстает своим flex-боксом с
+    // собственными отступами - их НЕ трогаем, чтобы не задвоить padding.
+    th.header,
+    th.item,
+    th.category,
+    th.userfield,
+    td.userfield,
+    tr.avg th,
+    tr.avg td {
+        padding: var(--unics-table-cell-y) var(--unics-table-cell-x);
+        vertical-align: middle;
+        border-color: var(--unics-table-border);
+    }
+
+    // Базовый фон ДАННЫХ-ячеек (оценки/email) - наша поверхность через ТОКЕН, а не
+    // серый body-bg ядра. Ядро красит эти ячейки литералом #F5F6F9 (компилируется
+    // из $body-bg) - на тёмной A1-теме они светились бы белыми блоками (токен не
+    // достаёт литерал). Через var() фон следует за темой: светлая = белый, тёмная =
+    // тёмная поверхность. Специфичность (1,2,1) НИЖЕ zebra/overridden/hover (1,3,1),
+    // поэтому те по-прежнему перекрывают этот базовый фон.
+    td.cell {
+        background-color: var(--unics-surface);
+    }
+
+    // Заголовок категории/курса (th.category, "География. 7 класс") и строки средних
+    // ПО ГРУППЕ (tr.groupavg, появляются при активных изолированных группах) - ядро
+    // красит их литералами #f8f9fa/#f5f6f9 (на тёмной теме = светлые пятна). Даём те
+    // же фирменные подложки через токены: категория = заголовочная, group-avg = как
+    // строка средних. Светлая тема: унифицируется с обычными заголовками/итогами.
+    th.category {
+        background-color: var(--unics-table-head-bg);
+    }
+    tr.groupavg th,
+    tr.groupavg td {
+        background-color: var(--unics-neutral-bg);
+    }
+
+    // --- Заголовки колонок (tr.heading) ---------------------------------------
+    // Фирменный нейтральный фон + тёмный текст (~13:1) + вес. Opaque-фон
+    // обязателен: под липким заголовком прокручивается контент.
+    tr.heading th,
+    tr.heading td {
+        background-color: var(--unics-table-head-bg);
+        color: var(--unics-table-head-text);
+        font-weight: 600;
+        border-bottom: 2px solid var(--unics-table-border);
+    }
+
+    // Липкий заголовок: колонки-заголовки (НЕ замороженная угловая ячейка) липнут
+    // к верху под фиксированным навбаром. z=3 - над ячейками оценок, под именной
+    // колонкой (z=2 у ядра) их пути не пересекаются, кроме угла (ниже).
+    tr.heading th.item,
+    tr.heading th.category,
+    tr.heading th.userfield,
+    tr.heading td {
+        position: sticky;
+        top: var(--navbar-height, 60px);
+        z-index: 3;
+    }
+
+    // Угловая ячейка заголовка (имя/фамилия): уже sticky-left у ядра. Добавляем
+    // top -> липнет в углу по ОБЕИМ осям. z=6 - поверх и заголовков (3), и
+    // именной колонки (2), и строки средних (4), чтобы угол не перекрывался.
+    tr.heading th.header {
+        position: sticky;
+        left: 0;
+        top: var(--navbar-height, 60px);
+        z-index: 6;
+    }
+
+    // --- Замороженная колонка имени (тело таблицы) ----------------------------
+    // Ядро держит её sticky-left (z=2) с фоном --unics-bg; даём чистый белый
+    // (opaque - под ней скроллят оценки) и фирменный hover вместе со строкой.
+    tr.userrow th.header.user {
+        background-color: var(--unics-surface);
+    }
+
+    // --- Zebra + hover строки -------------------------------------------------
+    // Полосатость - только на прокручиваемых ячейках (оценки/email); именную
+    // колонку держим белой ради чистоты карточки.
+    tr.userrow.even td {
+        background-color: var(--unics-table-stripe);
+    }
+
+    // Hover - вся строка, включая замороженную именную ячейку (th).
+    tr.userrow:hover td,
+    tr.userrow:hover th.header.user {
+        background-color: var(--unics-table-row-hover);
+    }
+
+    // --- Строка средних (tr.avg.pinned, sticky-bottom у ядра) -----------------
+    // Выделяем как итог: нейтральный фон + верхняя граница + вес. Стикёрность/z
+    // ядра не трогаем.
+    tr.avg th,
+    tr.avg td {
+        background-color: var(--unics-neutral-bg);
+        border-top: 2px solid var(--unics-table-border);
+        font-weight: 600;
+    }
+
+    // --- Переопределённая оценка (td.overridden) ------------------------------
+    // Ядро тинтит её еле заметно; даём спокойный info-тинт. Не цвет-единственный:
+    // значение остаётся числом-текстом, плюс ядро рисует dimmed_text.
+    td.gradecell.overridden {
+        background-color: var(--unics-info-bg);
+    }
+
+    // Клавиатурный фокус по ссылкам внутри журнала.
+    a:focus-visible {
+        outline: none;
+        box-shadow: var(--unics-focus-ring);
+        border-radius: var(--unics-radius);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 2. Отчет по пользователю (user) - то, что видит ученик/родитель.
+//    Базу (заголовок/ячейки/zebra/рамка) даёт Foundation generaltable. Здесь -
+//    специфика журнала + чуть просторнее (детская поверхность).
+// -----------------------------------------------------------------------------
+.path-grade-report-user .user-grade {
+
+    // Чуть просторнее staff-таблицы: ученик читает СВОИ оценки, не сканирует класс.
+    // Базовый фон ячеек - наша поверхность через ТОКЕН (ядро красит .header-ячейки
+    // литералом #f8f9fa -> на тёмной A1-теме светятся). Категории/итоги ниже
+    // перекрывают (та же специфичность, но идут позже по исходнику).
+    th,
+    td {
+        padding: var(--unics-space-3) var(--unics-table-cell-x);
+        background-color: var(--unics-surface);
+    }
+
+    // Заголовки колонок (thead): ядро grade-report-user красит их #f8f9fa правилом
+    // СПЕЦИФИЧНЕЕ Foundation (.user-grade thead th = (0,2,2)) -> на тёмной теме
+    // светятся. Перебиваем тем же набором классов (та же специфичность, позже по
+    // исходнику) на фирменную подложку через токен (светлая #eef0f4 / тёмная surface-2).
+    thead th,
+    thead td {
+        background-color: var(--unics-table-head-bg);
+    }
+
+    // Ячейка названия элемента (.item, бывает th и td): ядро красит её белым
+    // правилом (0,3,1), перебивающим базовый фон выше. Тем же набором классов
+    // (оба тега) возвращаем на токен.
+    th.item,
+    td.item {
+        background-color: var(--unics-surface);
+    }
+
+    // Названия категорий (th.category) - читаемый вес, мягкая подложка.
+    th.category {
+        background-color: var(--unics-neutral-bg);
+        font-weight: 600;
+    }
+
+    // Итоговые строки агрегации (level1 + baggt = "Итого по категории/курсу") -
+    // выделяем фоном/весом/верхней границей, как строку средних в grader.
+    .level1.baggt {
+        background-color: var(--unics-neutral-bg);
+        border-top: 2px solid var(--unics-table-border);
+        font-weight: 600;
+    }
+
+    // Колонка оценки - главная для ученика: акцент весом и размером.
+    td.column-grade {
+        font-weight: 600;
+        color: var(--unics-text);
+    }
+
+    // Колонка отзыва - читаемая ширина, спокойный текст.
+    td.column-feedback {
+        max-width: var(--unics-readable-width);
+        color: var(--unics-text);
+    }
+
+    // Строки-разделители ядра (spacer) - тихий зазор, без рамок/фона.
+    tr.spacer th,
+    tr.spacer td {
+        padding: 0;
+        height: var(--unics-space-2);
+        border: 0;
+        background-color: transparent;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 3. Сквозное для всех отчетов журнала (.path-grade-report): семантика оценки и
+//    приглушённый текст. Pass/fail подсвечиваем там, где ядро ставит классы
+//    .gradepass / .gradefail (когда у элемента задан "проходной балл"). Это
+//    ДОПОЛНЕНИЕ к числу-оценке (оно всегда текстом) - не нарушает WCAG 1.4.1.
+// -----------------------------------------------------------------------------
+.path-grade-report {
+    .gradepass .gradevalue,
+    .gradepass.column-grade {
+        color: var(--unics-success);
+        font-weight: 600;
+    }
+
+    .gradefail .gradevalue,
+    .gradefail.column-grade {
+        color: var(--unics-error);
+        font-weight: 600;
+    }
+
+    // Рассчитанные/скрытые/недоступные значения - приглушённо (ядро ставит
+    // .dimmed_text). Берём `--unics-neutral` (#4a5160), а НЕ `--unics-text-muted`
+    // (#6b7280): muted даёт лишь ~4.0:1 на info-тинте overridden и ~4.4:1 на zebra
+    // (axe: serious color-contrast). neutral держит >=7:1 на всех фонах таблицы
+    // (белый/zebra/neutral-bg/info-bg) и остаётся визуально приглушённым слейтом.
+    .gradevalue.dimmed_text,
+    .dimmed_text {
+        color: var(--unics-neutral);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 4. Адаптив (<992px, телефон + планшет): плотная таблица grader НЕ должна
+//    ломать страницу. У ядра `.gradeparent` (и все предки) overflow:visible -> на
+//    узком экране широкая таблица (>2000px) тянет горизонтальный скролл ВСЕЙ
+//    страницы: вбок едут навбар и баннер ("ломка" из DESIGN_BRIEF). Делаем
+//    `.gradeparent` контейнером горизонтального скролла - едет ТОЛЬКО таблица,
+//    страница на месте. Замороженная колонка имени (sticky-left, ядро) продолжает
+//    работать уже относительно контейнера: имя видно при скролле оценок вбок.
+//    Порог = Bootstrap lg (991.98px): ниже - контейнер-скролл (телефон+планшет,
+//    где ломка хуже всего и места нет), от lg и выше - оставляем sticky-top
+//    заголовок + скролл страницы (десктоп, заголовок под навбаром полезнее).
+//    Подтверждено живым DOM: на 360px и 768px без фикса document > viewport.
+// -----------------------------------------------------------------------------
+@media (max-width: 991.98px) {
+    .path-grade-report-grader .gradeparent {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;   // инерционный скролл на iOS
+        border: 1px solid var(--unics-table-border);
+        border-radius: var(--unics-radius);
+    }
+
+    // Липкий ВЕРХ заголовка выключаем: в scroll-контейнере overflow-y вычисляется
+    // как auto, и sticky-top считается от контейнера, а не вьюпорта - ведёт себя
+    // непредсказуемо. Брендинг (фон/вес/граница) остаётся.
+    .path-grade-report-grader #user-grades tr.heading th.item,
+    .path-grade-report-grader #user-grades tr.heading th.category,
+    .path-grade-report-grader #user-grades tr.heading th.userfield,
+    .path-grade-report-grader #user-grades tr.heading td {
+        position: static;
+        top: auto;
+    }
+
+    // Угловая ячейка имени: оставляем только горизонтальную заморозку (sticky-left
+    // от базового правила), вертикальную снимаем.
+    .path-grade-report-grader #user-grades tr.heading th.header {
+        top: auto;
+        z-index: 2;
+    }
+}

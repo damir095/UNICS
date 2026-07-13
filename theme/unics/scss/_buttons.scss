@@ -59,6 +59,34 @@
     color: #fff !important;
 }
 
+// -----------------------------------------------------------------------------
+// Сплошные контекстные кнопки: дефолты Bootstrap (белый на #28a745/#dc3545/#17a2b8)
+// валят WCAG AA. Перекрываем на выделенные AA-токены, как .btn-primary.
+// Партиал темы идёт ПОСЛЕ Bootstrap -> при равной специфичности выигрывают наши
+// правила (явный hover-фон бьёт бутстраповский тёмный hover).
+// .btn-warning не трогаем - тёмный текст на жёлтом проходит AA.
+// -----------------------------------------------------------------------------
+.btn-success, .btn-success:hover, .btn-success:focus, .btn-success:active {
+    background-color: var(--unics-success-btn);
+    border-color: var(--unics-success-btn);
+}
+.btn-danger, .btn-danger:hover, .btn-danger:focus, .btn-danger:active {
+    background-color: var(--unics-danger-btn);
+    border-color: var(--unics-danger-btn);
+}
+.btn-info, .btn-info:hover, .btn-info:focus, .btn-info:active {
+    background-color: var(--unics-info-btn);
+    border-color: var(--unics-info-btn);
+}
+.btn-success, .btn-danger, .btn-info,
+.btn-success *, .btn-danger *, .btn-info * {
+    color: #fff !important;
+}
+.btn-success:hover, .btn-danger:hover, .btn-info:hover,
+.btn-success:focus, .btn-danger:focus, .btn-info:focus {
+    filter: brightness(0.92);
+}
+
 .btn-outline-primary {
     color: var(--unics-primary-text);
     border-color: var(--unics-primary);

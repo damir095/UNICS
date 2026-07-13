@@ -1,0 +1,178 @@
+// =============================================================================
+// Core-страницы Moodle — страница курса (G2, Срез 1)
+//
+// Самая видная детская поверхность ядра. Приводим её к визуальному языку наших
+// страниц (_unics-pages): секции — карточки, строки активностей — крупные
+// кликабельные ряды, текущий раздел — маркер + текстовая метка (не только цвет).
+// Детская плотность: просторно, крупно, тёплый акцент точечно (Scandinavian).
+//
+// Разметка (Moodle 5.0 Boost, topics-формат, подтверждено живым DOM курса 21):
+//   .course-content
+//     li.section.course-section.main#section-N[data-for=section](.current?)
+//       .section-item
+//         .course-section-header.d-flex[data-for=section_title]
+//           a.btn.btn-icon (тогглер) + заголовок раздела
+//         .course-section-content (collapse)
+//           ul.section[data-for=cmlist]
+//             li.activity.modtype_*#module-N
+//               .activity-item.focus-control[data-region=activity-card]
+//                 .activity-grid
+//                   .activity-icon.activityiconcontainer
+//                   .activity-name-area > .activitytitle > .activityname >
+//                       a.aalink.stretched-link > .instancename
+//                   .activity-completion
+//
+// Все значения — var(--unics-*). Тёмная/контраст — позже в _accessibility (A1).
+// =============================================================================
+
+.course-content {
+
+    // -------------------------------------------------------------------------
+    // Секция курса = карточка-поверхность (как наши .card / .unics-metric).
+    // Фон/радиус/тень/паддинг из токенов; зазор между секциями — section-gap.
+    // -------------------------------------------------------------------------
+    .course-section {
+        background-color: var(--unics-section-bg);
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius-lg);
+        box-shadow: var(--unics-shadow-sm);
+        padding: var(--unics-section-pad);
+        margin-bottom: var(--unics-section-gap);
+    }
+
+    // Заголовок раздела — крупный, с воздухом снизу.
+    .course-section-header {
+        margin-bottom: var(--unics-space-3);
+
+        .sectionname,
+        h3 {
+            font-weight: 600;
+            line-height: 1.3;
+        }
+    }
+
+    // Описание/резюме раздела — читаемая ширина, приглушённый текст.
+    .course-section-content > .summarytext,
+    .section-summary,
+    .summary {
+        max-width: var(--unics-readable-width);
+        color: var(--unics-text-muted);
+    }
+
+    // Список активностей внутри секции — снимаем дефолтные list-отступы,
+    // даём вертикальный ритм между строками.
+    ul.section {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    li.activity {
+        margin: 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Строка активности — крупная кликабельная карточка-ряд.
+    // Иконка + текст, наведение подсвечивает строку, цель >= 44px.
+    // .aalink.stretched-link уже делает всю строку кликабельной (ядро).
+    // -------------------------------------------------------------------------
+    .activity-item {
+        min-height: var(--unics-touch-min);
+        padding: var(--unics-space-2) var(--unics-space-3);
+        border: 1px solid transparent;
+        border-radius: var(--unics-radius);
+        transition: background-color .12s ease, border-color .12s ease;
+
+        &:hover {
+            background-color: var(--unics-activity-hover);
+            border-color: var(--unics-border);
+        }
+
+        // Клавиатурный фокус по строке (stretched-link получает фокус) — видимое кольцо.
+        &:focus-within {
+            border-color: var(--unics-primary);
+            box-shadow: var(--unics-focus-ring);
+        }
+    }
+
+    // Название активности — читаемый размер/вес (база 1.125rem из pre-scss).
+    .activityname .aalink,
+    .instancename {
+        font-weight: 500;
+        color: var(--unics-text);
+    }
+
+    // Иконка активности — выровнена с текстом, не растягивается.
+    .activity-icon {
+        flex: 0 0 auto;
+    }
+
+    // Иконка завершения активности (галочка/тоггл): акцентная, крупная цель.
+    // (цвет иконки уже задан в _layout; здесь — размер цели нажатия.)
+    .activity-completion {
+        .btn,
+        .completion-icon {
+            min-height: var(--unics-touch-min);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Текущий раздел — маркер + ТЕКСТОВАЯ метка (не только цвет, WCAG 1.4.1).
+    // Ядро вешает .current на li.section текущего раздела. Левая фирменная
+    // полоса (графический объект, контраст к белой поверхности >= 3:1) + чип
+    // с подписью "Текущий раздел" (тёмный фон, белый текст = AA).
+    // -------------------------------------------------------------------------
+    li.section.current {
+        border-left: 4px solid var(--unics-current-marker);
+
+        // Текстовая метка-пилюля в начале карточки секции (над заголовком).
+        // inline-block => ширина по содержимому (а не во всю строку); следующий
+        // блок .section-item переносит её на свою строку сверху.
+        &::before {
+            content: "Текущий раздел";
+            display: inline-block;
+            margin-bottom: var(--unics-space-2);
+            padding: var(--unics-space-1) var(--unics-space-3);
+            background-color: var(--unics-primary-deep);  // #A93D24 — белый текст 6:1 (AA); сам маркер-полоса яркий
+            color: #fff;
+            border-radius: var(--unics-radius-pill);
+            font-size: 0.8125rem;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Course index (левый drawer) — типографика и активная секция/страница в
+// токенах. Сам drawer Boost (фон/границу) оставляем — заданы в _layout.scss.
+// Разметка: #course-index .courseindex-section > .courseindex-item(.pageitem)
+//           .courseindex-link / .courseindex-name.
+// -----------------------------------------------------------------------------
+#course-index {
+    .courseindex-item {
+        border-radius: var(--unics-radius);
+        transition: background-color .12s ease;
+
+        &:hover {
+            background-color: var(--unics-activity-hover);
+        }
+    }
+
+    .courseindex-link,
+    .courseindex-name {
+        color: var(--unics-text);
+    }
+
+    // Текущая страница в дереве (активный mod / секция) — акцент + вес.
+    // pageitem проставляет ядро; фон + цвет = сигнал не только цветом (вес+фон).
+    .courseindex-item.pageitem {
+        background-color: var(--unics-neutral-bg);
+
+        .courseindex-link,
+        .courseindex-name {
+            color: var(--unics-primary-text);
+            font-weight: 600;
+        }
+    }
+}

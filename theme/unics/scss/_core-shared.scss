@@ -1,0 +1,208 @@
+// =============================================================================
+// Core-страницы Moodle — сквозные примитивы ядра (G2, Foundation)
+//
+// Единая визуальная грамматика для элементов, которые встречаются на ВСЕХ
+// core-поверхностях (курс, mod, тест, журнал, settings): вкладки страницы,
+// generic-таблицы, формы mform, алерты. Цель — чтобы граница "наши страницы"
+// (_unics-pages) <-> "ядро Moodle" не читалась глазом (DESIGN_BRIEF §Solution).
+//
+// Что НЕ дублируем здесь (уже покрыто раньше по каскаду):
+//   - #page-header (фирменный баннер) — _navbar.scss
+//   - form-control / focus-ring         — _forms.scss
+//   - ссылки / типографика / #courseindex база — _layout.scss
+// Здесь только то, чего ещё нет, и только в светлой теме. Тёмная/контраст
+// перекрываются позже в _accessibility.scss (per-user A1), поэтому селекторы
+// держим без !important там, где это возможно.
+//
+// Все значения — из var(--unics-*) (DESIGN_TOKENS.md). Хардкод запрещён.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Secondary navigation — вкладки страницы (Курс / Настройки / Участники / ...).
+// Разметка: .secondary-navigation > nav.moremenu > ul.nav-tabs.more-nav >
+//           li.nav-item > a.nav-link(.active, aria-current="true").
+// Активная вкладка — в палитре (нижняя граница + цвет + вес), НЕ только цветом:
+// у ядра уже есть aria-current и более жирная подчёркнутая граница снизу.
+// Цель нажатия >= 44px (WCAG 2.5.5).
+// -----------------------------------------------------------------------------
+.secondary-navigation {
+    .nav-tabs,
+    .more-nav {
+        border-bottom: 1px solid var(--unics-border);
+    }
+
+    .nav-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--unics-touch-min);   // 44px сенсорная цель
+        padding: var(--unics-space-2) var(--unics-space-4);
+        color: var(--unics-text);
+        border: 0;
+        border-bottom: 3px solid transparent;  // место под активный маркер — layout не прыгает
+        border-radius: var(--unics-radius) var(--unics-radius) 0 0;
+        font-weight: 500;
+
+        &:hover,
+        &:focus {
+            background-color: var(--unics-neutral-bg);
+            color: var(--unics-primary-text);
+            border-bottom-color: var(--unics-border);
+        }
+
+        &:focus-visible {
+            box-shadow: var(--unics-focus-ring);
+            outline: none;
+        }
+    }
+
+    // Активная вкладка: фирменный нижний маркер + акцентный текст + вес.
+    // (aria-current="true" остаётся семантическим сигналом для скринридеров.)
+    .nav-link.active,
+    .nav-link[aria-current="true"] {
+        color: var(--unics-primary-text);
+        background-color: transparent;
+        border-bottom-color: var(--unics-primary);
+        font-weight: 600;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Generic-таблицы ядра (table.generaltable): участники, отчёты, списки.
+// Разметка: table.flexible.table.table-striped.table-hover.generaltable,
+// обёрнута в .table-responsive (горизонтальный скролл на узких экранах — ядро
+// уже умеет, сохраняем). Брендируем через --bs-table-* (как это делает тёмная
+// тема в _accessibility) + фирменный заголовок. Staff-плотность.
+// -----------------------------------------------------------------------------
+.table-responsive {
+    // Скруглённая рамка вокруг таблицы — карточный вид, как у наших блоков.
+    border: 1px solid var(--unics-table-border);
+    border-radius: var(--unics-radius);
+    overflow: auto hidden;   // вертикаль не режем, горизонталь — скролл (мобайл)
+}
+
+.generaltable {
+    // Bootstrap 5 управляет полосами/ховером через CSS-переменные на .table —
+    // подменяем их нашими токенами вместо переопределения фонов напрямую.
+    --bs-table-bg: var(--unics-surface);
+    --bs-table-color: var(--unics-text);
+    --bs-table-striped-bg: var(--unics-table-stripe);
+    --bs-table-striped-color: var(--unics-text);
+    --bs-table-hover-bg: var(--unics-table-row-hover);
+    --bs-table-hover-color: var(--unics-text);
+    --bs-table-border-color: var(--unics-table-border);
+
+    margin-bottom: 0;   // рамку/радиус даёт .table-responsive — лишний зазор снизу убираем
+
+    // Фирменный заголовок: нейтральный фон, тёмный текст (~13:1), вес.
+    thead th,
+    thead td,
+    th.header {
+        background-color: var(--unics-table-head-bg);
+        color: var(--unics-table-head-text);
+        border-bottom: 2px solid var(--unics-table-border);
+        font-weight: 600;
+        vertical-align: middle;
+    }
+
+    // Ячейки — staff-плотность из токенов, читаемое вертикальное выравнивание.
+    th,
+    td {
+        padding: var(--unics-table-cell-y) var(--unics-table-cell-x);
+        vertical-align: middle;
+        border-color: var(--unics-table-border);
+    }
+
+    // Ссылки сортировки в шапке наследуют тёмный текст заголовка (а не оранжевый
+    // ссылочный) — иначе шапка пестрит; акцент оставляем активной сортировке.
+    thead th a {
+        color: var(--unics-table-head-text);
+        text-decoration: none;
+
+        &:hover,
+        &:focus {
+            color: var(--unics-primary-text);
+            text-decoration: underline;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Формы mform (settings, course/edit, mod-формы).
+// form-control/focus уже стилизованы глобально (_forms). Здесь подтягиваем
+// КОМПОНОВКУ к нашим карточкам: каждый <fieldset> — карточка-поверхность с
+// фирменным заголовком; лейблы — читаемый вес; отступы из токенов.
+// Разметка: form.mform > fieldset.collapsible#id_* > (header) + .fcontainer
+//           с рядами .fitem.row > .col-form-label + .felement.
+// -----------------------------------------------------------------------------
+.mform {
+    fieldset {
+        background-color: var(--unics-surface);
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius-lg);
+        box-shadow: var(--unics-shadow-sm);
+        padding: var(--unics-density-child);
+        margin-bottom: var(--unics-section-gap);
+    }
+
+    // Заголовок секции формы (легенда/тогглер) — акцентная подложка снизу,
+    // как у .card-header в _cards. Тогглер сворачивания ядра сохраняем.
+    fieldset > .ftoggler,
+    fieldset > legend:not(.visually-hidden),
+    .fheader {
+        margin-bottom: var(--unics-space-4);
+        padding-bottom: var(--unics-space-2);
+        border-bottom: 2px solid var(--unics-primary);
+        font-weight: 600;
+    }
+
+    // Лейблы полей — читаемый вес (form-control стиль берётся из _forms).
+    .col-form-label label,
+    .fitemtitle label {
+        font-weight: 500;
+    }
+
+    // Ряд поля — вертикальный ритм из токенов (ядро ставит .mb-3, выравниваем).
+    .fitem {
+        margin-bottom: var(--unics-space-4);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Алерты/уведомления ядра (.alert): семантические фоны из токенов + рамка.
+// ВСЕГДА в паре с иконкой (ядро Boost рендерит иконку внутри .alert) — цвет не
+// единственный сигнал (WCAG 1.4.1). .alert-primary НЕ трогаем (бренд-нотисы,
+// цвет ссылок задан в _layout). Тёмная тема перекрывает эти фоны своими (A1).
+// -----------------------------------------------------------------------------
+.alert {
+    border-radius: var(--unics-radius);
+    border-width: 1px;
+    border-left-width: 4px;   // акцентная левая полоса — единый паттерн с .unics-toast/.unics-welcome
+    padding: var(--unics-space-3) var(--unics-space-4);
+
+    &.alert-success {
+        background-color: var(--unics-success-bg);
+        border-color: var(--unics-success);
+        color: var(--unics-success);
+    }
+    &.alert-info {
+        background-color: var(--unics-info-bg);
+        border-color: var(--unics-info);
+        color: var(--unics-info);
+    }
+    &.alert-warning {
+        background-color: var(--unics-warning-bg);
+        border-color: var(--unics-warning);
+        color: var(--unics-warning);
+    }
+    &.alert-danger,
+    &.alert-error {
+        background-color: var(--unics-error-bg);
+        border-color: var(--unics-error);
+        color: var(--unics-error);
+    }
+    &.alert-secondary {
+        background-color: var(--unics-neutral-bg);
+        border-color: var(--unics-border);
+        color: var(--unics-neutral);
+    }
+}
