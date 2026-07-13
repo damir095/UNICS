@@ -170,13 +170,13 @@ echo html_writer::start_tag('div', ['class' => 'row g-2']);
 // Предмет
 echo html_writer::start_tag('div', ['class' => 'col-md-3 mb-3']);
 echo html_writer::tag('label', 'Предмет', ['class' => 'font-weight-bold d-block']);
-echo html_writer::select($subject_menu, 'subject', '', false, ['class' => 'form-control', 'required' => 'required']);
+echo html_writer::select($subject_menu, 'subject', '', false, ['class' => 'form-control', 'required' => 'required', 'aria-label' => 'Предмет']);
 echo html_writer::end_tag('div');
 
 // Класс
 echo html_writer::start_tag('div', ['class' => 'col-md-2 mb-3']);
 echo html_writer::tag('label', 'Класс', ['class' => 'font-weight-bold d-block']);
-echo html_writer::select($class_menu, 'class_num', 0, false, ['class' => 'form-control', 'required' => 'required']);
+echo html_writer::select($class_menu, 'class_num', 0, false, ['class' => 'form-control', 'required' => 'required', 'aria-label' => 'Класс']);
 echo html_writer::end_tag('div');
 
 // Кол-во тем (override)
@@ -194,7 +194,7 @@ echo html_writer::end_tag('div');
 echo html_writer::start_tag('div', ['class' => 'col-md-3 mb-3']);
 echo html_writer::tag('label', 'Категория (Moodle)', ['class' => 'd-block']);
 echo html_writer::select($category_menu, 'category_id', 0, false,
-    ['class' => 'form-control', 'style' => 'min-width:200px']);
+    ['class' => 'form-control', 'style' => 'min-width:200px', 'aria-label' => 'Категория Moodle']);
 echo html_writer::end_tag('div');
 
 echo html_writer::end_tag('div'); // form-row

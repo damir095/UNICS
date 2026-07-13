@@ -298,7 +298,7 @@ echo html_writer::start_tag('div', ['class' => 'row g-2 align-items-end']);
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
 echo html_writer::tag('label', 'Курс', ['class' => 'font-weight-bold d-block mb-1']);
 echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
-    ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()']);
+    ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()', 'aria-label' => 'Курс']);
 echo html_writer::end_tag('div');
 
 if (!$is_admin_user && $methodist_org_id) {
@@ -310,14 +310,14 @@ if (!$is_admin_user && $methodist_org_id) {
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
     echo html_writer::tag('label', 'Муниципалитет', ['class' => 'd-block mb-1']);
     echo html_writer::select($districts_menu, 'district_id', $filter_district, false,
-        ['class' => 'form-control', 'style' => 'min-width:170px']);
+        ['class' => 'form-control', 'style' => 'min-width:170px', 'aria-label' => 'Муниципалитет']);
     echo html_writer::end_tag('div');
 
     // Организация
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
     echo html_writer::tag('label', 'Организация', ['class' => 'd-block mb-1']);
     echo html_writer::select($orgs_menu, 'org_id', $filter_org, false,
-        ['class' => 'form-control', 'style' => 'min-width:170px']);
+        ['class' => 'form-control', 'style' => 'min-width:170px', 'aria-label' => 'Организация']);
     echo html_writer::end_tag('div');
 }
 
@@ -325,14 +325,14 @@ if (!$is_admin_user && $methodist_org_id) {
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
 echo html_writer::tag('label', 'Класс', ['class' => 'd-block mb-1']);
 echo html_writer::select($classes_menu, 'class_num', $filter_class, false,
-    ['class' => 'form-control', 'style' => 'min-width:120px']);
+    ['class' => 'form-control', 'style' => 'min-width:120px', 'aria-label' => 'Класс']);
 echo html_writer::end_tag('div');
 
 // Буква класса
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
 echo html_writer::tag('label', 'Буква', ['class' => 'd-block mb-1']);
 echo html_writer::select($letters_menu, 'class_letter', $filter_letter, false,
-    ['class' => 'form-control', 'style' => 'min-width:110px']);
+    ['class' => 'form-control', 'style' => 'min-width:110px', 'aria-label' => 'Буква класса']);
 echo html_writer::end_tag('div');
 
 // Кнопка
@@ -368,7 +368,7 @@ if ($selected_course > 0) {
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
     echo html_writer::tag('label', 'Добавить в группу курса:', ['class' => 'font-weight-bold d-block mb-1']);
     echo html_writer::select($groups_menu, 'group_id', 0, false,
-        ['class' => 'form-control', 'style' => 'min-width:200px']);
+        ['class' => 'form-control', 'style' => 'min-width:200px', 'aria-label' => 'Группа курса']);
     echo html_writer::end_tag('div');
 
     // Разделитель
@@ -422,10 +422,11 @@ foreach ($students as $s) {
         : html_writer::tag('span', 'Не записан', ['class' => 'badge badge-secondary']);
 
     $checkbox = html_writer::empty_tag('input', [
-        'type'  => 'checkbox',
-        'name'  => 'student_ids[]',
-        'value' => $s->student_id,
-        'class' => 'student-check',
+        'type'       => 'checkbox',
+        'name'       => 'student_ids[]',
+        'value'      => $s->student_id,
+        'class'      => 'student-check',
+        'aria-label' => 'Выбрать учащегося: ' . trim("{$s->lastname} {$s->firstname}"),
     ]);
 
     // Группы пользователя

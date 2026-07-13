@@ -427,7 +427,7 @@ echo html_writer::start_tag('div', ['class' => 'row g-2 align-items-end']);
 echo html_writer::start_tag('div', ['class' => 'col-auto']);
 echo html_writer::tag('label', 'Курс', ['class' => 'font-weight-bold d-block mb-1']);
 echo html_writer::select($courses_menu, 'course_id', $selected_course, false,
-    ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()']);
+    ['class' => 'form-control', 'style' => 'min-width:250px', 'onchange' => 'this.form.submit()', 'aria-label' => 'Курс']);
 echo html_writer::end_tag('div');
 
 if (!$is_admin_user && $methodist_org_id) {
@@ -438,7 +438,7 @@ if (!$is_admin_user && $methodist_org_id) {
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
     echo html_writer::tag('label', 'Организация', ['class' => 'd-block mb-1']);
     echo html_writer::select($orgs_menu, 'org_id', $filter_org, false,
-        ['class' => 'form-control', 'style' => 'min-width:200px']);
+        ['class' => 'form-control', 'style' => 'min-width:200px', 'aria-label' => 'Организация']);
     echo html_writer::end_tag('div');
 }
 
@@ -475,7 +475,7 @@ if ($selected_course > 0) {
     echo html_writer::start_tag('div', ['class' => 'col-auto']);
     echo html_writer::tag('label', 'Добавить в группу курса:', ['class' => 'font-weight-bold d-block mb-1']);
     echo html_writer::select($groups_menu, 'group_id', 0, false,
-        ['class' => 'form-control', 'style' => 'min-width:200px']);
+        ['class' => 'form-control', 'style' => 'min-width:200px', 'aria-label' => 'Группа курса']);
     echo html_writer::end_tag('div');
 
     // Разделитель
@@ -645,10 +645,11 @@ foreach ($teachers as $t) {
         : html_writer::tag('span', 'Не записан', ['class' => 'badge badge-secondary']);
 
     $checkbox = html_writer::empty_tag('input', [
-        'type'  => 'checkbox',
-        'name'  => 'teacher_ids[]',
-        'value' => $t->teacher_id,
-        'class' => 'teacher-check',
+        'type'       => 'checkbox',
+        'name'       => 'teacher_ids[]',
+        'value'      => $t->teacher_id,
+        'class'      => 'teacher-check',
+        'aria-label' => 'Выбрать педагога: ' . trim("{$t->lastname} {$t->firstname}"),
     ]);
 
     $gnames = $teacher_groups[$t->mdl_user_id] ?? [];

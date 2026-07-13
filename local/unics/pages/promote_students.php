@@ -195,11 +195,11 @@ echo $OUTPUT->notification(
 echo html_writer::start_tag('form', ['method' => 'get',
     'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
 echo html_writer::select([0 => '- выберите организацию -'] + $orgs_menu,
-    'org', $filter_org, false, ['class' => 'form-control']);
+    'org', $filter_org, false, ['class' => 'form-control', 'aria-label' => 'Организация']);
 echo html_writer::select([0 => 'Все классы'] + $class_menu,
-    'class', $filter_class, false, ['class' => 'form-control']);
+    'class', $filter_class, false, ['class' => 'form-control', 'aria-label' => 'Класс']);
 echo html_writer::select(['' => 'Все буквы'] + $letters_menu,
-    'letter', $filter_letter, false, ['class' => 'form-control']);
+    'letter', $filter_letter, false, ['class' => 'form-control', 'aria-label' => 'Буква класса']);
 echo html_writer::tag('button', 'Показать', ['type' => 'submit', 'class' => 'btn btn-outline-secondary']);
 echo html_writer::end_tag('form');
 

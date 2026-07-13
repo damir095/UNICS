@@ -322,16 +322,16 @@ if (!$is_admin_user && $methodist_org_id) {
 } else {
     echo html_writer::tag('label', 'Организация:', ['class' => 'mr-1']);
     echo html_writer::select($orgs_menu, 'filter_org', $filter_org, false,
-        ['class' => 'form-control form-control-sm mr-3']);
+        ['class' => 'form-control form-control-sm mr-3', 'aria-label' => 'Организация']);
 }
 
 echo html_writer::tag('label', 'Класс:', ['class' => 'mr-1']);
 echo html_writer::select($classes_menu, 'filter_class', $filter_class, false,
-    ['class' => 'form-control form-control-sm mr-3']);
+    ['class' => 'form-control form-control-sm mr-3', 'aria-label' => 'Класс']);
 
 echo html_writer::tag('label', 'Буква:', ['class' => 'mr-1']);
 echo html_writer::select($letters_menu, 'filter_letter', $filter_letter, false,
-    ['class' => 'form-control form-control-sm mr-3']);
+    ['class' => 'form-control form-control-sm mr-3', 'aria-label' => 'Буква класса']);
 
 echo html_writer::tag('button', 'Применить', ['type' => 'submit', 'class' => 'btn btn-sm btn-secondary']);
 echo html_writer::end_tag('form');
@@ -353,7 +353,7 @@ echo html_writer::start_tag('div', ['class' => 'row']);
 echo html_writer::start_tag('div', ['class' => 'col-md-4 mb-3']);
 echo html_writer::tag('label', 'Педагог:', ['class' => 'font-weight-bold']);
 echo html_writer::select($teachers_menu, 'teacher_id', '', false,
-    ['class' => 'form-control', 'id' => 'teacher_select']);
+    ['class' => 'form-control', 'id' => 'teacher_select', 'aria-label' => 'Педагог']);
 echo html_writer::end_tag('div');
 
 // Правая колонка: чекбоксы учащихся
@@ -453,8 +453,8 @@ $assign_ps_url = new moodle_url('/local/unics/pages/assign.php',
     ['action' => 'assign_ps', 'sesskey' => sesskey()]);
 echo html_writer::start_tag('form', ['method' => 'post', 'action' => $assign_ps_url,
     'class' => 'form-inline mb-2']);
-echo html_writer::select($parents_menu, 'parent_id', '', false, ['class' => 'form-control mr-2']);
-echo html_writer::select($students_menu, 'student_id', '', false, ['class' => 'form-control mr-2']);
+echo html_writer::select($parents_menu, 'parent_id', '', false, ['class' => 'form-control mr-2', 'aria-label' => 'Родитель']);
+echo html_writer::select($students_menu, 'student_id', '', false, ['class' => 'form-control mr-2', 'aria-label' => 'Учащийся']);
 echo html_writer::tag('button', 'Привязать', ['type' => 'submit', 'class' => 'btn btn-primary']);
 echo html_writer::end_tag('form');
 

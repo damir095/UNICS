@@ -124,13 +124,13 @@ echo html_writer::start_tag('form',
     ['method' => 'get', 'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
 // Смена категории / вида перестраивает список курсов и таблицу сразу.
 echo html_writer::select($cat_menu, 'f_cat', $filter_cat, false,
-    ['class' => 'form-control', 'onchange' => 'this.form.submit()']);
+    ['class' => 'form-control', 'onchange' => 'this.form.submit()', 'aria-label' => 'Категория']);
 echo html_writer::select($course_menu, 'course_id', $course_id, false,
-    ['class' => 'form-control', 'style' => 'max-width:340px']);
-echo html_writer::select($class_menu,   'f_class',  $filter_class,  false, ['class' => 'form-control']);
-echo html_writer::select($letters_menu, 'f_letter', $filter_letter, false, ['class' => 'form-control']);
+    ['class' => 'form-control', 'style' => 'max-width:340px', 'aria-label' => 'Курс']);
+echo html_writer::select($class_menu,   'f_class',  $filter_class,  false, ['class' => 'form-control', 'aria-label' => 'Класс']);
+echo html_writer::select($letters_menu, 'f_letter', $filter_letter, false, ['class' => 'form-control', 'aria-label' => 'Буква класса']);
 echo html_writer::select($view_menu, 'view', $view, false,
-    ['class' => 'form-control', 'onchange' => 'this.form.submit()']);
+    ['class' => 'form-control', 'onchange' => 'this.form.submit()', 'aria-label' => 'Вид журнала']);
 echo html_writer::tag('button', 'Показать', ['type' => 'submit', 'class' => 'btn btn-primary']);
 echo html_writer::end_tag('form');
 

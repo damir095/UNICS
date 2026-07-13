@@ -177,12 +177,12 @@ if ($mode === 'admin' || $mode === 'scoped') {
         ['method' => 'get', 'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
     if (count($districts_menu) > 1) {
         echo html_writer::select([0 => 'Все муниципалитеты'] + $districts_menu,
-            'f_dist', $filter_district, false, ['class' => 'form-control']);
+            'f_dist', $filter_district, false, ['class' => 'form-control', 'aria-label' => 'Муниципалитет']);
     }
-    echo html_writer::select($orgs_menu,    'f_org',    $filter_org,    false, ['class' => 'form-control']);
-    echo html_writer::select($class_menu,   'f_class',  $filter_class,  false, ['class' => 'form-control']);
-    echo html_writer::select($letters_menu, 'f_letter', $filter_letter, false, ['class' => 'form-control']);
-    echo html_writer::select($level_menu,   'f_level',  $filter_level,  false, ['class' => 'form-control']);
+    echo html_writer::select($orgs_menu,    'f_org',    $filter_org,    false, ['class' => 'form-control', 'aria-label' => 'Организация']);
+    echo html_writer::select($class_menu,   'f_class',  $filter_class,  false, ['class' => 'form-control', 'aria-label' => 'Класс']);
+    echo html_writer::select($letters_menu, 'f_letter', $filter_letter, false, ['class' => 'form-control', 'aria-label' => 'Буква класса']);
+    echo html_writer::select($level_menu,   'f_level',  $filter_level,  false, ['class' => 'form-control', 'aria-label' => 'Уровень']);
     echo html_writer::tag('button', 'Фильтр', ['type' => 'submit', 'class' => 'btn btn-outline-secondary']);
     echo html_writer::end_tag('form');
 }
