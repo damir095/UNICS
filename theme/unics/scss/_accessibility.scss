@@ -699,3 +699,15 @@ html[class*="unics-a11y"] .unics-shell-rail .unics-shell-rail__groups .unics-she
         color: var(--unics-rail-item-active-text);
     }
 }
+
+// -----------------------------------------------------------------------------
+// Логотип в темной схеме: вход (#logoimage) и мобильный drawer лежат на темном
+// фоне - подменяем темнотекстовую связку белой (как навбар в _navbar.scss).
+// Контраст-схема светлая - там остается дефолтная версия.
+// -----------------------------------------------------------------------------
+html.unics-a11y-dark {
+    #logoimage,
+    [data-region="site-home-link"] .logo {
+        content: url([[pix:theme|unics-logo-white]]);
+    }
+}

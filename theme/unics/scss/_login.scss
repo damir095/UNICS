@@ -15,6 +15,13 @@
         background: var(--unics-surface);
     }
 
+    // Логотип над формой (renderer get_logo_url -> #logoimage): у SVG
+    // собственная ширина 200px, задаем целевую и не даем вылезти из бокса.
+    #logoimage {
+        width: 240px;
+        max-width: 100%;
+    }
+
     .login-form-username,
     .login-form-password {
         margin-bottom: var(--unics-space-4);

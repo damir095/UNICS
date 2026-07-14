@@ -115,6 +115,14 @@
     display: none !important;
 }
 
+// Логотип УНИКС в навбаре (renderer get_compact_logo_url -> img.logo в .navbar-brand).
+// Навбар темный ВСЕГДА (--unics-dark выше), а дефолтный src - темнотекстовая связка
+// (ее видит светлый мобильный drawer), поэтому здесь подменяем на белую версию.
+// [[pix:theme|...]] ядро разворачивает в URL при компиляции CSS.
+.navbar .navbar-brand .logo {
+    content: url([[pix:theme|unics-logo-white]]);
+}
+
 // Иконки УНИКС в навбаре (Сообщения + Доступность), рядом с колокольчиком.
 // Рендерятся через local_unics_render_navbar_output(). Крупная цель нажатия
 // (>=44px) и белый цвет на тёмном навбаре; ховер - акцент, как у прочих nav-link.

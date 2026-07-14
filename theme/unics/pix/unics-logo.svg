@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- УНИКС: знак «У-росток» + словесная часть path-буквами (не text - не зависит от шрифтов клиента). Версия с темным текстом для светлых поверхностей. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="64" viewBox="0 0 200 64">
+  <!-- Знак: буква У монолинией, правая ветвь прорастает листьями -->
+  <g fill="none" stroke="#F26545" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="7" d="M17 20 L32 39 M44 23 L32 39 L32 50 Q32 57 25 57"/>
+    <path stroke-width="5" d="M44 23 Q46.5 16 45.5 12"/>
+  </g>
+  <g fill="#2f9e55">
+    <path d="M45.5 12 Q37 4 28.5 6.5 Q34 14 45.5 12 Z"/>
+    <path d="M45.5 12 Q52 3 60 6 Q56 13 45.5 12 Z"/>
+  </g>
+  <!-- УНИКС -->
+  <g fill="none" stroke="#1F2430" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M92 17 L78 47 M76 17 L85.5 31"/>
+    <path d="M100 17 V47 M116 17 V47 M100 32 H116"/>
+    <path d="M124 17 V47 M140 17 V47 M124 47 L140 17"/>
+    <path d="M148 17 V47 M162 17 L149 32 L162 47"/>
+    <path d="M188.3 19.7 A11 15 0 1 0 188.3 44.3"/>
+  </g>
+</svg>

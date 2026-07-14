@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Фавикон УНИКС: белая «У-росток» (упрощение - один лист) на коралловой плашке. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#F26545"/>
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="7" d="M19 21 L32 37 M42 24 L32 37 L32 47 Q32 54 25.5 54"/>
+    <path stroke-width="5" d="M42 24 Q44.5 17.5 43.5 14"/>
+  </g>
+  <path fill="#FFFFFF" d="M43.5 14 Q35 6 26.5 8.5 Q31.5 15.5 43.5 14 Z"/>
+</svg>
