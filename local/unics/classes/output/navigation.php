@@ -27,11 +27,11 @@ class navigation {
         // cmid берём из контекста модуля - $PAGE->cm на этом этапе ещё не заполнен.
         if ($context instanceof \context_module && has_capability('mod/page:view', $context)) {
             $cmid = (int)$context->instanceid;
-            $modname = $DB->get_field_sql(
-                "SELECT m.name FROM {course_modules} cm JOIN {modules} m ON m.id = cm.module WHERE cm.id = ?",
+            $modrec = $DB->get_record_sql(
+                "SELECT m.name, cm.instance FROM {course_modules} cm JOIN {modules} m ON m.id = cm.module WHERE cm.id = ?",
                 [$cmid]
             );
-            if ($modname === 'page') {
+            if ($modrec && $modrec->name === 'page') {
                 $target = $settingsnav->find('modulesettings', null) ?: $settingsnav;
                 $target->add(
                     'УНИКС: Скачать PDF',
@@ -41,6 +41,22 @@ class navigation {
                     'local_unics_umk_export',
                     new \pix_icon('t/download', '')
                 );
+
+                // PPTX - только персоналу и только на УМК-презентациях (слайды
+                // .unics-slide в контенте); ученику остается PDF ([[umk-pptx-export-design]]).
+                if (access::student_record() === null) {
+                    $content = (string)$DB->get_field('page', 'content', ['id' => $modrec->instance]);
+                    if (\local_unics\ai\slide_parser::is_presentation($content)) {
+                        $target->add(
+                            'УНИКС: Скачать PPTX',
+                            new \moodle_url('/local/unics/pages/umk_export_pptx.php', ['cmid' => $cmid]),
+                            \navigation_node::TYPE_SETTING,
+                            null,
+                            'local_unics_umk_export_pptx',
+                            new \pix_icon('t/download', '')
+                        );
+                    }
+                }
             }
         }
 

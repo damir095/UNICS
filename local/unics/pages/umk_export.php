@@ -21,42 +21,8 @@ require_capability('mod/page:view', $context);
 
 $page = $DB->get_record('page', ['id' => $cm->instance], '*', MUST_EXIST);
 
-$is_presentation = (strpos((string)$page->content, 'unics-slide') !== false);
-
-// ---------------------------------------------------------------------------
-// Хелперы разбора презентации
-// ---------------------------------------------------------------------------
-function local_unics_inner_html(DOMNode $node): string {
-    $html = '';
-    foreach ($node->childNodes as $child) {
-        $html .= $node->ownerDocument->saveHTML($child);
-    }
-    return $html;
-}
-
-function local_unics_parse_slides(string $html): array {
-    $doc = new DOMDocument();
-    libxml_use_internal_errors(true);
-    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
-    libxml_clear_errors();
-    $xp = new DOMXPath($doc);
-    $slides = [];
-    $nodes = $xp->query("//div[contains(concat(' ', normalize-space(@class), ' '), ' unics-slide ')]");
-    foreach ($nodes as $node) {
-        $titlenode = $xp->query(".//*[contains(@class,'unics-slide-title')]", $node)->item(0);
-        $title = $titlenode ? trim($titlenode->textContent) : '';
-        $title = trim(str_replace("\u{1F50A}", '', $title)); // убрать значок «динамик»
-
-        $cnode = $xp->query(".//*[contains(@class,'unics-slide-content')]", $node)->item(0);
-        $content = $cnode ? local_unics_inner_html($cnode) : '';
-
-        $kpnode = $xp->query(".//*[contains(@class,'unics-kp')]", $node)->item(0);
-        $kp = $kpnode ? local_unics_inner_html($kpnode) : '';
-
-        $slides[] = ['title' => $title, 'content' => $content, 'kp' => $kp];
-    }
-    return $slides;
-}
+// Разбор слайдов - общий парсер (им же пользуется PPTX-экспорт umk_export_pptx.php).
+$is_presentation = \local_unics\ai\slide_parser::is_presentation((string)$page->content);
 
 // ---------------------------------------------------------------------------
 // PDF
@@ -77,7 +43,7 @@ $head = '<div style="border-bottom:2px solid #F26545;padding-bottom:6px;margin-b
       . '</div>';
 
 if ($is_presentation) {
-    $slides = local_unics_parse_slides((string)$page->content);
+    $slides = \local_unics\ai\slide_parser::parse((string)$page->content);
     if (empty($slides)) {
         $pdf->AddPage();
         $pdf->writeHTML($head . '<p>Слайды не найдены.</p>', true, false, true, false, '');
@@ -86,9 +52,9 @@ if ($is_presentation) {
             $pdf->AddPage();
             $html = ($i === 0 ? $head : '');
             $html .= '<h2 style="color:#C44A2F;font-size:17px;">Слайд ' . ($i + 1) . '. ' . s($sl['title']) . '</h2>';
-            $html .= '<div style="font-size:13px;line-height:1.6;">' . $sl['content'] . '</div>';
-            if (trim((string)$sl['kp']) !== '') {
-                $html .= '<div style="font-size:12px;line-height:1.5;margin-top:10px;">' . $sl['kp'] . '</div>';
+            $html .= '<div style="font-size:13px;line-height:1.6;">' . $sl['content_html'] . '</div>';
+            if (trim((string)$sl['kp_html']) !== '') {
+                $html .= '<div style="font-size:12px;line-height:1.5;margin-top:10px;">' . $sl['kp_html'] . '</div>';
             }
             $pdf->writeHTML($html, true, false, true, false, '');
         }
