@@ -107,16 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 'status'           => 1,
                 'generated_at'     => time(),
             ]);
-            $DB->insert_record('unics_ai_queue', (object)[
-                'umk_id'              => $umk_id,
-                'student_ids'         => json_encode(array_values($sids)),
-                'generate_text'       => 1,
+            // Постановка = строка очереди + adhoc-задача на параллельное исполнение
+            // ([[ai-queue-parallel-design]], 3.4 аудита).
+            \local_unics\ai\ai_queue::enqueue($umk_id, array_values($sids), [
                 'generate_audio'      => (int)$generate_audio,
                 'generate_quiz'       => (int)$generate_quiz,
                 'generate_assignment' => (int)$generate_assignment,
                 'generate_video'      => (int)$generate_video,
-                'status'              => 1,
-                'created_at'          => time(),
             ]);
             $queued++;
         }
