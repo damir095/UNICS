@@ -8,7 +8,9 @@
  *   3) Быстрые действия (короткий курированный набор карточек, как в рельсе)
  *   4) Метрики (.unics-stat-card)
  *   + при необходимости - роль-специфичный дополнительный блок (последние тесты/УМК/дети).
- * Содержимое блоков - per-role; рендер-каркас общий (замыкания ниже).
+ *
+ * Рендер - mustache (2.5 аудита, [[mustache-dashboard-design]]): ветки ролей собирают
+ * ОДИН $context, разметка целиком в templates/dashboard.mustache. Запросы/гарды не менялись.
  */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
@@ -29,82 +31,59 @@ $PAGE->set_title('УНИКС - Портал');
 $PAGE->set_heading('УНИКС - Единый портал');
 $PAGE->set_pagelayout('standard');
 
-echo $OUTPUT->header();
-
 // ============================================================================
-// Общий рендер-каркас (один на все роли). Содержимое блоков передаёт каждая роль.
+// Хелперы сборки контекста шаблона (разметка - в templates/dashboard.mustache).
 // ============================================================================
 
-// 1) Приветствие. $titlehtml - уже безопасный HTML (имя экранирует вызывающий).
-$render_welcome = function (string $titlehtml, string $subline): void {
-    echo '<div class="unics-welcome mb-4">';
-    echo '<h2>' . $titlehtml . '</h2>';
-    echo '<div class="sub">' . s($subline) . '</div>';
-    echo '</div>';
+// Иконка карточки: pix_icon с доп. классом (SCSS-сайзинг) - хелпер {{#pix}} так не умеет,
+// поэтому пре-рендер здесь (доверенный вывод ядра, в шаблоне тройной скобкой).
+$card_icon = function (?string $pix, string $extraclass) use ($OUTPUT): string {
+    return $pix ? $OUTPUT->pix_icon($pix, '', 'moodle', ['class' => 'icon ' . $extraclass]) : '';
 };
 
-// 2) Требует внимания. Карточки-действия; блок скрыт, если массив пуст.
-//    $card: ['label','url','icon'(pix, opt),'tone'(opt),'badge'(html, opt)].
-$render_attention = function (array $cards) use ($OUTPUT): void {
+// Карточка «Требует внимания»: ['label','url','icon'(opt),'tone'(opt),'badge'(opt)].
+$attention_ctx = function (array $cards) use ($card_icon): ?array {
     if (empty($cards)) {
-        return;
+        return null;
     }
-    echo '<h2 class="unics-section-title">Требует внимания</h2>';
-    echo '<div class="unics-attention mb-4">';
-    foreach ($cards as $c) {
-        $icon = !empty($c['icon'])
-            ? $OUTPUT->pix_icon($c['icon'], '', 'moodle', ['class' => 'icon unics-attention-card__icon'])
-            : '';
-        $tone  = !empty($c['tone']) ? ' unics-attention-card--' . $c['tone'] : '';
-        $badge = !empty($c['badge']) ? ' <span class="badge badge-danger">' . $c['badge'] . '</span>' : '';
-        echo html_writer::link($c['url'],
-            $icon . '<span class="unics-attention-card__label">' . s($c['label']) . '</span>' . $badge,
-            ['class' => 'unics-attention-card' . $tone]);
-    }
-    echo '</div>';
+    return ['cards' => array_map(fn($c) => [
+        'url'        => (string)$c['url'],
+        'label'      => $c['label'],
+        'icon_html'  => $card_icon($c['icon'] ?? null, 'unics-attention-card__icon'),
+        'tone_class' => !empty($c['tone']) ? 'unics-attention-card--' . $c['tone'] : null,
+        'badge'      => $c['badge'] ?? null,
+    ], $cards)];
 };
 
-// 3) Быстрые действия - карточки иконка+метка. $a: ['label','url','icon'(pix),'badge'(html, opt)].
-$render_actions = function (array $actions) use ($OUTPUT): void {
+// Карточка «Быстрые действия»: ['label','url','icon','badge'(opt)].
+$actions_ctx = function (array $actions) use ($card_icon): ?array {
     if (empty($actions)) {
-        return;
+        return null;
     }
-    echo '<h2 class="unics-section-title">Быстрые действия</h2>';
-    echo '<div class="unics-action-cards mb-4">';
-    foreach ($actions as $a) {
-        $icon = !empty($a['icon'])
-            ? $OUTPUT->pix_icon($a['icon'], '', 'moodle', ['class' => 'icon unics-action-card__icon'])
-            : '';
-        $badge = !empty($a['badge'])
-            ? ' <span class="badge badge-danger unics-action-card__badge">' . $a['badge'] . '</span>'
-            : '';
-        $inner = $icon
-               . '<span class="unics-action-card__label">' . s($a['label']) . '</span>'
-               . $badge;
-        echo html_writer::link($a['url'], $inner, ['class' => 'unics-action-card']);
-    }
-    echo '</div>';
+    return ['cards' => array_map(fn($a) => [
+        'url'       => (string)$a['url'],
+        'label'     => $a['label'],
+        'icon_html' => $card_icon($a['icon'] ?? null, 'unics-action-card__icon'),
+        'badge'     => $a['badge'] ?? null,
+    ], $actions)];
 };
 
-// 4) Метрики - .unics-stat-card. $m: ['value'(html),'label'(html),'extraclass'(opt),'col'(opt)].
-$render_metrics = function (array $metrics): void {
-    if (empty($metrics)) {
-        return;
+// Метрики: элементы уже в форме контекста (value | pct_badge | lvl_pill; label | lvl_label_pill).
+$metrics_ctx = function (array $items): ?array {
+    if (empty($items)) {
+        return null;
     }
-    echo '<div class="row mb-4">';
-    foreach ($metrics as $m) {
-        $col   = $m['col'] ?? 'col-6 col-md-3';
-        $extra = !empty($m['extraclass']) ? ' ' . $m['extraclass'] : '';
-        echo '<div class="' . $col . ' mb-3">';
-        echo '<div class="card unics-stat-card' . $extra . ' p-3 text-center">';
-        echo '<div class="stat-value">' . $m['value'] . '</div>';
-        echo '<div class="stat-label mt-1">' . $m['label'] . '</div>';
-        echo '</div></div>';
+    foreach ($items as &$m) {
+        $m['col'] = $m['col'] ?? 'col-6 col-md-3';
     }
-    echo '</div>';
+    return ['items' => $items];
 };
+
+$pct_tone = fn(float $pct): string => $pct >= 85 ? 'success' : ($pct >= 50 ? 'warning' : 'danger');
 
 $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
+
+$context = [];
 
 // ----------------------------------------------------------------
 // АДМИНИСТРАТОР
@@ -119,7 +98,8 @@ if ($is_admin) {
 
     $fio_admin = trim($USER->lastname . ' ' . $USER->firstname);
 
-    $render_welcome('Добро пожаловать, ' . s($fio_admin), 'Панель администратора УНИКС');
+    $context['welcome'] = ['greeting' => 'Добро пожаловать, ' . $fio_admin,
+        'subline' => 'Панель администратора УНИКС'];
 
     $attention = [];
     if ($ai_in_queue > 0) {
@@ -145,8 +125,8 @@ if ($is_admin) {
             'url'  => new moodle_url('/local/unics/pages/adaptive_suggestions.php'),
             'icon' => 'i/checkpermissions', 'tone' => 'info', 'badge' => $adapt_n];
     }
-    $render_attention($attention);
-    $render_actions([
+    $context['attention'] = $attention_ctx($attention);
+    $context['actions'] = $actions_ctx([
         ['label' => 'Адаптивные предложения', 'url' => new moodle_url('/local/unics/pages/adaptive_suggestions.php'), 'icon' => 'i/checkpermissions'],
         ['label' => 'Пользователи',  'url' => new moodle_url('/local/unics/pages/users.php'),        'icon' => 'i/user'],
         ['label' => 'Генерация УМК', 'url' => new moodle_url('/local/unics/pages/generate_umk.php'), 'icon' => 'i/edit'],
@@ -155,7 +135,7 @@ if ($is_admin) {
         ['label' => 'Организации',   'url' => new moodle_url('/local/unics/pages/organizations.php'), 'icon' => 'i/cohort'],
         ['label' => 'Статистика',    'url' => new moodle_url('/local/unics/pages/statistics.php'),    'icon' => 'i/stats'],
     ]);
-    $render_metrics([
+    $context['metrics'] = $metrics_ctx([
         ['value' => $total_students,  'label' => 'Учащихся'],
         ['value' => $total_orgs,      'label' => 'Организаций'],
         ['value' => $total_umk_ready, 'label' => 'УМК готово'],
@@ -170,31 +150,20 @@ if ($is_admin) {
           ORDER BY u.id DESC
           LIMIT 5"
     );
-    echo '<h2 class="unics-section-title">Последние генерации УМК</h2>';
-    if (empty($recent_umk)) {
-        echo '<p class="text-muted">УМК ещё не создавались.</p>';
-    } else {
-        $status_labels = [1 => 'В очереди', 2 => 'Обрабатывается', 3 => 'Готов', 4 => 'Ошибка'];
-        $status_colors = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'];
-        echo '<table class="table table-sm table-bordered">';
-        echo '<thead class="table-light"><tr>
-            <th>Материал</th><th>Уровень</th><th>Учащихся</th><th>Статус</th><th>Дата</th>
-        </tr></thead><tbody>';
-        foreach ($recent_umk as $u) {
-            $lvl = $level_labels[$u->difficulty_level] ?? '?';
-            $sc  = $status_colors[$u->status] ?? 'secondary';
-            $sl  = $status_labels[$u->status] ?? '?';
-            $dt  = $u->generated_at ? date('d.m.Y', (int)$u->generated_at) : '-';
-            echo '<tr>';
-            echo '<td>' . s($u->title) . '</td>';
-            echo '<td><span class="unics-lvl unics-lvl-' . (int)$u->difficulty_level . '">' . s($lvl) . '</span></td>';
-            echo '<td>' . (int)$u->student_count . '</td>';
-            echo '<td><span class="badge badge-' . $sc . '">' . $sl . '</span></td>';
-            echo '<td>' . $dt . '</td>';
-            echo '</tr>';
-        }
-        echo '</tbody></table>';
-    }
+    $status_labels = [1 => 'В очереди', 2 => 'Обрабатывается', 3 => 'Готов', 4 => 'Ошибка'];
+    $status_colors = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'];
+    $context['umk_table'] = [
+        'empty' => empty($recent_umk),
+        'rows'  => array_map(fn($u) => [
+            'title'        => $u->title,
+            'lvl'          => (int)$u->difficulty_level,
+            'lvl_label'    => $level_labels[$u->difficulty_level] ?? '?',
+            'students'     => (int)$u->student_count,
+            'status_tone'  => $status_colors[$u->status] ?? 'secondary',
+            'status_label' => $status_labels[$u->status] ?? '?',
+            'date'         => $u->generated_at ? date('d.m.Y', (int)$u->generated_at) : '-',
+        ], array_values($recent_umk)),
+    ];
 
 // ----------------------------------------------------------------
 // РЕГИОНАЛЬНЫЙ / РАЙОННЫЙ АДМИНИСТРАТОР (manageorg, скоуп)
@@ -225,8 +194,8 @@ if ($is_admin) {
         ? 'Портал регионального методиста'
         : 'Панель администратора';
 
-    $render_welcome('Добро пожаловать, ' . s($fio_admin),
-        $panel_label . ($scope_name ? ' - ' . $scope_name : ''));
+    $context['welcome'] = ['greeting' => 'Добро пожаловать, ' . $fio_admin,
+        'subline' => $panel_label . ($scope_name ? ' - ' . $scope_name : '')];
 
     $attention = [];
     $nocourse = (int)$DB->count_records_sql(
@@ -242,15 +211,15 @@ if ($is_admin) {
             'url'  => new moodle_url('/local/unics/pages/enrol_students.php'),
             'icon' => 'i/users', 'tone' => 'warning', 'badge' => $nocourse];
     }
-    $render_attention($attention);
-    $render_actions([
+    $context['attention'] = $attention_ctx($attention);
+    $context['actions'] = $actions_ctx([
         ['label' => 'Все учащиеся',        'url' => new moodle_url('/local/unics/pages/my_students.php'),      'icon' => 'i/users'],
         ['label' => 'Делегирование курсов','url' => new moodle_url('/local/unics/pages/course_delegation.php'),'icon' => 'i/permissions'],
         ['label' => 'Организации',         'url' => new moodle_url('/local/unics/pages/organizations.php'),    'icon' => 'i/cohort'],
         ['label' => 'Статистика',          'url' => new moodle_url('/local/unics/pages/statistics.php'),       'icon' => 'i/stats'],
         ['label' => 'Кодификатор',         'url' => new moodle_url('/local/unics/pages/codifier.php'),         'icon' => 'i/competencies'],
     ]);
-    $render_metrics([
+    $context['metrics'] = $metrics_ctx([
         ['value' => $total_students, 'label' => 'Учащихся'],
         ['value' => $total_orgs,     'label' => 'Организаций'],
     ]);
@@ -291,8 +260,8 @@ if ($is_admin) {
 
     $is_district = local_unics_user_has_role((int)$USER->id, ['district_methodist']);
 
-    $render_welcome('Здравствуйте, ' . s($fio_methodist),
-        'Портал методиста УНИКС' . ($scope_name ? ' - ' . $scope_name : ''));
+    $context['welcome'] = ['greeting' => 'Здравствуйте, ' . $fio_methodist,
+        'subline' => 'Портал методиста УНИКС' . ($scope_name ? ' - ' . $scope_name : '')];
 
     $attention = [];
     // Дети без курса - в пределах скоупа методиста (тот же org_filter_sql).
@@ -326,7 +295,7 @@ if ($is_admin) {
             'url'  => new moodle_url('/local/unics/pages/adaptive_suggestions.php'),
             'icon' => 'i/checkpermissions', 'tone' => 'info', 'badge' => $adapt_n];
     }
-    $render_attention($attention);
+    $context['attention'] = $attention_ctx($attention);
 
     $actions = [
         ['label' => 'Адаптивные предложения',  'url' => new moodle_url('/local/unics/pages/adaptive_suggestions.php'), 'icon' => 'i/checkpermissions'],
@@ -341,10 +310,10 @@ if ($is_admin) {
         $actions[] = ['label' => 'Организации',
             'url' => new moodle_url('/local/unics/pages/organizations.php'), 'icon' => 'i/cohort'];
     }
-    $render_actions($actions);
+    $context['actions'] = $actions_ctx($actions);
 
-    $render_metrics([
-        ['value' => $total_students, 'label' => s($students_label)],
+    $context['metrics'] = $metrics_ctx([
+        ['value' => $total_students, 'label' => $students_label],
         ['value' => $umk_active,     'label' => 'УМК в очереди'],
         ['value' => $umk_ready,      'label' => 'УМК готово'],
     ]);
@@ -419,7 +388,8 @@ if ($is_admin) {
     $fio_teacher = trim($USER->lastname . ' ' . $USER->firstname);
     $is_editing  = !local_unics_is_nonediting_teacher();
 
-    $render_welcome('Добро пожаловать, ' . s($fio_teacher), 'Личный кабинет педагога УНИКС');
+    $context['welcome'] = ['greeting' => 'Добро пожаловать, ' . $fio_teacher,
+        'subline' => 'Личный кабинет педагога УНИКС'];
 
     // v1-сигналы (дёшево): непрочитанные сообщения. Работы на проверку / риск падения
     // уровня - дороже по данным, отложены (IA v1-минимум).
@@ -436,7 +406,7 @@ if ($is_admin) {
             'url'  => new moodle_url('/local/unics/pages/adaptive_suggestions.php'),
             'icon' => 'i/checkpermissions', 'tone' => 'info', 'badge' => $adapt_n];
     }
-    $render_attention($attention);
+    $context['attention'] = $attention_ctx($attention);
 
     $actions = [
         ['label' => 'Мои учащиеся', 'url' => new moodle_url('/local/unics/pages/my_students.php'), 'icon' => 'i/users'],
@@ -451,24 +421,23 @@ if ($is_admin) {
         $actions[] = ['label' => 'Шаблоны курсов',
             'url' => new moodle_url('/local/unics/pages/course_templates.php'), 'icon' => 'i/course'];
     }
-    $render_actions($actions);
+    $context['actions'] = $actions_ctx($actions);
 
     $metrics = [['value' => $total_my, 'label' => 'Моих учащихся']];
     if ($avg_overall !== null) {
-        $bc = $avg_overall >= 85 ? 'success' : ($avg_overall >= 50 ? 'warning' : 'danger');
         $metrics[] = [
-            'value' => '<span class="badge badge-' . $bc . ' h5">' . $avg_overall . '%</span>',
-            'label' => 'Средний балл',
+            'pct_badge' => ['pct' => $avg_overall, 'tone' => $pct_tone($avg_overall)],
+            'label'     => 'Средний балл',
         ];
     }
     foreach ($level_labels as $lv => $lbl) {
         $metrics[] = [
-            'value' => $level_counts[$lv],
-            'label' => '<span class="unics-lvl unics-lvl-' . $lv . '">' . s($lbl) . '</span>',
-            'col'   => 'col-6 col-md-2',
+            'value'          => $level_counts[$lv],
+            'lvl_label_pill' => ['lv' => $lv, 'label' => $lbl],
+            'col'            => 'col-6 col-md-2',
         ];
     }
-    $render_metrics($metrics);
+    $context['metrics'] = $metrics_ctx($metrics);
 
 // ----------------------------------------------------------------
 // УЧАЩИЙСЯ / РОДИТЕЛЬ
@@ -488,16 +457,16 @@ if ($is_admin) {
             : '-';
 
         // Приветствие с бейджем активного титула (если есть).
-        $titlehtml = 'Привет, ' . s($USER->firstname) . '!';
+        $welcome = ['greeting' => 'Привет, ' . $USER->firstname . '!', 'subline' => $class_str];
         if ($active_title) {
-            $title_pic = !empty($active_title->icon)
-                ? '<img src="' . $OUTPUT->image_url('shop/' . $active_title->icon, 'local_unics')
-                  . '" width="20" height="20" alt="" style="vertical-align:-4px;margin-right:4px;">'
-                : '';
-            $titlehtml .= ' <span class="badge badge-warning ml-1" style="font-size:.8em;">'
-               . $title_pic . s($active_title->name) . '</span>';
+            $welcome['title_badge'] = [
+                'name'    => $active_title->name,
+                'iconurl' => !empty($active_title->icon)
+                    ? $OUTPUT->image_url('shop/' . $active_title->icon, 'local_unics')->out(false)
+                    : null,
+            ];
         }
-        $render_welcome($titlehtml, $class_str);
+        $context['welcome'] = $welcome;
 
         // v1-сигналы (дёшево): незавершённый тест, новые заметки педагога, новые сообщения.
         $attention = [];
@@ -528,9 +497,9 @@ if ($is_admin) {
                 'url'  => new moodle_url('/local/unics/pages/messenger.php'),
                 'icon' => 't/message', 'tone' => 'info', 'badge' => $msgs];
         }
-        $render_attention($attention);
+        $context['attention'] = $attention_ctx($attention);
 
-        $render_actions([
+        $context['actions'] = $actions_ctx([
             ['label' => 'Мой маршрут',
                 'url' => new moodle_url('/local/unics/pages/my_path.php', ['student_id' => $student->id]),
                 'icon' => 'i/competencies'],
@@ -548,22 +517,14 @@ if ($is_admin) {
         // Виджет «Стоит повторить»: топ слабых элементов по полосе владения (если есть).
         $weak = \local_unics\learning\mastery_manager::get_weak_elements((int)$student->id, 3);
         if ($weak) {
-            echo html_writer::start_tag('div', ['class' => 'card mb-4']);
-            echo html_writer::tag('div', 'Стоит повторить', ['class' => 'card-header']);
-            echo html_writer::start_tag('div', ['class' => 'card-body']);
-            echo html_writer::start_tag('ul', ['class' => 'mb-2']);
-            foreach ($weak as $w) {
-                [$wtext, $wcls] = \local_unics\learning\mastery_manager::band_label((int)$w->band, true);
-                $label = s($w->title);
-                echo html_writer::tag('li',
-                    $label . ' ' . html_writer::tag('span', $wtext, ['class' => "badge badge-$wcls"]));
-            }
-            echo html_writer::end_tag('ul');
-            echo html_writer::link(
-                new moodle_url('/local/unics/pages/codifier_report.php', ['student_id' => $student->id]),
-                'Подробнее', ['class' => 'btn btn-sm btn-outline-primary']);
-            echo html_writer::end_tag('div');
-            echo html_writer::end_tag('div');
+            $context['weak_widget'] = [
+                'items' => array_map(function ($w) {
+                    [$wtext, $wcls] = \local_unics\learning\mastery_manager::band_label((int)$w->band, true);
+                    return ['title' => $w->title, 'band_text' => $wtext, 'band_class' => $wcls];
+                }, array_values($weak)),
+                'details_url' => (string)new moodle_url('/local/unics/pages/codifier_report.php',
+                    ['student_id' => $student->id]),
+            ];
         }
 
         $badges_earned = $DB->count_records('unics_achievements', ['student_id' => $student->id]);
@@ -577,12 +538,11 @@ if ($is_admin) {
         $lv        = (int)$student->difficulty_level;
         $lvl_label = $level_labels[$lv] ?? '-';
 
-        $render_metrics([
+        $context['metrics'] = $metrics_ctx([
             ['value' => (int)$courses_count, 'label' => 'Курсов'],
             ['value' => $badges_earned . ' / 4', 'label' => 'Значков'],
             ['value' => number_format($points_bal), 'label' => 'Баллов', 'extraclass' => 'unics-points-card'],
-            ['value' => '<span class="unics-lvl unics-lvl-' . $lv . '">' . s($lvl_label) . '</span>',
-                'label' => 'Текущий уровень'],
+            ['lvl_pill' => ['lv' => $lv, 'label' => $lvl_label], 'label' => 'Текущий уровень'],
         ]);
 
         // Доп. блок: последние тесты.
@@ -602,20 +562,16 @@ if ($is_admin) {
             ['uid' => $student->mdl_user_id]
         );
         if (!empty($last_grades)) {
-            echo '<h2 class="unics-section-title">Последние тесты</h2>';
-            echo '<table class="table table-sm table-bordered">';
-            echo '<thead class="table-light"><tr><th>Тест</th><th>Курс</th><th>Балл</th><th>%</th></tr></thead><tbody>';
-            foreach ($last_grades as $g) {
+            $context['grades_table'] = ['rows' => array_map(function ($g) use ($pct_tone) {
                 $pct = round(($g->finalgrade / $g->grademax) * 100, 1);
-                $bc  = $pct >= 85 ? 'success' : ($pct >= 50 ? 'warning' : 'danger');
-                echo '<tr>';
-                echo '<td>' . s($g->quiz_name ?? '-') . '</td>';
-                echo '<td>' . s($g->course_name) . '</td>';
-                echo '<td>' . round($g->finalgrade, 1) . '/' . round($g->grademax, 1) . '</td>';
-                echo '<td><span class="badge badge-' . $bc . '">' . $pct . '%</span></td>';
-                echo '</tr>';
-            }
-            echo '</tbody></table>';
+                return [
+                    'quiz'   => $g->quiz_name ?? '-',
+                    'course' => $g->course_name,
+                    'score'  => round($g->finalgrade, 1) . '/' . round($g->grademax, 1),
+                    'pct'    => $pct,
+                    'tone'   => $pct_tone($pct),
+                ];
+            }, array_values($last_grades))];
         }
 
     } else {
@@ -672,24 +628,19 @@ if ($is_admin) {
         $selchild = $sel ? ($children[$sel] ?? null) : null;
 
         $fio_parent = trim($USER->lastname . ' ' . $USER->firstname);
-        $render_welcome('Добро пожаловать, ' . s($fio_parent), 'Портал родителя УНИКС');
+        $context['welcome'] = ['greeting' => 'Добро пожаловать, ' . $fio_parent,
+            'subline' => 'Портал родителя УНИКС'];
 
         // Переключатель ребёнка.
         if (count($children) > 1) {
-            echo '<form method="get" class="unics-btn-row mb-3" action="'
-                . (new moodle_url('/local/unics/pages/dashboard.php'))->out(false) . '">';
-            echo '<label class="d-flex align-items-center gap-2" style="gap:.5rem;">'
-                . '<span>Ребёнок:</span>';
-            echo '<select name="child" class="form-control" style="width:auto;" '
-                . 'onchange="this.form.submit()">';
-            foreach ($children as $ch) {
-                $chfio = trim("{$ch->lastname} {$ch->firstname}");
-                echo '<option value="' . (int)$ch->id . '"' . ($ch->id == $sel ? ' selected' : '') . '>'
-                    . s($chfio) . '</option>';
-            }
-            echo '</select></label>';
-            echo '<noscript><button type="submit" class="btn btn-outline-secondary btn-sm">Показать</button></noscript>';
-            echo '</form>';
+            $context['child_switcher'] = [
+                'action_url' => (new moodle_url('/local/unics/pages/dashboard.php'))->out(false),
+                'options'    => array_map(fn($ch) => [
+                    'id'       => (int)$ch->id,
+                    'fio'      => trim("{$ch->lastname} {$ch->firstname}"),
+                    'selected' => $ch->id == $sel,
+                ], array_values($children)),
+            ];
         }
 
         // v1-сигналы (дёшево): новые заметки педагога по каждому ребёнку, новые сообщения.
@@ -709,10 +660,10 @@ if ($is_admin) {
                 'url'  => new moodle_url('/local/unics/pages/messenger.php'),
                 'icon' => 't/message', 'tone' => 'info', 'badge' => $msgs];
         }
-        $render_attention($attention);
+        $context['attention'] = $attention_ctx($attention);
 
         if ($selchild) {
-            $render_actions([
+            $context['actions'] = $actions_ctx([
                 ['label' => 'Результаты ребёнка',
                     'url' => new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $selchild->id]),
                     'icon' => 'i/report'],
@@ -729,66 +680,38 @@ if ($is_admin) {
 
             $pcts = $grade_map[$selchild->mdl_user_id] ?? [];
             $avg  = !empty($pcts) ? round(array_sum($pcts) / count($pcts), 1) : null;
-            $bc   = $avg !== null ? ($avg >= 85 ? 'success' : ($avg >= 50 ? 'warning' : 'danger')) : 'secondary';
             $lv   = (int)$selchild->difficulty_level;
-            $render_metrics([
-                ['value' => $avg !== null
-                    ? '<span class="badge badge-' . $bc . ' h5">' . $avg . '%</span>'
-                    : '-',
-                    'label' => 'Средний балл'],
-                ['value' => '<span class="unics-lvl unics-lvl-' . $lv . '">'
-                    . s($level_labels[$lv] ?? '-') . '</span>',
+            $context['metrics'] = $metrics_ctx([
+                $avg !== null
+                    ? ['pct_badge' => ['pct' => $avg, 'tone' => $pct_tone($avg)], 'label' => 'Средний балл']
+                    : ['value' => '-', 'label' => 'Средний балл'],
+                ['lvl_pill' => ['lv' => $lv, 'label' => $level_labels[$lv] ?? '-'],
                     'label' => 'Текущий уровень'],
             ]);
         }
 
         // Доп. блок: все дети карточками (с бейджем новых заметок).
-        echo '<h2 class="unics-section-title">Мои дети</h2>';
-        echo '<div class="row">';
-        foreach ($children as $ch) {
-            $fio = trim("{$ch->lastname} {$ch->firstname} " . ($ch->middlename ?? ''));
-            $cls = $ch->class_number
-                ? $ch->class_number . ($ch->class_letter ? " «{$ch->class_letter}»" : '')
-                : '-';
+        $context['children_cards'] = ['rows' => array_map(function ($ch) use ($grade_map, $pct_tone, $USER) {
             $pcts = $grade_map[$ch->mdl_user_id] ?? [];
             $avg  = !empty($pcts) ? round(array_sum($pcts) / count($pcts), 1) : null;
-            $bc   = $avg !== null ? ($avg >= 85 ? 'success' : ($avg >= 50 ? 'warning' : 'danger')) : 'secondary';
+            return [
+                'fio'        => trim("{$ch->lastname} {$ch->firstname} " . ($ch->middlename ?? '')),
+                'cls'        => $ch->class_number
+                    ? $ch->class_number . ($ch->class_letter ? " «{$ch->class_letter}»" : '')
+                    : '-',
+                'has_avg'    => $avg !== null,
+                'avg'        => $avg,
+                'tone'       => $avg !== null ? $pct_tone($avg) : 'secondary',
+                'unread'     => \local_unics\social\comment_manager::count_unread((int)$ch->id, (int)$USER->id),
+                'report_url' => (string)new moodle_url('/local/unics/pages/student_report.php',
+                    ['student_id' => $ch->id], 'notes'),
+            ];
+        }, array_values($children))];
 
-            echo '<div class="col-md-6 mb-3">';
-            echo '<div class="card unics-stat-card p-3">';
-            echo '<div class="d-flex justify-content-between align-items-start">';
-            echo '<div>';
-            echo '<strong>' . s($fio) . '</strong><br>';
-            echo '<small class="text-muted">' . s($cls) . ' класс</small>';
-            echo '</div>';
-            echo $avg !== null
-                ? '<span class="badge badge-' . $bc . ' ml-2">' . $avg . '%</span>'
-                : '<span class="badge badge-secondary ml-2">-</span>';
-            echo '</div>';
-            $unread_notes = \local_unics\social\comment_manager::count_unread((int)$ch->id, (int)$USER->id);
-            if ($unread_notes > 0) {
-                echo '<div class="mt-1"><span class="badge badge-danger">'
-                   . $unread_notes . ' новых</span></div>';
-            }
-            echo '<div class="mt-2">';
-            echo html_writer::link(
-                new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $ch->id], 'notes'),
-                'Отчёт →',
-                ['class' => 'btn btn-sm btn-outline-primary']
-            );
-            echo '</div>';
-            echo '</div></div>';
-        }
-        echo '</div>';
-
-        echo '<div class="mt-2">';
-        echo html_writer::link(
-            new moodle_url('/local/unics/pages/my_children.php'),
-            'Все дети →',
-            ['class' => 'btn btn-outline-secondary btn-sm']
-        );
-        echo '</div>';
+        $context['children_link'] = ['url' => (string)new moodle_url('/local/unics/pages/my_children.php')];
     }
 }
 
+echo $OUTPUT->header();
+echo $OUTPUT->render_from_template('local_unics/dashboard', $context);
 echo $OUTPUT->footer();

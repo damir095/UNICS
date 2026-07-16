@@ -1,0 +1,149 @@
+{{!
+    Дашборд УНИКС под роль (2.5 аудита, [[mustache-dashboard-design]]).
+
+    Один каркас на все роли: опциональные секции в супер-порядке
+    welcome -> child_switcher -> attention -> actions -> weak_widget ->
+    metrics -> umk_table -> grades_table -> children_cards -> children_link;
+    относительный порядок блоков каждой роли сохранен. Контекст собирает
+    pages/dashboard.php. icon_html - доверенный пре-рендер $OUTPUT->pix_icon
+    (хелпер pix не умеет доп. класс карточки); пользовательские данные
+    тройными скобками не передаются.
+
+    Пример контекста:
+    {
+        "welcome": { "greeting": "Привет, Полина!", "subline": "8 «Б» класс",
+                     "title_badge": { "name": "Умник", "iconurl": "https://example.com/i.png" } },
+        "attention": { "cards": [ { "url": "#", "label": "Новые сообщения",
+                       "icon_html": "<i class=\"icon\"></i>",
+                       "tone_class": "unics-attention-card--info", "badge": 3 } ] },
+        "actions": { "cards": [ { "url": "#", "label": "Журнал",
+                     "icon_html": "<i class=\"icon\"></i>", "badge": null } ] },
+        "metrics": { "items": [ { "col": "col-6 col-md-3", "label": "Курсов", "value": "2" } ] }
+    }
+}}
+{{#welcome}}
+<div class="unics-welcome mb-4">
+    <h2>{{greeting}}{{#title_badge}} <span class="badge badge-warning ml-1" style="font-size:.8em;">{{#iconurl}}<img src="{{iconurl}}" width="20" height="20" alt="" style="vertical-align:-4px;margin-right:4px;">{{/iconurl}}{{name}}</span>{{/title_badge}}</h2>
+    <div class="sub">{{subline}}</div>
+</div>
+{{/welcome}}
+{{#child_switcher}}
+<form method="get" class="unics-btn-row mb-3" action="{{action_url}}">
+    <label class="d-flex align-items-center gap-2" style="gap:.5rem;"><span>Ребёнок:</span>
+    <select name="child" class="form-control" style="width:auto;" onchange="this.form.submit()">
+        {{#options}}
+        <option value="{{id}}"{{#selected}} selected{{/selected}}>{{fio}}</option>
+        {{/options}}
+    </select></label>
+    <noscript><button type="submit" class="btn btn-outline-secondary btn-sm">Показать</button></noscript>
+</form>
+{{/child_switcher}}
+{{#attention}}
+<h2 class="unics-section-title">Требует внимания</h2>
+<div class="unics-attention mb-4">
+    {{#cards}}
+    <a href="{{url}}" class="unics-attention-card{{#tone_class}} {{tone_class}}{{/tone_class}}">{{{icon_html}}}<span class="unics-attention-card__label">{{label}}</span>{{#badge}} <span class="badge badge-danger">{{badge}}</span>{{/badge}}</a>
+    {{/cards}}
+</div>
+{{/attention}}
+{{#actions}}
+<h2 class="unics-section-title">Быстрые действия</h2>
+<div class="unics-action-cards mb-4">
+    {{#cards}}
+    <a href="{{url}}" class="unics-action-card">{{{icon_html}}}<span class="unics-action-card__label">{{label}}</span>{{#badge}} <span class="badge badge-danger unics-action-card__badge">{{badge}}</span>{{/badge}}</a>
+    {{/cards}}
+</div>
+{{/actions}}
+{{#weak_widget}}
+<div class="card mb-4">
+    <div class="card-header">Стоит повторить</div>
+    <div class="card-body">
+        <ul class="mb-2">
+            {{#items}}
+            <li>{{title}} <span class="badge badge-{{band_class}}">{{band_text}}</span></li>
+            {{/items}}
+        </ul>
+        <a href="{{details_url}}" class="btn btn-sm btn-outline-primary">Подробнее</a>
+    </div>
+</div>
+{{/weak_widget}}
+{{#metrics}}
+<div class="row mb-4">
+    {{#items}}
+    <div class="{{col}} mb-3">
+        <div class="card unics-stat-card{{#extraclass}} {{extraclass}}{{/extraclass}} p-3 text-center">
+            <div class="stat-value">{{#pct_badge}}<span class="badge badge-{{tone}} h5">{{pct}}%</span>{{/pct_badge}}{{#lvl_pill}}<span class="unics-lvl unics-lvl-{{lv}}">{{label}}</span>{{/lvl_pill}}{{value}}</div>
+            <div class="stat-label mt-1">{{#lvl_label_pill}}<span class="unics-lvl unics-lvl-{{lv}}">{{label}}</span>{{/lvl_label_pill}}{{label}}</div>
+        </div>
+    </div>
+    {{/items}}
+</div>
+{{/metrics}}
+{{#umk_table}}
+<h2 class="unics-section-title">Последние генерации УМК</h2>
+{{#empty}}<p class="text-muted">УМК ещё не создавались.</p>{{/empty}}
+{{^empty}}
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr>
+        <th>Материал</th><th>Уровень</th><th>Учащихся</th><th>Статус</th><th>Дата</th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{title}}</td>
+            <td><span class="unics-lvl unics-lvl-{{lvl}}">{{lvl_label}}</span></td>
+            <td>{{students}}</td>
+            <td><span class="badge badge-{{status_tone}}">{{status_label}}</span></td>
+            <td>{{date}}</td>
+        </tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{/empty}}
+{{/umk_table}}
+{{#grades_table}}
+<h2 class="unics-section-title">Последние тесты</h2>
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr><th>Тест</th><th>Курс</th><th>Балл</th><th>%</th></tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{quiz}}</td>
+            <td>{{course}}</td>
+            <td>{{score}}</td>
+            <td><span class="badge badge-{{tone}}">{{pct}}%</span></td>
+        </tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{/grades_table}}
+{{#children_cards}}
+<h2 class="unics-section-title">Мои дети</h2>
+<div class="row">
+    {{#rows}}
+    <div class="col-md-6 mb-3">
+        <div class="card unics-stat-card p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <strong>{{fio}}</strong><br>
+                    <small class="text-muted">{{cls}} класс</small>
+                </div>
+                {{#has_avg}}<span class="badge badge-{{tone}} ml-2">{{avg}}%</span>{{/has_avg}}
+                {{^has_avg}}<span class="badge badge-secondary ml-2">-</span>{{/has_avg}}
+            </div>
+            {{#unread}}
+            <div class="mt-1"><span class="badge badge-danger">{{unread}} новых</span></div>
+            {{/unread}}
+            <div class="mt-2">
+                <a href="{{report_url}}" class="btn btn-sm btn-outline-primary">Отчёт →</a>
+            </div>
+        </div>
+    </div>
+    {{/rows}}
+</div>
+{{/children_cards}}
+{{#children_link}}
+<div class="mt-2">
+    <a href="{{url}}" class="btn btn-outline-secondary btn-sm">Все дети →</a>
+</div>
+{{/children_link}}
