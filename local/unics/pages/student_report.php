@@ -154,111 +154,101 @@ if (!empty($last5)) {
 }
 
 // ----------------------------------------------------------------
-// Вывод
+// Сборка контекста шаблона (2.5 аудита: разметка целиком в
+// templates/student_report.mustache; здесь - только данные).
 // ----------------------------------------------------------------
 
-$categories   = [1 => 'ОВЗ', 2 => 'Семейное обучение', 3 => 'Длительное лечение', 4 => 'Одарённый'];
 $levels       = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 $umk_statuses = [1 => 'В очереди', 2 => 'Обрабатывается', 3 => 'Готов', 4 => 'Ошибка'];
 
-echo $OUTPUT->header();
-echo local_unics_dashboard_button();
+$context = [];
 
-echo '<div class="d-flex flex-wrap gap-2 mt-3 mb-3">';
+// Тулбар.
+$buttons = [];
 if ($is_admin || $is_teacher) {
-    echo html_writer::link(
-        new moodle_url('/local/unics/pages/my_students.php'),
-        'Мои учащиеся',
-        ['class' => 'btn btn-outline-secondary btn-sm']
-    );
+    $buttons[] = [
+        'url'   => (string)new moodle_url('/local/unics/pages/my_students.php'),
+        'label' => 'Мои учащиеся',
+        'cls'   => 'btn btn-outline-secondary btn-sm',
+    ];
 }
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student_id]),
-    'Значки достижений',
-    ['class' => 'btn btn-outline-warning btn-sm']
-);
+$buttons[] = [
+    'url'   => (string)new moodle_url('/local/unics/pages/achievements.php', ['student_id' => $student_id]),
+    'label' => 'Значки достижений',
+    'cls'   => 'btn btn-outline-warning btn-sm',
+];
 if ($is_admin || $is_teacher) {
-    echo ' ' . html_writer::link(
-        new moodle_url('/local/unics/pages/essay_check.php', ['student_id' => $student_id]),
-        'ИИ-проверка ответов',
-        ['class' => 'btn btn-outline-primary btn-sm']
-    );
+    $buttons[] = [
+        'url'   => (string)new moodle_url('/local/unics/pages/essay_check.php', ['student_id' => $student_id]),
+        'label' => 'ИИ-проверка ответов',
+        'cls'   => 'btn btn-outline-primary btn-sm',
+    ];
 }
 if ($is_admin) {
-    echo ' ' . html_writer::link(
-        new moodle_url('/local/unics/pages/org_report.php', ['org_id' => $org->id ?? 0]),
-        'Сводный отчёт по организации',
-        ['class' => 'btn btn-outline-info btn-sm']
-    );
+    $buttons[] = [
+        'url'   => (string)new moodle_url('/local/unics/pages/org_report.php', ['org_id' => $org->id ?? 0]),
+        'label' => 'Сводный отчёт по организации',
+        'cls'   => 'btn btn-outline-info btn-sm',
+    ];
 }
-echo ' ' . html_writer::link(
-    new moodle_url('/local/unics/pages/codifier_report.php', ['student_id' => $student_id]),
-    'Элементы содержания',
-    ['class' => 'btn btn-outline-primary btn-sm']
-);
-echo '</div>';
+$buttons[] = [
+    'url'   => (string)new moodle_url('/local/unics/pages/codifier_report.php', ['student_id' => $student_id]),
+    'label' => 'Элементы содержания',
+    'cls'   => 'btn btn-outline-primary btn-sm',
+];
+$context['toolbar_buttons'] = $buttons;
 
-// Карточка учащегося
+// Карточка учащегося.
 $fio = trim("{$mdl_user->lastname} {$mdl_user->firstname} " . ($mdl_user->middlename ?? ''));
 $class_str = $student->class_number
     ? $student->class_number . ($student->class_letter ? " «{$student->class_letter}»" : '') . ' класс'
     : '-';
 
-$avg_badge_class = grade_scale::badge_class($avg_score);
-
-echo '<div class="card mb-4">';
-echo '<div class="card-header bg-light"><strong>' . s($fio) . '</strong></div>';
-echo '<div class="card-body">';
-echo '<div class="row">';
-echo '<div class="col-md-3"><b>Класс:</b> ' . s($class_str) . '</div>';
+$card = [
+    'fio'             => $fio,
+    'class_str'       => $class_str,
+    'avg_badge_class' => grade_scale::badge_class($avg_score),
+    'avg_text'        => grade_scale::format($avg_score),
+    'org_name'        => $org->name ?? '-',
+];
 if (!$is_own_view) {
     $cat_label = \local_unics\identity\student_helper::format_categories($student) ?: '-';
     $ovz_label = \local_unics\identity\student_helper::format_ovz_types($student);
-    echo '<div class="col-md-3"><b>Категория:</b> ' . s($cat_label)
-       . ($ovz_label ? ' <span class="text-muted small">(' . s($ovz_label) . ')</span>' : '')
-       . '</div>';
-    echo '<div class="col-md-3"><b>Уровень:</b> ' . s($levels[$student->difficulty_level] ?? '-') . '</div>';
+    $card['staff_fields'] = [
+        'cat_label'   => $cat_label,
+        'ovz_label'   => $ovz_label ?: null,
+        'level_label' => $levels[$student->difficulty_level] ?? '-',
+    ];
+    $card['email'] = $mdl_user->email;
 }
-echo '<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-' . $avg_badge_class . '">' . grade_scale::format($avg_score) . '</span></div>';
-echo '</div>';
-echo '<div class="row mt-2">';
-echo '<div class="col-md-6"><b>Организация:</b> ' . s($org->name ?? '-') . '</div>';
-if (!$is_own_view) {
-    echo '<div class="col-md-6"><b>Email:</b> ' . s($mdl_user->email) . '</div>';
-}
-echo '</div>';
-echo '</div></div>';
+$context['card'] = $card;
 
 // --- Образовательный маршрут (ИОМ, A2) ---
 $path = \local_unics\path_manager::get_active_path($student_id);
-echo '<h2 class="unics-section-title mt-4">' .
-    ($is_own_view ? 'Мой маршрут' : 'Образовательный маршрут') . '</h2>';
+$path_ctx = [
+    'title'    => $is_own_view ? 'Мой маршрут' : 'Образовательный маршрут',
+    'open_url' => (string)new moodle_url('/local/unics/pages/my_path.php', ['student_id' => $student_id]),
+];
 if ($path) {
     $prog = \local_unics\path_manager::progress((int)$path->id);
-    echo '<p>Прогресс: <strong>' . $prog['done'] . '</strong> из <strong>' . $prog['total']
-       . '</strong> шагов.';
-    if ($prog['current']) {
-        echo ' Текущий шаг: <strong>' . s($prog['current']->title) . '</strong>.';
-    } else if ($prog['total'] > 0) {
-        echo ' Все шаги пройдены.';
-    }
-    echo '</p>';
+    $path_ctx['has_path'] = [
+        'done'     => $prog['done'],
+        'total'    => $prog['total'],
+        'current'  => $prog['current'] ? ['title' => $prog['current']->title] : null,
+        'all_done' => !$prog['current'] && $prog['total'] > 0,
+    ];
 } else {
-    echo '<p class="text-muted">Маршрут пока не составлен.</p>';
+    $path_ctx['no_path'] = true;
 }
-echo '<div class="d-flex flex-wrap gap-2 mb-2">';
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/my_path.php', ['student_id' => $student_id]),
-    'Открыть маршрут', ['class' => 'btn btn-sm btn-outline-primary']);
 if ($is_admin || $is_teacher) {
-    echo html_writer::link(
-        new moodle_url('/local/unics/pages/path_builder.php', ['student_id' => $student_id]),
-        $path ? 'Редактировать маршрут' : 'Составить маршрут',
-        ['class' => 'btn btn-sm btn-outline-secondary']);
+    $path_ctx['builder'] = [
+        'url'   => (string)new moodle_url('/local/unics/pages/path_builder.php', ['student_id' => $student_id]),
+        'label' => $path ? 'Редактировать маршрут' : 'Составить маршрут',
+    ];
 }
-echo '</div>';
+$context['path'] = $path_ctx;
 
-// --- График прогресса ---
+// --- График прогресса (пре-рендер ядра, в шаблоне тройной скобкой) ---
 if (count($grade_history) >= 2) {
     $chart_vals   = [];
     $chart_labels = [];
@@ -272,249 +262,191 @@ if (count($grade_history) >= 2) {
     $chart->add_series($series);
     $chart->set_labels($chart_labels);
 
-    echo '<h2 class="unics-section-title mt-4">' .
-        ($is_own_view ? 'Мой прогресс' : 'Динамика успеваемости') . '</h2>';
-    // Без фиксированной высоты: Moodle .chart-area тянется до высоты canvas, и
-    // фикс. height обрезал бы box, из-за чего график вылезал на след. секцию.
-    // Контейнер обнимает график по высоте, margin-bottom даёт отступ.
-    echo '<div style="margin-bottom:1.25rem;">';
-    echo $OUTPUT->render_chart($chart, false);
-    echo '</div>';
+    $context['chart'] = [
+        'title' => $is_own_view ? 'Мой прогресс' : 'Динамика успеваемости',
+        'html'  => $OUTPUT->render_chart($chart, false),
+    ];
 }
 
-// Результаты тестов и заданий
+// Результаты тестов и заданий.
 $type_labels = ['quiz' => 'Тест', 'assign' => 'Задание'];
-echo '<h2 class="unics-section-title mt-4">Результаты тестов и заданий</h2>';
 if (empty($quiz_grades)) {
-    echo '<p class="text-muted">Тесты и задания ещё не оценены.</p>';
+    $context['grades'] = ['empty' => true];
 } else {
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="table-light"><tr>
-        <th>Курс</th><th>Тип</th><th>Тест / задание</th><th>Баллы</th><th>Балл</th><th>Дата</th><th></th>
-    </tr></thead><tbody>';
+    $grades_rows = [];
     foreach ($quiz_grades as $g) {
         $score = grade_scale::from_raw((float)$g->finalgrade, (float)$g->grademax);
-        $bc    = grade_scale::badge_class($score);
         $gcmid = (int)($g->cmid ?? 0);
         $notes_for_quiz = $gcmid ? ($note_map[$gcmid] ?? []) : [];
         $note_count = count($notes_for_quiz);
 
-        echo '<tr>';
-        echo '<td>' . s($g->course_name) . '</td>';
-        echo '<td>' . s($type_labels[$g->itemmodule] ?? $g->itemmodule) . '</td>';
-        echo '<td>' . s($g->quiz_name ?? '-') . '</td>';
-        echo '<td>' . round($g->finalgrade, 1) . ' / ' . round($g->grademax, 1) . '</td>';
-        echo '<td><span class="badge badge-' . $bc . '">' . grade_scale::format($score) . '</span></td>';
-        echo '<td>' . ($g->timemodified ? userdate($g->timemodified, '%d.%m.%Y') : '-') . '</td>';
-        echo '<td>';
+        $row = [
+            'course'      => $g->course_name,
+            'type_label'  => $type_labels[$g->itemmodule] ?? $g->itemmodule,
+            'name'        => $g->quiz_name ?? '-',
+            'raw_score'   => round($g->finalgrade, 1) . ' / ' . round($g->grademax, 1),
+            'badge_class' => grade_scale::badge_class($score),
+            'score_text'  => grade_scale::format($score),
+            'date'        => $g->timemodified ? userdate($g->timemodified, '%d.%m.%Y') : '-',
+        ];
         if ($gcmid && ($is_admin || $is_teacher)) {
-            $note_lbl = $note_count > 0 ? '💬 ' . $note_count : '+ заметка';
-            echo html_writer::link(
-                new moodle_url('/local/unics/pages/student_comments.php', [
+            $row['note_btn'] = [
+                'url'   => (string)new moodle_url('/local/unics/pages/student_comments.php', [
                     'student_id' => $student_id,
                     'cmid'       => $gcmid,
                 ]),
-                $note_lbl,
-                ['class' => 'btn btn-sm btn-outline-' . ($note_count > 0 ? 'info' : 'secondary')]
-            );
+                'label' => $note_count > 0 ? '💬 ' . $note_count : '+ заметка',
+                'cls'   => 'btn btn-sm btn-outline-' . ($note_count > 0 ? 'info' : 'secondary'),
+            ];
         } elseif ($gcmid && $note_count > 0) {
-            echo '<span class="badge badge-info">💬 ' . $note_count . '</span>';
+            $row['note_badge'] = ['count' => $note_count];
         }
-        echo '</td>';
-        echo '</tr>';
-
-        // Показываем все заметки этой активности inline
+        // Все заметки этой активности - inline-строкой под оценкой.
         if (!empty($notes_for_quiz)) {
-            echo '<tr class="unics-note-row">';
-            echo '<td colspan="7">';
-            foreach ($notes_for_quiz as $note) {
-                $na = trim("{$note->lastname} {$note->firstname}");
+            $row['notes_row'] = ['notes' => array_map(function ($note) {
                 [$abadge, $aclass] = \local_unics\social\comment_manager::audience_badge((int)$note->audience);
-                echo '<div class="unics-teacher-note">';
-                echo '<div class="note-meta">';
-                echo '<span class="note-author">' . s($na)
-                   . ' <span class="badge badge-' . $aclass . '">' . s($abadge) . '</span></span>';
-                echo '<span class="note-date">' . userdate($note->created_at, '%d.%m.%Y') . '</span>';
-                echo '</div>';
-                echo '<p class="note-body">' . s($note->body) . '</p>';
-                echo '</div>';
-            }
-            echo '</td></tr>';
+                return [
+                    'author'         => trim("{$note->lastname} {$note->firstname}"),
+                    'audience_label' => $abadge,
+                    'audience_class' => $aclass,
+                    'date'           => userdate($note->created_at, '%d.%m.%Y'),
+                    'body'           => $note->body,
+                ];
+            }, $notes_for_quiz)];
         }
+        $grades_rows[] = $row;
     }
-    echo '</tbody></table>';
+    $context['grades'] = ['rows' => $grades_rows];
 }
 
 // Контрольные точки (B4) — промежуточная аттестация по milestone-тестам.
 // Видны всем ролям, у кого есть доступ к отчёту (учащийся видит свои).
 $milestones = \local_unics\learning\milestone_manager::student_milestones($student->mdl_user_id);
-echo '<h2 class="unics-section-title mt-4">Контрольные точки</h2>';
 if (empty($milestones)) {
-    echo '<p class="text-muted">Контрольных точек пока нет.</p>';
+    $context['milestones'] = ['empty' => true];
 } else {
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="table-light"><tr>
-        <th>Курс</th><th>Контрольная точка</th><th>Статус</th><th>Балл</th><th>Дата</th>
-    </tr></thead><tbody>';
-    foreach ($milestones as $m) {
+    $context['milestones'] = ['rows' => array_map(function ($m) {
         $r = $m->result;
-        echo '<tr>';
-        echo '<td>' . s($m->course_name) . '</td>';
-        echo '<td>' . s($m->quiz_name) . '</td>';
-        echo '<td>' . \local_unics\learning\milestone_manager::status_html($r) . '</td>';
-        echo '<td>' . \local_unics\learning\milestone_manager::grade_text($r) . '</td>';
-        echo '<td>' . (!empty($r->timemodified) ? userdate($r->timemodified, '%d.%m.%Y') : '-') . '</td>';
-        echo '</tr>';
-    }
-    echo '</tbody></table>';
+        return [
+            'course'      => $m->course_name,
+            'name'        => $m->quiz_name,
+            'status_html' => \local_unics\learning\milestone_manager::status_html($r),
+            'grade_html'  => \local_unics\learning\milestone_manager::grade_text($r),
+            'date'        => !empty($r->timemodified) ? userdate($r->timemodified, '%d.%m.%Y') : '-',
+        ];
+    }, array_values($milestones))];
 }
 
 // Темы для повторения (B2) — проваленные тесты темы (с B1-гейтом), ожидающие повтора.
 // Видны всем ролям с доступом к отчёту (учащийся видит свои).
 $topic_retries = \local_unics\learning\topic_retry_manager::student_open_retries($student->mdl_user_id);
-echo '<h2 class="unics-section-title mt-4">Темы для повторения</h2>';
 if (empty($topic_retries)) {
-    echo '<p class="text-muted">Тем для повторения нет.</p>';
+    $context['retries'] = ['empty' => true];
 } else {
-    echo '<p class="text-muted">Тесты темы, которые пока не пройдены - стоит повторить материалы и пройти заново.</p>';
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="table-light"><tr>
-        <th>Курс</th><th>Тема (тест)</th><th>Результат</th><th>Дата</th>
-    </tr></thead><tbody>';
-    foreach ($topic_retries as $tr) {
-        echo '<tr>';
-        echo '<td>' . s($tr->course_name) . '</td>';
-        echo '<td>' . s($tr->quiz_name ?? 'тест темы') . '</td>';
-        echo '<td>' . \local_unics\learning\topic_retry_manager::grade_text($tr) . '</td>';
-        echo '<td>' . (!empty($tr->timecreated) ? userdate($tr->timecreated, '%d.%m.%Y') : '-') . '</td>';
-        echo '</tr>';
-    }
-    echo '</tbody></table>';
+    $context['retries'] = ['rows' => array_map(fn($tr) => [
+        'course'     => $tr->course_name,
+        'name'       => $tr->quiz_name ?? 'тест темы',
+        'grade_html' => \local_unics\learning\topic_retry_manager::grade_text($tr),
+        'date'       => !empty($tr->timecreated) ? userdate($tr->timecreated, '%d.%m.%Y') : '-',
+    ], array_values($topic_retries))];
 }
 
 // Пробелы (B3) - вопросы с ошибками по последней завершённой попытке каждого теста,
 // сгруппированные по теме (тесту). Правило, без ИИ; читаем из ядровых question_*.
 // Видны всем ролям с доступом к отчёту (учащийся видит свои).
 $gaps = \local_unics\learning\gap_manager::student_gaps($student->mdl_user_id);
-echo '<h2 class="unics-section-title mt-4">Пробелы</h2>';
 if (empty($gaps)) {
-    echo '<p class="text-muted">Пробелов по тестам не выявлено.</p>';
+    $context['gaps'] = ['empty' => true];
 } else {
-    echo '<p class="text-muted">Вопросы с ошибками по последним попыткам - темы, которые стоит повторить.</p>';
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="table-light"><tr>
-        <th>Курс</th><th>Тема (тест)</th><th>Ошибки</th>
-    </tr></thead><tbody>';
-    foreach ($gaps as $topic) {
-        echo '<tr>';
-        echo '<td>' . s($topic->course_name) . '</td>';
-        echo '<td>' . s($topic->quiz_name) . '</td>';
-        echo '<td>' . s(\local_unics\learning\gap_manager::summary_text($topic)) . '</td>';
-        echo '</tr>';
-
-        // Перечень ошибочных вопросов этой темы inline (что ответил учащийся).
-        echo '<tr class="unics-note-row"><td colspan="3"><ul class="mb-0">';
-        foreach ($topic->questions as $qq) {
-            $resp = ($qq->response !== null && $qq->response !== '')
-                ? ' <span class="text-muted small">- ответ: ' . s($qq->response) . '</span>'
-                : '';
-            echo '<li>' . \local_unics\learning\gap_manager::state_html($qq->state)
-               . ' ' . s($qq->qname) . $resp . '</li>';
-        }
-        echo '</ul></td></tr>';
-    }
-    echo '</tbody></table>';
+    $context['gaps'] = ['rows' => array_map(fn($topic) => [
+        'course'    => $topic->course_name,
+        'name'      => $topic->quiz_name,
+        'summary'   => \local_unics\learning\gap_manager::summary_text($topic),
+        // Перечень ошибочных вопросов темы (что ответил учащийся).
+        'questions' => array_map(fn($qq) => [
+            'state_html'   => \local_unics\learning\gap_manager::state_html($qq->state),
+            'qname'        => $qq->qname,
+            'has_response' => $qq->response !== null && $qq->response !== '',
+            'response'     => $qq->response,
+        ], array_values($topic->questions)),
+    ], array_values($gaps))];
 }
 
-// Записан на курсы
-echo '<h2 class="unics-section-title mt-4">Записан на курсы (' . count($enrolled_courses) . ')</h2>';
+// Записан на курсы.
+$courses_ctx = ['count' => count($enrolled_courses)];
 if (empty($enrolled_courses)) {
-    echo '<p class="text-muted">Не записан ни на один курс.</p>';
+    $courses_ctx['empty'] = true;
 } else {
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="table-light"><tr><th>Курс</th><th>Дата записи</th><th></th></tr></thead><tbody>';
-    foreach ($enrolled_courses as $c) {
+    $courses_ctx['rows'] = array_map(function ($c) use ($is_admin, $is_teacher, $student_id) {
         $ts = $c->timestart ?: $c->timecreated;
-        echo '<tr>';
-        echo '<td>' . s($c->fullname) . '</td>';
-        echo '<td>' . ($ts ? userdate($ts, '%d.%m.%Y') : '-') . '</td>';
-        echo '<td>';
+        $row = [
+            'fullname' => $c->fullname,
+            'date'     => $ts ? userdate($ts, '%d.%m.%Y') : '-',
+        ];
         if ($is_admin || $is_teacher) {
-            echo html_writer::link(
-                new moodle_url('/local/unics/pages/course_notes.php', [
-                    'student_id' => $student_id,
-                    'courseid'   => $c->id,
-                ]),
-                'Заметки по курсу',
-                ['class' => 'btn btn-sm btn-outline-info']
-            );
+            $row['notes_btn'] = ['url' => (string)new moodle_url('/local/unics/pages/course_notes.php', [
+                'student_id' => $student_id,
+                'courseid'   => $c->id,
+            ])];
         }
-        echo '</td>';
-        echo '</tr>';
-    }
-    echo '</tbody></table>';
+        return $row;
+    }, array_values($enrolled_courses));
 }
+$context['courses'] = $courses_ctx;
 
 // История УМК - служебная информация педагогики (статусы очереди генерации).
 // Не показываем ни ученику (своя), ни родителю - путает «УМК с ошибкой» с оценкой ребёнка.
 if ($is_admin || $is_teacher) {
-    echo '<h2 class="unics-section-title mt-4">История генерации УМК (' . count($umk_list) . ')</h2>';
+    $umk_ctx = ['count' => count($umk_list)];
     if (empty($umk_list)) {
-        echo '<p class="text-muted">УМК ещё не генерировались.</p>';
+        $umk_ctx['empty'] = true;
     } else {
-        $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
-        echo '<table class="table table-sm table-bordered">';
-        echo '<thead class="table-light"><tr>
-            <th>Название</th><th>Тема</th><th>Уровень</th><th>Курс</th><th>Статус</th><th>Дата</th>
-        </tr></thead><tbody>';
-        foreach ($umk_list as $u) {
-            $sl  = $umk_statuses[$u->status] ?? '?';
-            $sc  = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'][$u->status] ?? 'secondary';
-            $dt  = $u->generated_at ? date('d.m.Y', (int)$u->generated_at) : '-';
-            $lvl = $level_labels[$u->difficulty_level] ?? '-';
-            echo '<tr>';
-            echo '<td>' . s($u->title) . '</td>';
-            echo '<td>' . s($u->topic) . '</td>';
-            echo '<td>' . s($lvl) . '</td>';
-            echo '<td>' . s($u->course_name ?? '-') . '</td>';
-            echo '<td><span class="badge badge-' . $sc . '">' . $sl . '</span></td>';
-            echo '<td>' . $dt . '</td>';
-            echo '</tr>';
-        }
-        echo '</tbody></table>';
+        $status_colors = [1 => 'secondary', 2 => 'info', 3 => 'success', 4 => 'danger'];
+        $umk_ctx['rows'] = array_map(fn($u) => [
+            'title'        => $u->title,
+            'topic'        => $u->topic,
+            'level'        => $levels[$u->difficulty_level] ?? '-',
+            'course'       => $u->course_name ?? '-',
+            'status_tone'  => $status_colors[$u->status] ?? 'secondary',
+            'status_label' => $umk_statuses[$u->status] ?? '?',
+            'date'         => $u->generated_at ? date('d.m.Y', (int)$u->generated_at) : '-',
+        ], array_values($umk_list));
     }
+    $context['umk'] = $umk_ctx;
 }
 
 // Общие заметки педагога (последние 3 видимые). Видимость по audience уже
 // применена сервисом выше ($general_notes). Активностные заметки - inline.
 $last_comments = array_slice($general_notes, 0, 3);
-
-echo '<h2 class="unics-section-title mt-4" id="notes">Общие заметки педагога</h2>';
+$notes_ctx = [];
 if (empty($last_comments)) {
-    echo '<p class="text-muted">Комментариев ещё нет.</p>';
+    $notes_ctx['empty'] = true;
 } else {
-    foreach ($last_comments as $cm) {
-        $author = trim("{$cm->lastname} {$cm->firstname}");
+    $notes_ctx['cards'] = array_map(function ($cm) {
         [$abadge, $aclass] = \local_unics\social\comment_manager::audience_badge((int)$cm->audience);
-        echo '<div class="card mb-2">';
-        echo '<div class="card-header d-flex justify-content-between">';
-        echo '<span class="font-weight-bold">' . s($author)
-           . ' <span class="badge badge-' . $aclass . '">' . s($abadge) . '</span></span>';
-        echo '<small class="text-muted">' . userdate($cm->created_at, '%d.%m.%Y') . '</small>';
-        echo '</div>';
-        echo '<div class="card-body py-2">';
-        echo '<p class="mb-0" style="white-space:pre-wrap">' . s($cm->body) . '</p>';
-        echo '</div>';
-        echo '</div>';
-    }
+        return [
+            'author'         => trim("{$cm->lastname} {$cm->firstname}"),
+            'audience_label' => $abadge,
+            'audience_class' => $aclass,
+            'date'           => userdate($cm->created_at, '%d.%m.%Y'),
+            'body'           => $cm->body,
+        ];
+    }, $last_comments);
 }
 // Создавать заметки могут только педагог и админ.
 if ($is_admin || $is_teacher) {
-    echo html_writer::link(
-        new moodle_url('/local/unics/pages/student_comments.php', ['student_id' => $student_id]),
-        count($last_comments) > 0 ? 'Все комментарии и добавить новый →' : 'Добавить комментарий →',
-        ['class' => 'btn btn-outline-secondary btn-sm mt-1']
-    );
+    $notes_ctx['all_link'] = [
+        'url'   => (string)new moodle_url('/local/unics/pages/student_comments.php', ['student_id' => $student_id]),
+        'label' => count($last_comments) > 0 ? 'Все комментарии и добавить новый →' : 'Добавить комментарий →',
+    ];
 }
+$context['notes'] = $notes_ctx;
 
+// ----------------------------------------------------------------
+// Вывод
+// ----------------------------------------------------------------
+
+echo $OUTPUT->header();
+echo local_unics_dashboard_button();
+echo $OUTPUT->render_from_template('local_unics/student_report', $context);
 echo $OUTPUT->footer();

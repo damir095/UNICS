@@ -1,0 +1,193 @@
+{{!
+    Отчет по учащемуся / «Мои результаты» (2.5 аудита, слайс 2,
+    [[session-kickoff-mustache-slices]]). Разметка 1:1 из pages/student_report.php;
+    контекст собирает страница. Тройными скобками идет ТОЛЬКО доверенный
+    пре-рендер без пользовательских данных: график ядра (chart.html) и
+    бейджи/баллы менеджеров (status_html / grade_html / state_html - константные
+    метки и format_float). Пользовательский текст - всегда двойными скобками.
+
+    Пример контекста: см. tests/student_report_template_test.php::full_context().
+}}
+<div class="d-flex flex-wrap gap-2 mt-3 mb-3">
+    {{#toolbar_buttons}}
+    <a href="{{url}}" class="{{cls}}">{{label}}</a>
+    {{/toolbar_buttons}}
+</div>
+{{! Внутри card-body элементы вплотную (без переносов): исходная страница
+    echo-ила соседние div без пробельных узлов - сохраняем DOM 1:1. }}
+{{#card}}
+<div class="card mb-4">
+    <div class="card-header bg-light"><strong>{{fio}}</strong></div>
+    <div class="card-body"><div class="row"><div class="col-md-3"><b>Класс:</b> {{class_str}}</div>{{#staff_fields}}<div class="col-md-3"><b>Категория:</b> {{cat_label}}{{#ovz_label}} <span class="text-muted small">({{ovz_label}})</span>{{/ovz_label}}</div><div class="col-md-3"><b>Уровень:</b> {{level_label}}</div>{{/staff_fields}}<div class="col-md-3"><b>Средний балл:</b> <span class="badge badge-{{avg_badge_class}}">{{avg_text}}</span></div></div><div class="row mt-2"><div class="col-md-6"><b>Организация:</b> {{org_name}}</div>{{#email}}<div class="col-md-6"><b>Email:</b> {{email}}</div>{{/email}}</div></div>
+</div>
+{{/card}}
+{{#path}}
+<h2 class="unics-section-title mt-4">{{title}}</h2>
+{{#has_path}}
+<p>Прогресс: <strong>{{done}}</strong> из <strong>{{total}}</strong> шагов.{{#current}} Текущий шаг: <strong>{{title}}</strong>.{{/current}}{{#all_done}} Все шаги пройдены.{{/all_done}}</p>
+{{/has_path}}
+{{#no_path}}
+<p class="text-muted">Маршрут пока не составлен.</p>
+{{/no_path}}
+<div class="d-flex flex-wrap gap-2 mb-2">
+    <a href="{{open_url}}" class="btn btn-sm btn-outline-primary">Открыть маршрут</a>
+    {{#builder}}
+    <a href="{{url}}" class="btn btn-sm btn-outline-secondary">{{label}}</a>
+    {{/builder}}
+</div>
+{{/path}}
+{{#chart}}
+<h2 class="unics-section-title mt-4">{{title}}</h2>
+{{! Без фиксированной высоты: .chart-area ядра тянется до canvas, контейнер
+    обнимает график, margin-bottom дает отступ (иначе график лез на секцию ниже). }}
+<div style="margin-bottom:1.25rem;">
+    {{{html}}}
+</div>
+{{/chart}}
+{{#grades}}
+<h2 class="unics-section-title mt-4">Результаты тестов и заданий</h2>
+{{#empty}}<p class="text-muted">Тесты и задания ещё не оценены.</p>{{/empty}}
+{{^empty}}
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr>
+        <th>Курс</th><th>Тип</th><th>Тест / задание</th><th>Баллы</th><th>Балл</th><th>Дата</th><th></th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{course}}</td>
+            <td>{{type_label}}</td>
+            <td>{{name}}</td>
+            <td>{{raw_score}}</td>
+            <td><span class="badge badge-{{badge_class}}">{{score_text}}</span></td>
+            <td>{{date}}</td>
+            <td>{{#note_btn}}<a href="{{url}}" class="{{cls}}">{{label}}</a>{{/note_btn}}{{#note_badge}}<span class="badge badge-info">💬 {{count}}</span>{{/note_badge}}</td>
+        </tr>
+        {{! Заметки вплотную, как echo-ил оригинал (без пробельных узлов). }}
+        {{#notes_row}}
+        <tr class="unics-note-row"><td colspan="7">{{#notes}}<div class="unics-teacher-note"><div class="note-meta"><span class="note-author">{{author}} <span class="badge badge-{{audience_class}}">{{audience_label}}</span></span><span class="note-date">{{date}}</span></div><p class="note-body">{{body}}</p></div>{{/notes}}</td></tr>
+        {{/notes_row}}
+        {{/rows}}
+    </tbody>
+</table>
+{{/empty}}
+{{/grades}}
+{{#milestones}}
+<h2 class="unics-section-title mt-4">Контрольные точки</h2>
+{{#empty}}<p class="text-muted">Контрольных точек пока нет.</p>{{/empty}}
+{{^empty}}
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr>
+        <th>Курс</th><th>Контрольная точка</th><th>Статус</th><th>Балл</th><th>Дата</th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{course}}</td>
+            <td>{{name}}</td>
+            <td>{{{status_html}}}</td>
+            <td>{{{grade_html}}}</td>
+            <td>{{date}}</td>
+        </tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{/empty}}
+{{/milestones}}
+{{#retries}}
+<h2 class="unics-section-title mt-4">Темы для повторения</h2>
+{{#empty}}<p class="text-muted">Тем для повторения нет.</p>{{/empty}}
+{{^empty}}
+<p class="text-muted">Тесты темы, которые пока не пройдены - стоит повторить материалы и пройти заново.</p>
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr>
+        <th>Курс</th><th>Тема (тест)</th><th>Результат</th><th>Дата</th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{course}}</td>
+            <td>{{name}}</td>
+            <td>{{{grade_html}}}</td>
+            <td>{{date}}</td>
+        </tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{/empty}}
+{{/retries}}
+{{#gaps}}
+<h2 class="unics-section-title mt-4">Пробелы</h2>
+{{#empty}}<p class="text-muted">Пробелов по тестам не выявлено.</p>{{/empty}}
+{{^empty}}
+<p class="text-muted">Вопросы с ошибками по последним попыткам - темы, которые стоит повторить.</p>
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr>
+        <th>Курс</th><th>Тема (тест)</th><th>Ошибки</th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{course}}</td>
+            <td>{{name}}</td>
+            <td>{{summary}}</td>
+        </tr>
+        {{! li вплотную, как echo-ил оригинал (без пробельных узлов). }}
+        <tr class="unics-note-row"><td colspan="3"><ul class="mb-0">{{#questions}}<li>{{{state_html}}} {{qname}}{{#has_response}} <span class="text-muted small">- ответ: {{response}}</span>{{/has_response}}</li>{{/questions}}</ul></td></tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{/empty}}
+{{/gaps}}
+{{#courses}}
+<h2 class="unics-section-title mt-4">Записан на курсы ({{count}})</h2>
+{{#empty}}<p class="text-muted">Не записан ни на один курс.</p>{{/empty}}
+{{^empty}}
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr><th>Курс</th><th>Дата записи</th><th></th></tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{fullname}}</td>
+            <td>{{date}}</td>
+            <td>{{#notes_btn}}<a href="{{url}}" class="btn btn-sm btn-outline-info">Заметки по курсу</a>{{/notes_btn}}</td>
+        </tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{/empty}}
+{{/courses}}
+{{#umk}}
+<h2 class="unics-section-title mt-4">История генерации УМК ({{count}})</h2>
+{{#empty}}<p class="text-muted">УМК ещё не генерировались.</p>{{/empty}}
+{{^empty}}
+<table class="table table-sm table-bordered">
+    <thead class="table-light"><tr>
+        <th>Название</th><th>Тема</th><th>Уровень</th><th>Курс</th><th>Статус</th><th>Дата</th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td>{{title}}</td>
+            <td>{{topic}}</td>
+            <td>{{level}}</td>
+            <td>{{course}}</td>
+            <td><span class="badge badge-{{status_tone}}">{{status_label}}</span></td>
+            <td>{{date}}</td>
+        </tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{/empty}}
+{{/umk}}
+{{#notes}}
+<h2 class="unics-section-title mt-4" id="notes">Общие заметки педагога</h2>
+{{#empty}}<p class="text-muted">Комментариев ещё нет.</p>{{/empty}}
+{{! Внутренности карточки вплотную, как echo-ил оригинал. }}
+{{#cards}}
+<div class="card mb-2"><div class="card-header d-flex justify-content-between"><span class="font-weight-bold">{{author}} <span class="badge badge-{{audience_class}}">{{audience_label}}</span></span><small class="text-muted">{{date}}</small></div><div class="card-body py-2"><p class="mb-0" style="white-space:pre-wrap">{{body}}</p></div></div>
+{{/cards}}
+{{#all_link}}
+<a href="{{url}}" class="btn btn-outline-secondary btn-sm mt-1">{{label}}</a>
+{{/all_link}}
+{{/notes}}
