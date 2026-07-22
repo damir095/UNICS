@@ -45,59 +45,56 @@ if ($org_id) {
     local_unics_export_student_stats([(int)$org_id], 'unics-otchet-org-' . $org_id);
 }
 
+// ----------------------------------------------------------------
+// Сборка контекста шаблона (2.5 аудита: разметка целиком в
+// templates/org_report.mustache; здесь - только данные).
+// ----------------------------------------------------------------
+
+$context = ['users_url' => (string)new moodle_url('/local/unics/pages/users.php')];
+
 // Список организаций для селектора — по скоупу.
-if ($is_admin_user) {
-    $orgs = unics_organization_manager::get_organizations_grouped();
-} else {
-    [$ofw, $ofp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
-    $orgs = [];
-    foreach ($DB->get_records_sql(
-        "SELECT o.id, o.name FROM {unics_organizations} o
-          WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp) as $r) {
-        $orgs[$r->id] = s($r->name);
+if (!$fixed_org) {
+    if ($is_admin_user) {
+        $orgs = unics_organization_manager::get_organizations_grouped();
+    } else {
+        [$ofw, $ofp] = \local_unics\identity\scope_checker::org_filter_sql((int)$USER->id, 'o');
+        $orgs = [];
+        foreach ($DB->get_records_sql(
+            "SELECT o.id, o.name FROM {unics_organizations} o
+              WHERE o.is_active = 1 AND ({$ofw}) ORDER BY o.name", $ofp) as $r) {
+            $orgs[$r->id] = $r->name;
+        }
     }
+    $context['selector'] = ['options' => array_map(fn($oid, $olabel) => [
+        'id'       => $oid,
+        'label'    => $olabel,
+        'selected' => $oid == $org_id,
+    ], array_keys($orgs), array_values($orgs))];
 }
 
 echo $OUTPUT->header();
 echo local_unics_dashboard_button();
 
-echo '<div class="mb-3">';
-echo html_writer::link(
-    new moodle_url('/local/unics/pages/users.php'),
-    'Пользователи',
-    ['class' => 'btn btn-outline-secondary btn-sm']
-);
-echo '</div>';
-
-// Селектор организации: показываем, если скоуп не зафиксирован на одну орг.
-if (!$fixed_org) {
-    echo '<form method="get" class="form-inline mb-4">';
-    echo '<label class="mr-2 font-weight-bold">Организация:</label>';
-    echo '<select name="org_id" class="form-control mr-2" style="max-width:400px">';
-    echo '<option value="0">- Выберите организацию -</option>';
-    foreach ($orgs as $oid => $olabel) {
-        $sel = ($oid == $org_id) ? ' selected' : '';
-        echo '<option value="' . $oid . '"' . $sel . '>' . s($olabel) . '</option>';
-    }
-    echo '</select>';
-    echo '<button type="submit" class="btn btn-primary">Показать</button>';
-    echo '</form>';
-}
-
 if (!$org_id) {
+    echo $OUTPUT->render_from_template('local_unics/org_report', $context);
     echo $OUTPUT->footer();
     exit;
 }
 
 $org = $DB->get_record('unics_organizations', ['id' => $org_id]);
 if (!$org) {
-    echo $OUTPUT->notification('Организация не найдена.', 'error');
+    $context['not_found'] = ['html' => $OUTPUT->notification('Организация не найдена.', 'error')];
+    echo $OUTPUT->render_from_template('local_unics/org_report', $context);
     echo $OUTPUT->footer();
     exit;
 }
 
-echo '<h5 class="mb-3">' . s($org->name) . '</h5>';
-echo local_unics_export_buttons($PAGE->url);
+// Заголовок орг. + кнопки выгрузки показываются и при пустом списке учащихся
+// (оригинал печатал их ДО проверки $students) - общая шапка вне ветки report.
+$context['header'] = [
+    'org_name'            => $org->name,
+    'export_buttons_html' => local_unics_export_buttons($PAGE->url),
+];
 
 // Категории/ОВЗ - из нормализованных таблиц с прежними алиасами (этап 2.6-B).
 [$catsql, $ovzsql] = \local_unics\identity\student_helper::taxonomy_select_sql('s');
@@ -113,7 +110,8 @@ $students = $DB->get_records_sql(
 );
 
 if (empty($students)) {
-    echo $OUTPUT->notification('В этой организации нет учащихся.', 'info');
+    $context['no_students'] = ['html' => $OUTPUT->notification('В этой организации нет учащихся.', 'info')];
+    echo $OUTPUT->render_from_template('local_unics/org_report', $context);
     echo $OUTPUT->footer();
     exit;
 }
@@ -190,7 +188,7 @@ if ($student_ids) {
 }
 
 // ----------------------------------------------------------------
-// Вывод
+// Данные
 // ----------------------------------------------------------------
 $levels = [1 => 'Базовый', 2 => 'Стандарт', 3 => 'Продвинут.'];
 
@@ -202,11 +200,11 @@ const UNICS_RISK_IDLE_DAYS  = 21;  // нет сданных тестов дол�
 $only_risk = optional_param('risk', 0, PARAM_INT);
 
 // ---- Подсчёт по каждому учащемуся: средний балл, динамика, риск ----
-$rows      = [];
-$all_avgs  = [];
+$rows       = [];
+$all_avgs   = [];
 $level_dist = [1 => 0, 2 => 0, 3 => 0];
-$cnt_risk = 0;
-$cnt_ok   = 0;
+$cnt_risk   = 0;
+$cnt_ok     = 0;
 $cnt_nodata = 0;
 
 foreach ($students as $s) {
@@ -267,124 +265,108 @@ foreach ($students as $s) {
 
 $total = count($students);
 
-// ---- Карточки-сводка ----
-echo '<div class="row mb-3">';
-echo '<div class="col-md-3"><div class="card text-center p-2"><div class="h4">' . $total . '</div><small>Учащихся</small></div></div>';
-echo '<div class="col-md-3"><div class="card text-center p-2 ' . ($cnt_risk ? 'border-danger' : '')
-   . '"><div class="h4 text-danger">' . $cnt_risk . '</div><small>В группе риска</small></div></div>';
-echo '<div class="col-md-3"><div class="card text-center p-2"><div class="h4 text-success">' . $cnt_ok . '</div><small>Без риска</small></div></div>';
-echo '<div class="col-md-3"><div class="card text-center p-2"><div class="h4 text-muted">' . $cnt_nodata . '</div><small>Нет данных</small></div></div>';
-echo '</div>';
+// ----------------------------------------------------------------
+// Сборка контекста «report» (данные - разметка целиком в шаблоне).
+// ----------------------------------------------------------------
+$report = [];
+
+// ---- Мини-карточки сводки ----
+$report['stats'] = [
+    ['value' => $total,      'label' => 'Учащихся',       'value_class' => null,           'card_class' => null],
+    ['value' => $cnt_risk,   'label' => 'В группе риска', 'value_class' => 'text-danger',  'card_class' => $cnt_risk ? 'border-danger' : null],
+    ['value' => $cnt_ok,     'label' => 'Без риска',      'value_class' => 'text-success', 'card_class' => null],
+    ['value' => $cnt_nodata, 'label' => 'Нет данных',     'value_class' => 'text-muted',   'card_class' => null],
+];
 
 // ---- Визуализация (C-2): распределение по уровням + риск/норма ----
-if ($total > 0) {
-    echo '<div class="row mb-4">';
+$chart_lvl = new \core\chart_bar();
+$chart_lvl->add_series(new \core\chart_series('Учащихся',
+    [$level_dist[1], $level_dist[2], $level_dist[3]]));
+$chart_lvl->set_labels(['Базовый', 'Стандарт', 'Продвинут.']);
 
-    $chart_lvl = new \core\chart_bar();
-    $chart_lvl->add_series(new \core\chart_series('Учащихся',
-        [$level_dist[1], $level_dist[2], $level_dist[3]]));
-    $chart_lvl->set_labels(['Базовый', 'Стандарт', 'Продвинут.']);
-    echo '<div class="col-md-6"><h3 class="unics-section-title">Распределение по уровням</h3>'
-       . $OUTPUT->render_chart($chart_lvl, false) . '</div>';
+$chart_risk = new \core\chart_bar();
+$chart_risk->add_series(new \core\chart_series('Учащихся',
+    [$cnt_risk, $cnt_ok, $cnt_nodata]));
+$chart_risk->set_labels(['В группе риска', 'Без риска', 'Нет данных']);
 
-    $chart_risk = new \core\chart_bar();
-    $chart_risk->add_series(new \core\chart_series('Учащихся',
-        [$cnt_risk, $cnt_ok, $cnt_nodata]));
-    $chart_risk->set_labels(['В группе риска', 'Без риска', 'Нет данных']);
-    echo '<div class="col-md-6"><h3 class="unics-section-title">Группа риска</h3>'
-       . $OUTPUT->render_chart($chart_risk, false) . '</div>';
+$report['charts'] = [
+    ['title' => 'Распределение по уровням', 'html' => $OUTPUT->render_chart($chart_lvl, false)],
+    ['title' => 'Группа риска',             'html' => $OUTPUT->render_chart($chart_risk, false)],
+];
 
-    echo '</div>';
-}
-
-// ---- Фильтр ----
+// ---- Фильтр «группа риска» ----
 $base_url = new moodle_url('/local/unics/pages/org_report.php', ['org_id' => $org_id]);
 if ($cnt_risk > 0) {
     if ($only_risk) {
-        echo '<p>' . html_writer::link($base_url, '← Показать всех учащихся',
-            ['class' => 'btn btn-sm btn-outline-secondary']) . '</p>';
+        $report['risk_toggle'] = [
+            'url' => (string)$base_url, 'label' => '← Показать всех учащихся',
+            'cls' => 'btn btn-sm btn-outline-secondary',
+        ];
     } else {
         $risk_url = new moodle_url('/local/unics/pages/org_report.php',
             ['org_id' => $org_id, 'risk' => 1]);
-        echo '<p>' . html_writer::link($risk_url, 'Показать только группу риска (' . $cnt_risk . ')',
-            ['class' => 'btn btn-sm btn-outline-danger']) . '</p>';
+        $report['risk_toggle'] = [
+            'url' => (string)$risk_url, 'label' => 'Показать только группу риска (' . $cnt_risk . ')',
+            'cls' => 'btn btn-sm btn-outline-danger',
+        ];
     }
 }
 
 // ---- Таблица ----
-echo '<table class="table table-sm table-bordered table-hover">';
-echo '<thead class="table-light"><tr>
-    <th>Учащийся</th><th>Класс</th><th>Категория</th><th>Уровень</th>
-    <th>Средний балл</th><th>Риск</th><th>Курсов</th><th>УМК</th><th>Отчёт</th>
-</tr></thead><tbody>';
-
+$report['rows'] = [];
 foreach ($rows as $r) {
     if ($only_risk && !$r['is_risk']) {
         continue;
     }
     $s         = $r['s'];
-    $sid       = (int)$s->student_id;
     $avg_scale = $r['avg_scale'];
-
-    if ($avg_scale === null) {
-        $avg_cell = '<span class="text-muted">-</span>';
-    } else {
-        $bc = grade_scale::badge_class($avg_scale);
-        $avg_cell = '<span class="badge badge-' . $bc . '">' . grade_scale::format($avg_scale) . '</span>';
-    }
-
-    if ($r['is_risk']) {
-        $risk_cell = '<span class="badge badge-danger" title="'
-            . s(implode('; ', $r['reasons'])) . '">' . s(implode('; ', $r['reasons'])) . '</span>';
-    } elseif ($r['nodata']) {
-        $risk_cell = '<span class="text-muted">нет данных</span>';
-    } else {
-        $risk_cell = '<span class="badge badge-success">-</span>';
-    }
 
     $fio = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
     $class_str = $s->class_number
         ? $s->class_number . ($s->class_letter ? " «{$s->class_letter}»" : '')
         : '-';
 
-    $report_link = html_writer::link(
-        new moodle_url('/local/unics/pages/student_report.php', ['student_id' => $sid]),
-        'Открыть',
-        ['class' => 'btn btn-sm btn-outline-primary']
-    );
-
-    echo '<tr' . ($r['is_risk'] ? ' class="table-danger"' : '') . '>';
-    echo '<td>' . s($fio) . '</td>';
-    echo '<td>' . s($class_str) . '</td>';
-    echo '<td>' . s(\local_unics\identity\student_helper::format_categories($s) ?: '-') . '</td>';
-    echo '<td>' . ($levels[$s->difficulty_level] ?? '-') . '</td>';
-    echo '<td>' . $avg_cell . '</td>';
-    echo '<td>' . $risk_cell . '</td>';
-    echo '<td>' . $r['courses'] . '</td>';
-    echo '<td>' . $r['umk'] . '</td>';
-    echo '<td>' . $report_link . '</td>';
-    echo '</tr>';
+    $report['rows'][] = [
+        'row_class'  => $r['is_risk'] ? 'table-danger' : '',
+        'fio'        => $fio,
+        'class_str'  => $class_str,
+        'cat_label'  => \local_unics\identity\student_helper::format_categories($s) ?: '-',
+        'level_label' => $levels[$s->difficulty_level] ?? '-',
+        'avg_badge'  => $avg_scale === null ? null : [
+            'class' => grade_scale::badge_class($avg_scale),
+            'text'  => grade_scale::format($avg_scale),
+        ],
+        'risk'       => $r['is_risk'] ? ['reasons' => implode('; ', $r['reasons'])] : null,
+        'nodata'     => $r['nodata'],
+        'courses'    => $r['courses'],
+        'umk'        => $r['umk'],
+        'report_url' => (string)new moodle_url('/local/unics/pages/student_report.php',
+            ['student_id' => (int)$s->student_id]),
+    ];
 }
-
-echo '</tbody></table>';
 
 if (!empty($all_avgs)) {
     $org_avg_pct   = round(array_sum($all_avgs) / count($all_avgs), 1);
     $org_avg_scale = grade_scale::from_percent((float)$org_avg_pct);
-    $bc            = grade_scale::badge_class($org_avg_scale);
-    echo '<p class="mt-2"><strong>Средний балл по организации:</strong> '
-        . '<span class="badge badge-' . $bc . ' badge-lg">' . grade_scale::format($org_avg_scale) . '</span>'
-        . ' (по последним 5 тестам каждого учащегося)</p>';
+    $report['org_avg'] = [
+        'badge_class' => grade_scale::badge_class($org_avg_scale),
+        'text'        => grade_scale::format($org_avg_scale),
+    ];
 }
 
 if ($cnt_risk > 0) {
     $low_avg_scale = grade_scale::from_percent((float)UNICS_RISK_LOW_AVG);
-    echo '<div class="alert alert-warning mt-3"><strong>Рекомендации по группе риска:</strong> '
-       . 'индивидуальная консультация педагога; пересмотр уровня сложности; '
-       . 'генерация повторного УМК по слабым темам; контакт с родителями. '
-       . 'Критерии риска: средний балл &lt; ' . grade_scale::format($low_avg_scale) . ', '
-       . 'падение динамики &gt; ' . UNICS_RISK_TREND_DROP . ' п.п., '
-       . 'нет сданных тестов &gt; ' . UNICS_RISK_IDLE_DAYS . ' дн.</div>';
+    $report['risk_alert'] = [
+        'low_avg_text' => grade_scale::format($low_avg_scale),
+        'trend_drop'   => UNICS_RISK_TREND_DROP,
+        'idle_days'    => UNICS_RISK_IDLE_DAYS,
+    ];
 }
 
+$context['report'] = $report;
+
+// ----------------------------------------------------------------
+// Вывод (header/dashboard_button уже выведены выше, до ранних exit).
+// ----------------------------------------------------------------
+echo $OUTPUT->render_from_template('local_unics/org_report', $context);
 echo $OUTPUT->footer();

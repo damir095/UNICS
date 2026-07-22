@@ -1,0 +1,54 @@
+{{!
+    Сводный отчет по организации (2.5 аудита, слайс 3,
+    [[session-kickoff-mustache-slices]]). Разметка 1:1 из pages/org_report.php;
+    страница собирает контекст, ранний exit (нет org_id) остается в PHP -
+    тогда шаблону просто нечего показать кроме тулбара/селектора.
+
+    Три взаимоисключающих состояния верхнего уровня: not_found / no_students /
+    report (полный отчет). Тройными скобками - ТОЛЬКО доверенный пре-рендер без
+    пользовательских данных: кнопки выгрузки (export::buttons), графики ядра,
+    уведомления $OUTPUT->notification(). Внутри STAT/ALERT/P держим дочерние
+    теги на одной строке (без переносов) - иначе слепок разойдется на лишний
+    пробел (грабля слайса 2: пустой текст-узел между тегами).
+
+    Пример контекста: см. tests/org_report_template_test.php::full_context().
+}}
+<div class="mb-3"><a href="{{users_url}}" class="btn btn-outline-secondary btn-sm">Пользователи</a></div>
+{{#selector}}
+<form method="get" class="form-inline mb-4"><label class="mr-2 font-weight-bold">Организация:</label><select name="org_id" class="form-control mr-2" style="max-width:400px"><option value="0">- Выберите организацию -</option>{{#options}}<option value="{{id}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/options}}</select><button type="submit" class="btn btn-primary">Показать</button></form>
+{{/selector}}
+{{#not_found}}{{{html}}}{{/not_found}}
+{{#header}}<h5 class="mb-3">{{org_name}}</h5>{{{export_buttons_html}}}{{/header}}
+{{#no_students}}{{{html}}}{{/no_students}}
+{{#report}}
+<div class="row mb-3">{{#stats}}<div class="col-md-3"><div class="card text-center p-2{{#card_class}} {{card_class}}{{/card_class}}"><div class="h4{{#value_class}} {{value_class}}{{/value_class}}">{{value}}</div><small>{{label}}</small></div></div>{{/stats}}</div>
+<div class="row mb-4">
+    {{#charts}}
+    <div class="col-md-6"><h3 class="unics-section-title">{{title}}</h3>{{{html}}}</div>
+    {{/charts}}
+</div>
+{{#risk_toggle}}<p><a href="{{url}}" class="{{cls}}">{{label}}</a></p>{{/risk_toggle}}
+<table class="table table-sm table-bordered table-hover">
+    <thead class="table-light"><tr>
+        <th>Учащийся</th><th>Класс</th><th>Категория</th><th>Уровень</th>
+        <th>Средний балл</th><th>Риск</th><th>Курсов</th><th>УМК</th><th>Отчёт</th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr{{#row_class}} class="{{row_class}}"{{/row_class}}>
+            <td>{{fio}}</td>
+            <td>{{class_str}}</td>
+            <td>{{cat_label}}</td>
+            <td>{{level_label}}</td>
+            <td>{{#avg_badge}}<span class="badge badge-{{class}}">{{text}}</span>{{/avg_badge}}{{^avg_badge}}<span class="text-muted">-</span>{{/avg_badge}}</td>
+            <td>{{#risk}}<span class="badge badge-danger" title="{{reasons}}">{{reasons}}</span>{{/risk}}{{^risk}}{{#nodata}}<span class="text-muted">нет данных</span>{{/nodata}}{{^nodata}}<span class="badge badge-success">-</span>{{/nodata}}{{/risk}}</td>
+            <td>{{courses}}</td>
+            <td>{{umk}}</td>
+            <td><a href="{{report_url}}" class="btn btn-sm btn-outline-primary">Открыть</a></td>
+        </tr>
+        {{/rows}}
+    </tbody>
+</table>
+{{#org_avg}}<p class="mt-2"><strong>Средний балл по организации:</strong> <span class="badge badge-{{badge_class}} badge-lg">{{text}}</span> (по последним 5 тестам каждого учащегося)</p>{{/org_avg}}
+{{#risk_alert}}<div class="alert alert-warning mt-3"><strong>Рекомендации по группе риска:</strong> индивидуальная консультация педагога; пересмотр уровня сложности; генерация повторного УМК по слабым темам; контакт с родителями. Критерии риска: средний балл &lt; {{low_avg_text}}, падение динамики &gt; {{trend_drop}} п.п., нет сданных тестов &gt; {{idle_days}} дн.</div>{{/risk_alert}}
+{{/report}}
