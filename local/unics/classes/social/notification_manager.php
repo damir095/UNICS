@@ -359,6 +359,15 @@ class notification_manager {
     /**
      * Точка входа из обсервера course_module_created. Фильтрует по видимости и
      * типу модуля (quiz/assign), уведомляет всех активных учащихся курса.
+     *
+     * Модули УМК сюда НЕ доходят: course_builder создает их прямым
+     * insert_record('course_modules') минуя core-событие course_module_created,
+     * поэтому обсервер на них не срабатывает вовсе (их уведомляет notify_umk_ready).
+     * ВАЖНО: если course_builder когда-нибудь перейдет на add_moduleinfo() (событие
+     * начнет эмититься и для УМК), проверки видимости ниже недостаточно - она
+     * выполняется асинхронно в момент прогона задачи, и опубликованный к тому
+     * времени УМК-модуль прошел бы ее -> дубль с notify_umk_ready. Тогда нужен
+     * явный гард (например по unics_umk_materials).
      */
     public static function notify_new_assign_for_module(int $cmid): void {
         global $DB;
@@ -381,8 +390,12 @@ class notification_manager {
             return;
         }
 
-        // Активные учащиеся курса: строка в unics_students (не архивная) +
-        // активная запись на курс. Без учета раздельных групп/доступности (v1).
+        // Активные учащиеся курса: строка в unics_students (не архивная, не
+        // выпущенная) + активная запись на курс. То же определение «активного
+        // учащегося», что в class_chat_manager/student_helper (archived_at +
+        // graduated_at): выпускник, оставшийся записанным на старый курс, не
+        // должен получать уведомления о новых заданиях. Без учета раздельных
+        // групп/доступности (v1).
         $student_uids = $DB->get_fieldset_sql(
             "SELECT DISTINCT u.id
                FROM {user} u
@@ -392,13 +405,14 @@ class notification_manager {
               WHERE e.courseid = :courseid
                 AND ue.status = 0
                 AND u.deleted = 0
-                AND s.archived_at IS NULL",
+                AND s.archived_at IS NULL
+                AND s.graduated_at IS NULL",
             ['courseid' => $cm->course]
         );
 
         foreach ($student_uids as $uid) {
             self::notify_new_assign((int)$uid, (string)$activity_name,
-                $type_labels[$modname], $course_name, $cmid);
+                $type_labels[$modname], $course_name);
         }
     }
 
@@ -409,8 +423,7 @@ class notification_manager {
         int    $student_mdl_user_id,
         string $activity_name,
         string $type_label,
-        string $course_name,
-        int    $cmid
+        string $course_name
     ): void {
         $subject = "Новое задание: {$activity_name}";
         $body    = '<p>' . htmlspecialchars($type_label) . ' <strong>'

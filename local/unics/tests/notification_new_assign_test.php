@@ -134,6 +134,24 @@ final class notification_new_assign_test extends \advanced_testcase {
     }
 
     /**
+     * Выпускник (graduated_at выставлен), оставшийся записанным на старый курс,
+     * не должен получать уведомления - то же определение «активного учащегося»,
+     * что в class_chat_manager/student_helper (archived_at + graduated_at).
+     */
+    public function test_graduated_student_not_notified(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->redirectMessages();
+        [$course, $user] = $this->course_with_student();
+        $DB->set_field('unics_students', 'graduated_at', '2026-05-31', ['mdl_user_id' => $user->id]);
+
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+        notification_manager::notify_new_assign_for_module((int)$quiz->cmid);
+
+        $this->assertSame(0, $this->notif_count((int)$user->id));
+    }
+
+    /**
      * Сквозная проверка: обычное создание видимого quiz через генератор Moodle
      * (тот же путь, что и добавление активности педагогом через форму) само
      * триггерит core-событие course_module_created -> observer::course_module_created,
