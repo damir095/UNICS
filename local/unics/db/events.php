@@ -21,4 +21,11 @@ $observers = [
         'eventname' => '\core\event\user_deleted',
         'callback'  => '\local_unics\observer::user_deleted',
     ],
+    [
+        // Ручное добавление активности (этап 6.1 роадмапа) - ставит adhoc-задачу
+        // уведомления, если модуль видим сразу и это quiz/assign; УМК-модули
+        // создаются скрытыми.
+        'eventname' => '\core\event\course_module_created',
+        'callback'  => '\local_unics\observer::course_module_created',
+    ],
 ];

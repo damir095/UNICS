@@ -157,4 +157,22 @@ class observer {
         // сразу, чтобы уведомление пришло по горячим следам.
         \local_unics\social\achievement_manager::evaluate_student((int)$student->id, $userid);
     }
+
+    /**
+     * Педагог вручную добавил активность в курс (минуя УМК-конвейер) - если она
+     * сразу видима и это quiz/assign, уведомляем учащихся курса (этап 6.1
+     * роадмапа, [[new-assignment-notification-design]]). УМК-модули создаются
+     * скрытыми - под этот триггер не попадают. Отправка ЧЕРЕЗ adhoc-задачу
+     * (не напрямую) - создание модуля должно оставаться чистой back-end операцией.
+     */
+    public static function course_module_created(\core\event\course_module_created $event): void {
+        try {
+            $task = new \local_unics\task\send_new_assign_notification();
+            $task->set_custom_data(['cmid' => (int)$event->objectid]);
+            \core\task\manager::queue_adhoc_task($task);
+        } catch (\Throwable $e) {
+            // Нефатально - сбой постановки задачи не должен ломать создание активности.
+            debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
+        }
+    }
 }

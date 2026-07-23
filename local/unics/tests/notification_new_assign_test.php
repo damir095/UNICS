@@ -132,4 +132,32 @@ final class notification_new_assign_test extends \advanced_testcase {
 
         $this->assertSame(0, $this->notif_count((int)$user->id));
     }
+
+    /**
+     * Сквозная проверка: обычное создание видимого quiz через генератор Moodle
+     * (тот же путь, что и добавление активности педагогом через форму) само
+     * триггерит core-событие course_module_created -> observer::course_module_created,
+     * который ставит adhoc-задачу send_new_assign_notification в очередь. Само
+     * создание модуля НЕ должно уведомлять синхронно (см. дизайн-уточнение выше) -
+     * уведомление появляется только после явного выполнения поставленной задачи.
+     */
+    public function test_creating_visible_quiz_via_generator_queues_and_delivers_notification(): void {
+        $this->resetAfterTest();
+        $this->redirectMessages();
+        [$course, $user] = $this->course_with_student();
+
+        $this->getDataGenerator()->create_module('quiz',
+            ['course' => $course->id, 'name' => 'Автособытие']);
+
+        // Создание модуля - чистая back-end операция: уведомление еще НЕ отправлено,
+        // задача только поставлена в очередь.
+        $this->assertSame(0, $this->notif_count((int)$user->id));
+
+        $task = \core\task\manager::get_next_adhoc_task(time());
+        $this->assertInstanceOf(\local_unics\task\send_new_assign_notification::class, $task);
+        $task->execute();
+        \core\task\manager::adhoc_task_complete($task);
+
+        $this->assertSame(1, $this->notif_count((int)$user->id));
+    }
 }
