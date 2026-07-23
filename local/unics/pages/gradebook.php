@@ -11,6 +11,11 @@
  * везде, педагог — в своих курсах). При раздельных группах без accessallgroups
  * строки сужаются до групп смотрящего. Предметная (категорийная) изоляция
  * придёт с кластером «Предметы» без переделки страницы.
+ *
+ * Рендер - mustache (2.5 аудита, [[session-kickoff-mustache-slices]]): страница
+ * собирает ОДИН $context, разметка целиком в templates/gradebook.mustache.
+ * Построитель local_unics\gradebook::matrix() и экспорт не менялись - оба
+ * вида журнала сведены к одной генерической структуре headers/rows/footer_row.
  */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
@@ -64,12 +69,15 @@ if ($course_id && isset($allowed[$course_id])) {
 echo $OUTPUT->header();
 echo local_unics_dashboard_button();
 
+$context = [];
+
 if (empty($allowed)) {
-    echo $OUTPUT->notification(
+    $context['no_courses'] = ['html' => $OUTPUT->notification(
         'Нет курсов, по которым вам доступен просмотр оценок. '
         . 'Журнал виден педагогам своих курсов и администраторам.',
         'info'
-    );
+    )];
+    echo $OUTPUT->render_from_template('local_unics/gradebook', $context);
     echo $OUTPUT->footer();
     exit;
 }
@@ -120,21 +128,24 @@ $letters_menu = ['' => 'Все буквы', 'А' => 'А', 'Б' => 'Б', 'В' => 
                  'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
 $view_menu = ['order' => 'Оценки по порядку', 'item' => 'По заданиям'];
 
-echo html_writer::start_tag('form',
-    ['method' => 'get', 'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3']);
-// Смена категории / вида перестраивает список курсов и таблицу сразу.
-echo html_writer::select($cat_menu, 'f_cat', $filter_cat, false,
-    ['class' => 'form-control', 'onchange' => 'this.form.submit()', 'aria-label' => 'Категория']);
-echo html_writer::select($course_menu, 'course_id', $course_id, false,
-    ['class' => 'form-control', 'style' => 'max-width:340px', 'aria-label' => 'Курс']);
-echo html_writer::select($class_menu,   'f_class',  $filter_class,  false, ['class' => 'form-control', 'aria-label' => 'Класс']);
-echo html_writer::select($letters_menu, 'f_letter', $filter_letter, false, ['class' => 'form-control', 'aria-label' => 'Буква класса']);
-echo html_writer::select($view_menu, 'view', $view, false,
-    ['class' => 'form-control', 'onchange' => 'this.form.submit()', 'aria-label' => 'Вид журнала']);
-echo html_writer::tag('button', 'Показать', ['type' => 'submit', 'class' => 'btn btn-primary']);
-echo html_writer::end_tag('form');
+// Список опций селектора: [{value, label, selected}] - разметка в шаблоне.
+$build_options = function (array $menu, $selected): array {
+    $out = [];
+    foreach ($menu as $value => $label) {
+        $out[] = ['value' => $value, 'label' => $label, 'selected' => (string)$value === (string)$selected];
+    }
+    return $out;
+};
+$context['filters'] = [
+    'cat_options'    => $build_options($cat_menu, $filter_cat),
+    'course_options' => $build_options($course_menu, $course_id),
+    'class_options'  => $build_options($class_menu, $filter_class),
+    'letter_options' => $build_options($letters_menu, $filter_letter),
+    'view_options'   => $build_options($view_menu, $view),
+];
 
 if (!$course_id) {
+    echo $OUTPUT->render_from_template('local_unics/gradebook', $context);
     echo $OUTPUT->footer();
     exit;
 }
@@ -147,14 +158,19 @@ $course_ctx = context_course::instance($course_id);
 $can_edit = has_capability('moodle/grade:edit', $course_ctx)
          && has_capability('gradereport/singleview:view', $course_ctx);
 
-echo '<h5 class="mb-3">' . s($course->fullname) . '</h5>';
-echo local_unics_export_buttons(new moodle_url($PAGE->url, ['f_class' => $filter_class, 'f_letter' => $filter_letter]));
+$course_selected = [
+    'course_name'         => $course->fullname,
+    'export_buttons_html' => local_unics_export_buttons(
+        new moodle_url($PAGE->url, ['f_class' => $filter_class, 'f_letter' => $filter_letter])),
+];
 
 // Данные журнала (групп.изоляция, фильтр, ученики, оценки, матрица) - общий построитель.
 // Пагинация учеников (этап 3.1): страница строк; колонки/средние - по всей выборке.
 $gb = local_unics_gradebook_matrix($course_id, $filter_class, $filter_letter, $pg, $perpage);
 if ($gb['notice'] !== null) {
-    echo $OUTPUT->notification($gb['notice']['text'], $gb['notice']['level']);
+    $course_selected['notice'] = ['html' => $OUTPUT->notification($gb['notice']['text'], $gb['notice']['level'])];
+    $context['course_selected'] = $course_selected;
+    echo $OUTPUT->render_from_template('local_unics/gradebook', $context);
     echo $OUTPUT->footer();
     exit;
 }
@@ -175,15 +191,23 @@ $build_tip = function(array $g) use ($item_class_avg) {
     return $tip;
 };
 
-$cell = function(array $g) use ($build_tip) {
-    return '<span class="badge badge-' . grade_scale::badge_class($g['val'])
-        . '" title="' . s($build_tip($g)) . '">' . $g['val'] . '</span>';
+// Ячейка с оценкой - данные (без разметки), разметка в шаблоне.
+$cell_ctx = function(array $g) use ($build_tip): array {
+    return [
+        'has_value'   => true,
+        'td_cls'      => 'text-center',
+        'badge_class' => grade_scale::badge_class($g['val']),
+        'value'       => $g['val'],
+        'tip'         => $build_tip($g),
+    ];
 };
+$empty_cell_ctx = ['has_value' => false, 'td_cls' => 'text-muted text-center'];
 
 // Карандаш «Править оценки ученика» -> ядровый single-view (item=user). Только при праве.
-$edit_user_link = function(int $uid, string $fio) use ($can_edit, $course_id, $OUTPUT) {
+// Доверенный пре-рендер (pix_icon+html_writer::link - ядровое экранирование).
+$edit_user_html = function(int $uid, string $fio) use ($can_edit, $course_id, $OUTPUT): ?string {
     if (!$can_edit) {
-        return '';
+        return null;
     }
     $label = 'Править оценки: ' . $fio;
     $url = new moodle_url('/grade/report/singleview/index.php',
@@ -192,8 +216,22 @@ $edit_user_link = function(int $uid, string $fio) use ($can_edit, $course_id, $O
         ['class' => 'unics-grade-edit', 'title' => $label]);
 };
 
-echo '<div class="table-responsive">';
-echo '<table class="table table-sm table-bordered table-hover unics-gradebook">';
+$row_ctx = function (object $s) use ($by_user, $edit_user_html): array {
+    $uid = (int)$s->mdl_user_id;
+    $fio = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
+    $cls = $s->class_number
+        ? $s->class_number . ($s->class_letter ? " «{$s->class_letter}»" : '')
+        : '-';
+    return [
+        'fio'        => $fio,
+        'report_url' => (string)new moodle_url('/local/unics/pages/student_report.php',
+            ['student_id' => (int)$s->student_id]),
+        'edit_html'  => $edit_user_html($uid, $fio),
+        'class_str'  => $cls,
+    ];
+};
+
+$table = ['headers' => [], 'rows' => []];
 
 if ($view === 'item') {
     // ------------------------------------------------------------
@@ -210,11 +248,9 @@ if ($view === 'item') {
         }
     }
 
-    echo '<thead class="table-light"><tr>';
-    echo '<th>Учащийся</th><th>Класс</th>';
     foreach ($ordered_iids as $iid) {
         $hname = $item_meta[$iid]['name'];
-        $edit_item = '';
+        $edit_item = null;
         if ($can_edit) {
             $ilabel = 'Править оценки за задание: ' . $hname;
             $iurl = new moodle_url('/grade/report/singleview/index.php',
@@ -222,52 +258,38 @@ if ($view === 'item') {
             $edit_item = ' ' . html_writer::link($iurl, $OUTPUT->pix_icon('t/edit', $ilabel),
                 ['class' => 'unics-grade-edit', 'title' => $ilabel]);
         }
-        echo '<th title="' . s($hname) . '">' . s($hname) . $edit_item . '</th>';
+        $table['headers'][] = ['label' => $hname, 'title' => $hname, 'edit_html' => $edit_item];
     }
-    echo '<th>Средний</th>';
-    echo '</tr></thead><tbody>';
 
     foreach ($students as $s) {
         $uid = (int)$s->mdl_user_id;
-        $fio = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
-        $cls = $s->class_number
-            ? $s->class_number . ($s->class_letter ? " «{$s->class_letter}»" : '')
-            : '-';
-
-        echo '<tr>';
-        echo '<td>' . html_writer::link(
-            new moodle_url('/local/unics/pages/student_report.php', ['student_id' => (int)$s->student_id]),
-            s($fio)
-        ) . $edit_user_link($uid, $fio) . '</td>';
-        echo '<td>' . s($cls) . '</td>';
+        $row = $row_ctx($s);
 
         $row_pcts = [];
         foreach ($ordered_iids as $iid) {
             if (isset($grade_by_ui[$uid][$iid])) {
                 $g = $grade_by_ui[$uid][$iid];
                 $row_pcts[] = $g['pct'];
-                echo '<td class="text-center">' . $cell($g) . '</td>';
+                $row['cells'][] = $cell_ctx($g);
             } else {
-                echo '<td class="text-muted text-center">–</td>';
+                $row['cells'][] = $empty_cell_ctx;
             }
         }
 
         if (!empty($row_pcts)) {
             $rv = grade_scale::from_percent(array_sum($row_pcts) / count($row_pcts));
-            echo '<td><span class="badge badge-' . grade_scale::badge_class($rv) . '">' . $rv . '</span></td>';
+            $row['avg'] = ['has_value' => true, 'badge_class' => grade_scale::badge_class($rv), 'value' => $rv];
         } else {
-            echo '<td class="text-muted text-center">–</td>';
+            $row['avg'] = ['has_value' => false];
         }
-        echo '</tr>';
+        $table['rows'][] = $row;
     }
 
     // Средний по заданию (по столбцу) — корректен, т.к. это одно и то же задание.
-    echo '<tr class="table-light"><th>Средний по заданию</th><th></th>';
-    foreach ($ordered_iids as $iid) {
-        echo '<th class="text-center"><span class="badge badge-' . grade_scale::badge_class($item_class_avg[$iid])
-           . '">' . $item_class_avg[$iid] . '</span></th>';
-    }
-    echo '<th></th></tr>';
+    $table['footer_row'] = ['cells' => array_map(fn($iid) => [
+        'badge_class' => grade_scale::badge_class($item_class_avg[$iid]),
+        'value'       => $item_class_avg[$iid],
+    ], $ordered_iids)];
 
 } else {
     // ------------------------------------------------------------
@@ -279,56 +301,39 @@ if ($view === 'item') {
         $maxcols = max($maxcols, count($list));
     }
 
-    echo '<thead class="table-light"><tr>';
-    echo '<th>Учащийся</th><th>Класс</th>';
     for ($i = 1; $i <= $maxcols; $i++) {
-        echo '<th class="text-center">' . $i . '</th>';
+        $table['headers'][] = ['label' => (string)$i, 'cls' => 'text-center'];
     }
-    echo '<th>Средний</th>';
-    echo '</tr></thead><tbody>';
 
     foreach ($students as $s) {
         $uid  = (int)$s->mdl_user_id;
-        $fio  = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));
-        $cls  = $s->class_number
-            ? $s->class_number . ($s->class_letter ? " «{$s->class_letter}»" : '')
-            : '-';
+        $row  = $row_ctx($s);
         $list = $by_user[$uid] ?? [];
 
-        echo '<tr>';
-        echo '<td>' . html_writer::link(
-            new moodle_url('/local/unics/pages/student_report.php', ['student_id' => (int)$s->student_id]),
-            s($fio)
-        ) . $edit_user_link($uid, $fio) . '</td>';
-        echo '<td>' . s($cls) . '</td>';
-
         for ($i = 0; $i < $maxcols; $i++) {
-            if (isset($list[$i])) {
-                echo '<td class="text-center">' . $cell($list[$i]) . '</td>';
-            } else {
-                echo '<td class="text-muted text-center">–</td>';
-            }
+            $row['cells'][] = isset($list[$i]) ? $cell_ctx($list[$i]) : $empty_cell_ctx;
         }
 
         if (!empty($list)) {
             $pcts = array_column($list, 'pct');
             $rv = grade_scale::from_percent(array_sum($pcts) / count($pcts));
-            echo '<td><span class="badge badge-' . grade_scale::badge_class($rv) . '">' . $rv . '</span></td>';
+            $row['avg'] = ['has_value' => true, 'badge_class' => grade_scale::badge_class($rv), 'value' => $rv];
         } else {
-            echo '<td class="text-muted text-center">–</td>';
+            $row['avg'] = ['has_value' => false];
         }
-        echo '</tr>';
+        $table['rows'][] = $row;
     }
 }
 
-echo '</tbody></table>';
-echo '</div>';
-
 // Пагинация строк-учеников; фильтры сохраняются в ссылках страниц.
-echo local_unics_render_paging_bar($gb['total'], $pg, $perpage,
+$table['paging_html'] = local_unics_render_paging_bar($gb['total'], $pg, $perpage,
     new moodle_url('/local/unics/pages/gradebook.php', [
         'course_id' => $course_id, 'f_cat' => $filter_cat,
         'f_class' => $filter_class, 'f_letter' => $filter_letter, 'view' => $view,
     ]));
 
+$course_selected['table'] = $table;
+$context['course_selected'] = $course_selected;
+
+echo $OUTPUT->render_from_template('local_unics/gradebook', $context);
 echo $OUTPUT->footer();

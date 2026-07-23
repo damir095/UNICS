@@ -1,0 +1,59 @@
+{{!
+    Электронный журнал (2.5 аудита, слайс 4, [[session-kickoff-mustache-slices]]).
+    Разметка 1:1 из pages/gradebook.php; страница собирает контекст, построитель
+    local_unics\gradebook::matrix() и экспорт не менялись.
+
+    Состояния верхнего уровня: no_courses (нет доступных курсов) ИЛИ форма
+    фильтров (filters) + опционально course_selected (курс выбран - шапка,
+    затем либо notice builder'а, либо table). Оба вида журнала («по порядку» /
+    «по заданиям») сведены к одной генерической структуре headers/rows/
+    footer_row - разница между видами только в данных, не в разметке.
+
+    Тройными скобками - ТОЛЬКО доверенный пре-рендер без пользовательских
+    данных: кнопки выгрузки, $OUTPUT->notification(), paging_bar, иконки
+    правки (pix_icon+html_writer::link - ядровое экранирование).
+
+    Пример контекста: см. tests/gradebook_template_test.php.
+}}
+{{#no_courses}}{{{html}}}{{/no_courses}}
+{{^no_courses}}
+{{#filters}}
+<form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <select name="f_cat" class="form-control" onchange="this.form.submit()" aria-label="Категория">{{#cat_options}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/cat_options}}</select>
+    <select name="course_id" class="form-control" style="max-width:340px" aria-label="Курс">{{#course_options}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/course_options}}</select>
+    <select name="f_class" class="form-control" aria-label="Класс">{{#class_options}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/class_options}}</select>
+    <select name="f_letter" class="form-control" aria-label="Буква класса">{{#letter_options}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/letter_options}}</select>
+    <select name="view" class="form-control" onchange="this.form.submit()" aria-label="Вид журнала">{{#view_options}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/view_options}}</select>
+    <button type="submit" class="btn btn-primary">Показать</button>
+</form>
+{{/filters}}
+{{#course_selected}}
+<h5 class="mb-3">{{course_name}}</h5>{{{export_buttons_html}}}
+{{#notice}}{{{html}}}{{/notice}}
+{{#table}}
+<div class="table-responsive">
+<table class="table table-sm table-bordered table-hover unics-gradebook">
+    <thead class="table-light"><tr>
+        <th>Учащийся</th><th>Класс</th>
+        {{#headers}}<th{{#cls}} class="{{cls}}"{{/cls}}{{#title}} title="{{title}}"{{/title}}>{{label}}{{{edit_html}}}</th>{{/headers}}
+        <th>Средний</th>
+    </tr></thead>
+    <tbody>
+        {{#rows}}
+        <tr>
+            <td><a href="{{report_url}}">{{fio}}</a>{{{edit_html}}}</td>
+            <td>{{class_str}}</td>
+            {{#cells}}{{#has_value}}<td class="{{td_cls}}"><span class="badge badge-{{badge_class}}" title="{{tip}}">{{value}}</span></td>{{/has_value}}{{^has_value}}<td class="{{td_cls}}">–</td>{{/has_value}}{{/cells}}
+            {{#avg}}{{#has_value}}<td><span class="badge badge-{{badge_class}}">{{value}}</span></td>{{/has_value}}{{^has_value}}<td class="text-muted text-center">–</td>{{/has_value}}{{/avg}}
+        </tr>
+        {{/rows}}
+        {{#footer_row}}
+        <tr class="table-light"><th>Средний по заданию</th><th></th>{{#cells}}<th class="text-center"><span class="badge badge-{{badge_class}}">{{value}}</span></th>{{/cells}}<th></th></tr>
+        {{/footer_row}}
+    </tbody>
+</table>
+</div>
+{{{paging_html}}}
+{{/table}}
+{{/course_selected}}
+{{/no_courses}}
