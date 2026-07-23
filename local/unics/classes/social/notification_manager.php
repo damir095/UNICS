@@ -350,6 +350,78 @@ class notification_manager {
     }
 
     // ----------------------------------------------------------------
+    // Уведомление учащемуся: педагог вручную добавил новое задание (этап 6.1
+    // роадмапа, [[new-assignment-notification-design]]). Материалы УМК создаются
+    // скрытыми (visible=0) и публикуются отдельным путём (см. notify_umk_ready) -
+    // сюда не попадают, т.к. триггер смотрит только на СРАЗУ видимые модули.
+    // ----------------------------------------------------------------
+
+    /**
+     * Точка входа из обсервера course_module_created. Фильтрует по видимости и
+     * типу модуля (quiz/assign), уведомляет всех активных учащихся курса.
+     */
+    public static function notify_new_assign_for_module(int $cmid): void {
+        global $DB;
+
+        $cm = $DB->get_record('course_modules', ['id' => $cmid],
+            'id, course, module, instance, visible');
+        if (!$cm || !$cm->visible) {
+            return;
+        }
+
+        $modname = $DB->get_field('modules', 'name', ['id' => $cm->module]);
+        $type_labels = ['quiz' => 'Тест', 'assign' => 'Задание'];
+        if (!isset($type_labels[$modname])) {
+            return;
+        }
+
+        $activity_name = $DB->get_field($modname, 'name', ['id' => $cm->instance]);
+        $course_name   = (string)$DB->get_field('course', 'fullname', ['id' => $cm->course]);
+        if ($activity_name === false || $activity_name === null) {
+            return;
+        }
+
+        // Активные учащиеся курса: строка в unics_students (не архивная) +
+        // активная запись на курс. Без учёта раздельных групп/доступности (v1).
+        $student_uids = $DB->get_fieldset_sql(
+            "SELECT DISTINCT u.id
+               FROM {user} u
+               JOIN {unics_students} s ON s.mdl_user_id = u.id
+               JOIN {user_enrolments} ue ON ue.userid = u.id
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE e.courseid = :courseid
+                AND ue.status = 0
+                AND u.deleted = 0
+                AND s.archived_at IS NULL",
+            ['courseid' => $cm->course]
+        );
+
+        foreach ($student_uids as $uid) {
+            self::notify_new_assign((int)$uid, (string)$activity_name,
+                $type_labels[$modname], $course_name, $cmid);
+        }
+    }
+
+    /**
+     * Собственно отправка уведомления одному учащемуся.
+     */
+    public static function notify_new_assign(
+        int    $student_mdl_user_id,
+        string $activity_name,
+        string $type_label,
+        string $course_name,
+        int    $cmid
+    ): void {
+        $subject = "Новое задание: {$activity_name}";
+        $body    = '<p>' . htmlspecialchars($type_label) . ' <strong>'
+                 . htmlspecialchars($activity_name) . '</strong> добавлено в курс'
+                 . ' <strong>' . htmlspecialchars($course_name) . '</strong>.</p>'
+                 . '<p>Войдите в курс, чтобы посмотреть.</p>';
+
+        self::send($student_mdl_user_id, $subject, $body, self::TYPE_NEW_ASSIGN);
+    }
+
+    // ----------------------------------------------------------------
     // Базовый метод отправки
     // ----------------------------------------------------------------
     public static function send(
