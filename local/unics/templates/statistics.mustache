@@ -1,0 +1,51 @@
+{{!
+    Статистика (A5), продолжение линии mustache-переводов 2.5 аудита той же
+    механикой (см. [[session-kickoff-mustache-slices]] - архив метода).
+    Разметка 1:1 из pages/statistics.php; страница собирает контекст.
+
+    ДИЗАЙН-РЕШЕНИЕ (как в umk_status): таблицы срезов и кодификатора остаются
+    доверенным пре-рендером html_writer::table() - Moodle сама добавляет
+    служебные классы (header/cN/lastcol/lastrow), копировать их вручную в
+    mustache незачем. Мустачифицированы окружение (карточки, заголовки,
+    вкладки кодификатора, состояния "нет данных"/"список пуст").
+
+    slices - генерическая структура (как headers/rows в gradebook): каждый
+    срез (категория/ОВЗ/класс/организация/муниципалитет/регион) - одна и та
+    же разметка, разница только в данных (has_data, наличие chart_html/
+    paging_html). Тройными скобками - ТОЛЬКО доверенный пре-рендер:
+    export_buttons_html, chart_html, table_html, paging_html,
+    $OUTPUT->notification().
+
+    Пример контекста: см. tests/statistics_template_test.php.
+}}
+<div class="mb-3"><a href="{{rebuild_url}}" class="btn btn-secondary">Пересчитать сейчас</a> <span class="text-muted ml-2">Обычно статистика обновляется ночной задачей. Кнопка пересчитывает её немедленно.</span></div>
+{{#empty}}{{{html}}}{{/empty}}
+{{^empty}}
+{{{export_buttons_html}}}
+<h4 class="mt-2">Итого по скоупу</h4>
+<div class="d-flex flex-wrap mb-4" style="gap:0.75rem;">
+    {{#cards}}<div class="card" style="min-width:140px;flex:1 1 140px;"><div class="card-body p-3 text-center"><div style="font-size:1.6rem;font-weight:700;">{{value}}</div><div class="text-muted" style="font-size:0.85rem;">{{label}}</div></div></div>{{/cards}}
+</div>
+{{#slices}}
+<h4 class="mt-4">{{title}}</h4>
+{{^has_data}}<p class="text-muted">Нет данных для этого среза.</p>{{/has_data}}
+{{#has_data}}
+{{{chart_html}}}
+{{{table_html}}}
+{{{paging_html}}}
+{{/has_data}}
+{{/slices}}
+<h4 class="mt-4">По элементам содержания</h4>
+{{#codifier}}
+{{#no_codifiers}}<p class="text-muted">Кодификаторы ещё не созданы.</p>{{/no_codifiers}}
+{{^no_codifiers}}
+<div class="mb-2">
+    {{#tabs}}<a href="{{url}}" class="btn btn-sm {{cls}} mr-2 mb-2">{{label}}</a>{{/tabs}}
+</div>
+{{{table_html}}}
+{{#no_elements}}<p class="text-muted">В этом кодификаторе нет элементов.</p>{{/no_elements}}
+{{#pick_message}}<p class="text-muted">Выберите дисциплину, чтобы увидеть средние по элементам содержания.</p>{{/pick_message}}
+{{/no_codifiers}}
+{{/codifier}}
+<p class="text-muted mt-4" style="font-size:0.85rem;">Время на курсе - оценка по интервалам между событиями журнала (Moodle не хранит точное время на странице). Завершаемость считается по активностям с включённым отслеживанием.</p>
+{{/empty}}
