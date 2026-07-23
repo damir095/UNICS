@@ -156,6 +156,10 @@ class points_manager {
             'purchased_at' => time(),
         ]);
 
+        // Первая покупка слот-предмета (титул) надевается автоматически -
+        // эффект виден сразу ([[title-equipment-design]]).
+        equipment_manager::auto_equip_if_empty($student_id, $item_id);
+
         return true;
     }
 
@@ -175,19 +179,12 @@ class points_manager {
     }
 
     /**
-     * Получить активный титул учащегося (последняя покупка типа «титул»).
+     * Получить активный титул учащегося.
      */
     public static function get_active_title(int $student_id): ?object {
-        global $DB;
-        return $DB->get_record_sql(
-            "SELECT s.name, s.icon, s.icon_emoji
-               FROM {unics_purchases} p
-               JOIN {unics_shop_items} s ON s.id = p.item_id
-              WHERE p.student_id = :sid AND s.item_type = 1
-              ORDER BY p.purchased_at DESC
-              LIMIT 1",
-            ['sid' => $student_id]
-        ) ?: null;
+        // Источник - надетый титул (слот title), а не «последний купленный».
+        // Возвращаемый объект содержит name/icon/icon_emoji - дашборд не трогается.
+        return equipment_manager::get_equipped($student_id, 'title');
     }
 
     public static function reason_label(int $type): string {

@@ -128,4 +128,60 @@ final class equipment_test extends \advanced_testcase {
         $this->assertSame(1, $DB->count_records('unics_equipped',
             ['student_id' => $sid, 'slot' => 'title']));
     }
+
+    public function test_purchase_auto_equips_first_title(): void {
+        $this->resetAfterTest();
+        $sid = $this->make_student();
+        $t1  = $this->make_title('Умник', 10);
+        // Дать баллы на покупку.
+        \local_unics\social\points_manager::award($sid, 100,
+            \local_unics\social\points_manager::REASON_QUIZ_PASS, 'старт');
+
+        $this->assertTrue(\local_unics\social\points_manager::purchase($sid, $t1));
+        $eq = \local_unics\social\points_manager::get_active_title($sid);
+        $this->assertNotNull($eq);
+        $this->assertSame('Умник', $eq->name);
+    }
+
+    public function test_get_active_title_reads_equipped_not_last_purchase(): void {
+        $this->resetAfterTest();
+        $sid = $this->make_student();
+        $t1  = $this->make_title('Умник');
+        $t2  = $this->make_title('Чемпион');
+        $this->buy($sid, $t1);
+        $this->buy($sid, $t2);
+        // Надет t1, хотя t2 куплен «последним» - активный титул = надетый, не последний.
+        equipment_manager::equip($sid, $t1); // не auto - явно
+        $eq = \local_unics\social\points_manager::get_active_title($sid);
+        $this->assertSame('Умник', $eq->name);
+        // Снят - активного нет.
+        equipment_manager::unequip($sid, 'title');
+        $this->assertNull(\local_unics\social\points_manager::get_active_title($sid));
+    }
+
+    public function test_equip_nonexistent_item_rejected(): void {
+        $this->resetAfterTest();
+        $sid = $this->make_student();
+        // item_id, которого нет в unics_shop_items.
+        $res = equipment_manager::equip($sid, 999999);
+        $this->assertIsString($res);
+        $this->assertNull(equipment_manager::get_equipped($sid, 'title'));
+    }
+
+    public function test_equip_non_slot_item_rejected(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $sid = $this->make_student();
+        // Товар без слота (стикер, item_type=3): даже купленный - надеть нельзя.
+        $sticker = (int)$DB->insert_record('unics_shop_items', (object)[
+            'name' => 'Сова', 'cost' => 30, 'icon_emoji' => 'X',
+            'item_type' => 3, 'is_active' => 1, 'sort_order' => 0,
+        ]);
+        $DB->insert_record('unics_purchases', (object)[
+            'student_id' => $sid, 'item_id' => $sticker, 'purchased_at' => time(),
+        ]);
+        $res = equipment_manager::equip($sid, $sticker);
+        $this->assertIsString($res);
+        $this->assertNull(equipment_manager::get_equipped($sid, 'title'));
+    }
 }
