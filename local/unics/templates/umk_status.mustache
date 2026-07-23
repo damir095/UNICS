@@ -1,0 +1,32 @@
+{{!
+    История генерации УМК (2.5 аудита, слайс 5,
+    [[session-kickoff-mustache-slices]]). Разметка 1:1 из pages/umk_status.php;
+    action-обработчики (cancel/publish/run_now) остаются в PHP - шаблону
+    достается только вывод.
+
+    ДИЗАЙН-РЕШЕНИЕ: сама таблица (table_html) - доверенный пре-рендер
+    html_writer::table() (как раньше), НЕ разметка в mustache. Moodle сама
+    добавляет служебные классы (header/c0/c1.../lastcol/lastrow) к каждой
+    ячейке html_table - копировать это вручную в mustache рискованно и не
+    несет пользы (SCSS эти классы не использует, страница и так уже отделяла
+    данные от рендера через объект html_table). Мustache-ификации подлежит
+    только окружение таблицы: тулбар (создать/отменить все/запустить сейчас)
+    и состояние "список пуст". Тройными скобками - ТОЛЬКО доверенный
+    пре-рендер: table_html, paging_html, $OUTPUT->notification().
+
+    Пример контекста: см. tests/umk_status_template_test.php.
+}}
+{{#toolbar}}
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <a href="{{create_url}}" class="btn btn-primary">Создать новый УМК</a>
+    <div class="d-flex gap-2">
+        {{#cancel_all}}<a href="{{url}}" class="btn btn-outline-danger btn-sm me-2" onclick="return confirm('Отменить все {{count}} ожидающих задачи?')">Отменить все ожидающие ({{count}})</a>{{/cancel_all}}
+        <a href="{{run_now_url}}" class="btn btn-outline-secondary btn-sm" onclick="return confirm('Запустить обработку очереди прямо сейчас?')">Запустить обработку сейчас</a>
+    </div>
+</div>
+{{/toolbar}}
+{{#empty}}{{{html}}}{{/empty}}
+{{^empty}}
+{{{table_html}}}
+{{{paging_html}}}
+{{/empty}}

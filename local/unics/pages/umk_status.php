@@ -1,4 +1,10 @@
 <?php
+/**
+ * Рендер - mustache (2.5 аудита, [[session-kickoff-mustache-slices]]): страница
+ * собирает контекст, разметка целиком в templates/umk_status.mustache. Сама
+ * таблица остается доверенным пре-рендером html_writer::table() (см. заметку
+ * в шаблоне) - action-обработчики ниже не менялись.
+ */
 require_once(__DIR__ . '/../../../config.php');
 require_once(__DIR__ . '/../lib.php');
 
@@ -222,24 +228,19 @@ echo local_unics_dashboard_button();
 
 $pending_count = $DB->count_records('unics_umk', ['status' => 1]);
 
-echo '<div class="mb-3 d-flex justify-content-between align-items-center">';
-echo '<a href="generate_umk.php" class="btn btn-primary">Создать новый УМК</a>';
-echo '<div class="d-flex gap-2">';
+$context = ['toolbar' => [
+    'create_url'  => 'generate_umk.php',
+    'run_now_url' => '?run_now=1&sesskey=' . sesskey(),
+]];
 if ($pending_count > 0) {
-    echo '<a href="?cancel_all=1&sesskey=' . sesskey() . '" class="btn btn-outline-danger btn-sm me-2"
-            onclick="return confirm(\'Отменить все ' . $pending_count . ' ожидающих задачи?\')">'
-        . 'Отменить все ожидающие (' . $pending_count . ')'
-        . '</a>';
+    $context['toolbar']['cancel_all'] = [
+        'url'   => '?cancel_all=1&sesskey=' . sesskey(),
+        'count' => $pending_count,
+    ];
 }
-echo '<a href="?run_now=1&sesskey=' . sesskey() . '" class="btn btn-outline-secondary btn-sm"
-        onclick="return confirm(\'Запустить обработку очереди прямо сейчас?\')">'
-    . 'Запустить обработку сейчас'
-    . '</a>';
-echo '</div>';
-echo '</div>';
 
 if (empty($records)) {
-    echo $OUTPUT->notification('Материалов пока нет. Создайте первый УМК.', 'info');
+    $context['empty'] = ['html' => $OUTPUT->notification('Материалов пока нет. Создайте первый УМК.', 'info')];
 } else {
     $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 
@@ -304,9 +305,10 @@ if (empty($records)) {
         ];
     }
 
-    echo html_writer::table($table);
-    echo local_unics_render_paging_bar(
+    $context['table_html'] = html_writer::table($table);
+    $context['paging_html'] = local_unics_render_paging_bar(
         $total, $page, $perpage, new moodle_url('/local/unics/pages/umk_status.php'));
 }
 
+echo $OUTPUT->render_from_template('local_unics/umk_status', $context);
 echo $OUTPUT->footer();
