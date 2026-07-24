@@ -15,7 +15,9 @@ class equipment_manager {
 
     /** Тип товара (unics_shop_items.item_type) -> слот. Расширяется одной строкой. */
     const ITEM_TYPE_SLOT = [
-        1 => 'title', // Титул/звание
+        1 => 'title',  // Титул/звание
+        2 => 'frame',  // Рамка аватара
+        4 => 'accent', // Акцент дашборда
     ];
 
     /** Слот для типа товара, или null (тип без слота - напр. стикеры type=3). */
@@ -27,7 +29,7 @@ class equipment_manager {
     public static function get_equipped(int $student_id, string $slot): ?object {
         global $DB;
         return $DB->get_record_sql(
-            "SELECT s.id, s.name, s.icon, s.icon_emoji, s.item_type, e.equipped_at
+            "SELECT s.id, s.name, s.icon, s.icon_emoji, s.item_type, s.effect_key, e.equipped_at
                FROM {unics_equipped} e
                JOIN {unics_shop_items} s ON s.id = e.item_id
               WHERE e.student_id = :sid AND e.slot = :slot",

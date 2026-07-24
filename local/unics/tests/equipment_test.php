@@ -31,6 +31,16 @@ final class equipment_test extends \advanced_testcase {
         ]);
     }
 
+    /** Товар произвольного типа с effect_key. */
+    private function make_item(string $name, int $type, ?string $effect_key = null): int {
+        global $DB;
+        return (int)$DB->insert_record('unics_shop_items', (object)[
+            'name' => $name, 'cost' => 100, 'icon_emoji' => 'X',
+            'item_type' => $type, 'is_active' => 1, 'sort_order' => 0,
+            'effect_key' => $effect_key,
+        ]);
+    }
+
     /** Отметить товар купленным. */
     private function buy(int $sid, int $item_id): void {
         global $DB;
@@ -205,5 +215,44 @@ final class equipment_test extends \advanced_testcase {
         \local_unics\cleanup::purge_user_data((int)$u->id);
 
         $this->assertSame(0, $DB->count_records('unics_equipped', ['student_id' => $sid]));
+    }
+
+    public function test_slot_for_frame_and_accent(): void {
+        $this->resetAfterTest();
+        $this->assertSame('frame',  equipment_manager::slot_for_item_type(2));
+        $this->assertSame('accent', equipment_manager::slot_for_item_type(4));
+        $this->assertNull(equipment_manager::slot_for_item_type(3)); // стикер - без слота
+    }
+
+    public function test_three_slots_coexist(): void {
+        $this->resetAfterTest();
+        $sid    = $this->make_student();
+        $title  = $this->make_title('Умник');
+        $frame  = $this->make_item('Золотая рамка', 2, 'gold');
+        $accent = $this->make_item('Бирюзовый акцент', 4, 'accent-teal');
+        $this->buy($sid, $title);
+        $this->buy($sid, $frame);
+        $this->buy($sid, $accent);
+
+        $this->assertTrue(equipment_manager::equip($sid, $title));
+        $this->assertTrue(equipment_manager::equip($sid, $frame));
+        $this->assertTrue(equipment_manager::equip($sid, $accent));
+
+        // Три слота независимы - каждый вернул своё.
+        $this->assertSame($title,  (int)equipment_manager::get_equipped($sid, 'title')->id);
+        $this->assertSame($frame,  (int)equipment_manager::get_equipped($sid, 'frame')->id);
+        $this->assertSame($accent, (int)equipment_manager::get_equipped($sid, 'accent')->id);
+    }
+
+    public function test_effect_key_in_get_equipped(): void {
+        $this->resetAfterTest();
+        $sid   = $this->make_student();
+        $frame = $this->make_item('Золотая рамка', 2, 'gold');
+        $this->buy($sid, $frame);
+        equipment_manager::equip($sid, $frame);
+
+        $eq = equipment_manager::get_equipped($sid, 'frame');
+        $this->assertNotNull($eq);
+        $this->assertSame('gold', $eq->effect_key);
     }
 }

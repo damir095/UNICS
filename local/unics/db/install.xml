@@ -446,7 +446,8 @@
         <FIELD NAME="cost"        TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
         <FIELD NAME="icon_emoji"  TYPE="char" LENGTH="10"  NOTNULL="true"  DEFAULT="🎁" SEQUENCE="false" COMMENT="Legacy-фолбэк; основной способ - поле icon"/>
         <FIELD NAME="icon"        TYPE="char" LENGTH="32"  NOTNULL="false" SEQUENCE="false" COMMENT="Ключ SVG-иконки из pix/shop/{icon}.svg"/>
-        <FIELD NAME="item_type"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false" COMMENT="1=Титул/звание, 2=Оформление (резерв), 3=Стикер-карточка"/>
+        <FIELD NAME="effect_key"  TYPE="char" LENGTH="32"  NOTNULL="false" SEQUENCE="false" COMMENT="Ключ визуального варианта (bronze/silver/gold/accent-*); null у титулов/стикеров"/>
+        <FIELD NAME="item_type"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false" COMMENT="1=Титул/звание, 2=Рамка аватара, 3=Стикер-карточка, 4=Акцент дашборда"/>
         <FIELD NAME="is_active"   TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"  SEQUENCE="false"/>
         <FIELD NAME="sort_order"  TYPE="int"  LENGTH="10"  NOTNULL="true"  DEFAULT="0"  SEQUENCE="false"/>
       </FIELDS>
