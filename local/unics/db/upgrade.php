@@ -1464,5 +1464,29 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026070901, 'local', 'unics');
     }
 
+    if ($oldversion < 2026072300) {
+        // Этап 3 мотивации: слот-модель экипировки ([[title-equipment-design]]).
+        // Таблица надетых предметов + backfill слота титула из последней покупки
+        // (сохраняет текущее видимое состояние дашборда - «последний купленный»).
+        $table = new xmldb_table('unics_equipped');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('student_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('slot', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL);
+        $table->add_field('item_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('equipped_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('student_id', XMLDB_KEY_FOREIGN, ['student_id'], 'unics_students', ['id']);
+        $table->add_key('item_id', XMLDB_KEY_FOREIGN, ['item_id'], 'unics_shop_items', ['id']);
+        $table->add_index('ux_equipped_slot', XMLDB_INDEX_UNIQUE, ['student_id', 'slot']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // Backfill идемпотентен (guard record_exists внутри). Класс autoload.
+        \local_unics\social\equipment_manager::backfill_titles();
+
+        upgrade_plugin_savepoint(true, 2026072300, 'local', 'unics');
+    }
+
     return true;
 }
