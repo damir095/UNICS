@@ -5,9 +5,8 @@ defined('MOODLE_INTERNAL') || die();
 
 /**
  * Слот-модель экипировки учащегося (этап 3 мотивации, [[title-equipment-design]]).
- * Один надетый предмет на слот (UNIQUE student_id+slot в unics_equipped). Сейчас
- * единственный слот - title; таблица и маппинг расширяются под будущие слоты
- * (рамка/акцент) без изменения схемы.
+ * Один надетый предмет на слот (UNIQUE student_id+slot в unics_equipped).
+ * Три слота: title/frame/accent.
  *
  * @package local_unics
  */

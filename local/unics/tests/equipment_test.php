@@ -238,7 +238,7 @@ final class equipment_test extends \advanced_testcase {
         $this->assertTrue(equipment_manager::equip($sid, $frame));
         $this->assertTrue(equipment_manager::equip($sid, $accent));
 
-        // Три слота независимы - каждый вернул своё.
+        // Три слота независимы - каждый вернул свое.
         $this->assertSame($title,  (int)equipment_manager::get_equipped($sid, 'title')->id);
         $this->assertSame($frame,  (int)equipment_manager::get_equipped($sid, 'frame')->id);
         $this->assertSame($accent, (int)equipment_manager::get_equipped($sid, 'accent')->id);
