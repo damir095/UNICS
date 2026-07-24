@@ -466,6 +466,18 @@ if ($is_admin) {
                     : null,
             ];
         }
+        // Аватар ученика (личная деталь, всегда) + надетая рамка/акцент (украшают, когда есть).
+        // Только свой вид ученика; у прочих ролей welcome без avatar/accent (разметка прежняя).
+        $eq_frame  = \local_unics\social\equipment_manager::get_equipped((int)$student->id, 'frame');
+        $eq_accent = \local_unics\social\equipment_manager::get_equipped((int)$student->id, 'accent');
+        $welcome['avatar'] = [
+            'avatar_html' => $OUTPUT->user_picture($USER, ['size' => 56, 'link' => false]),
+            'frame_class' => ($eq_frame && $eq_frame->effect_key)
+                ? 'unics-frame-' . $eq_frame->effect_key : '',
+        ];
+        if ($eq_accent && $eq_accent->effect_key) {
+            $welcome['accent_class'] = 'unics-welcome--' . $eq_accent->effect_key;
+        }
         $context['welcome'] = $welcome;
 
         // v1-сигналы (дёшево): незавершённый тест, новые заметки педагога, новые сообщения.

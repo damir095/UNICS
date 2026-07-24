@@ -18,6 +18,11 @@ final class dashboard_template_test extends \advanced_testcase {
                 'greeting'    => 'Привет, Полина!',
                 'subline'     => '8 «Б» класс & <тест>',
                 'title_badge' => ['name' => 'Умник', 'iconurl' => 'http://example.com/i.png'],
+                'avatar' => [
+                    'avatar_html' => '<img class="userpicture" src="#" alt="">',
+                    'frame_class' => 'unics-frame-gold',
+                ],
+                'accent_class' => 'unics-welcome--accent-teal',
             ],
             'child_switcher' => [
                 'action_url' => 'http://localhost/local/unics/pages/dashboard.php',
@@ -79,6 +84,9 @@ final class dashboard_template_test extends \advanced_testcase {
         $this->assertStringContainsString('unics-welcome', $html);
         $this->assertStringContainsString('Привет, Полина!', $html);
         $this->assertStringContainsString('Умник', $html);                    // бейдж титула
+        $this->assertStringContainsString('unics-avatar-frame unics-frame-gold', $html);
+        $this->assertStringContainsString('unics-welcome--accent-teal', $html);
+        $this->assertStringContainsString('userpicture', $html);
         $this->assertStringContainsString('name="child"', $html);             // переключатель ребенка
         $this->assertStringContainsString('Требует внимания', $html);
         $this->assertStringContainsString('Быстрые действия', $html);
