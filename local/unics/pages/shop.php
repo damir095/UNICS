@@ -25,6 +25,7 @@ $PAGE->set_pagelayout('standard');
 
 require_once(__DIR__ . '/../classes/social/points_manager.php');
 use local_unics\social\points_manager;
+use local_unics\social\equipment_manager;
 
 // ----------------------------------------------------------------
 // Обработка покупки
@@ -42,8 +43,30 @@ if ($buy_item_id > 0 && confirm_sesskey()) {
     }
 }
 
+$equip_item_id = optional_param('equip',   0,  PARAM_INT);
+$unequip_slot  = optional_param('unequip', '', PARAM_ALPHA);
+
+if ($equip_item_id > 0 && confirm_sesskey()) {
+    $eqres = equipment_manager::equip((int)$student->id, $equip_item_id);
+    if ($eqres === true) {
+        redirect(new moodle_url('/local/unics/pages/shop.php', ['equipped' => 1]));
+    } else {
+        $buy_error = $eqres ?: 'Не удалось надеть';
+    }
+}
+if ($unequip_slot !== '' && confirm_sesskey()) {
+    equipment_manager::unequip((int)$student->id, $unequip_slot);
+    redirect(new moodle_url('/local/unics/pages/shop.php', ['unequipped' => 1]));
+}
+
 if (optional_param('bought', 0, PARAM_INT)) {
     $buy_msg = 'Покупка выполнена! Товар добавлен в ваши приобретения.';
+}
+if (optional_param('equipped', 0, PARAM_INT)) {
+    $buy_msg = 'Титул надет.';
+}
+if (optional_param('unequipped', 0, PARAM_INT)) {
+    $buy_msg = 'Титул снят.';
 }
 
 // ----------------------------------------------------------------
@@ -53,6 +76,8 @@ $balance  = points_manager::get_balance((int)$student->id);
 $history  = points_manager::get_history((int)$student->id, 10);
 $purchases = points_manager::get_purchases((int)$student->id);
 $bought_ids = array_column($purchases, 'item_id');
+$active_title = equipment_manager::get_equipped((int)$student->id, 'title');
+$active_title_id = $active_title ? (int)$active_title->id : 0;
 
 $shop_items = $DB->get_records('unics_shop_items', ['is_active' => 1], 'sort_order, cost', '*');
 
@@ -150,19 +175,52 @@ if (empty($shop_items)) {
     echo '</div>';
 }
 
-// Мои покупки
+// Мои покупки. У товаров-титулов (item_type=1) - управление активным титулом.
 if (!empty($purchases)) {
     echo '<h5 class="mt-4 mb-3">Мои приобретения</h5>';
+
+    $has_title = false;
+    foreach ($purchases as $p) {
+        if ((int)$p->item_type === 1) {
+            $has_title = true;
+            break;
+        }
+    }
+
     echo '<div class="d-flex flex-wrap gap-2 align-items-center">';
     foreach ($purchases as $p) {
         $pic = !empty($p->icon)
             ? '<img src="' . $OUTPUT->image_url('shop/' . $p->icon, 'local_unics')
               . '" width="22" height="22" alt="" class="mr-1" style="vertical-align:-5px;">'
             : '';
-        echo '<span class="badge badge-pill badge-warning p-2" style="font-size:.9rem;">'
-           . $pic . s($p->name) . '</span>';
+        $is_title  = (int)$p->item_type === 1;
+        $is_active = $is_title && (int)$p->item_id === $active_title_id;
+
+        echo '<span class="badge badge-pill badge-' . ($is_active ? 'success' : 'warning')
+           . ' p-2" style="font-size:.9rem;">' . $pic . s($p->name)
+           . ($is_active ? ' - активен' : '') . '</span>';
+
+        // Кнопка «Надеть» - у неактивных титулов.
+        if ($is_title && !$is_active) {
+            $equip_url = new moodle_url('/local/unics/pages/shop.php', [
+                'equip' => (int)$p->item_id, 'sesskey' => sesskey(),
+            ]);
+            echo html_writer::link($equip_url, 'Надеть',
+                ['class' => 'btn btn-outline-warning btn-sm']);
+        }
     }
     echo '</div>';
+
+    // «Без титула» - если сейчас какой-то титул надет.
+    if ($has_title && $active_title_id > 0) {
+        $unequip_url = new moodle_url('/local/unics/pages/shop.php', [
+            'unequip' => 'title', 'sesskey' => sesskey(),
+        ]);
+        echo '<div class="mt-2">';
+        echo html_writer::link($unequip_url, 'Без титула',
+            ['class' => 'btn btn-outline-secondary btn-sm']);
+        echo '</div>';
+    }
 }
 
 // История баллов
