@@ -162,6 +162,12 @@ class provider implements
             'purchased_at' => $time,
         ], 'privacy:metadata:unics_purchases');
 
+        $collection->add_database_table('unics_equipped', [
+            'student_id' => $s, 'slot' => 'privacy:metadata:unics_equipped:slot',
+            'item_id' => 'privacy:metadata:unics_equipped:item_id',
+            'equipped_at' => $time,
+        ], 'privacy:metadata:unics_equipped');
+
         $collection->add_database_table('unics_umk_students', [
             'student_id' => $s,
         ], 'privacy:metadata:unics_umk_students');
@@ -308,6 +314,7 @@ class provider implements
                 ['motivation', 'unics_points_log', ['student_id' => $sid]],
                 ['motivation', 'unics_achievements', ['student_id' => $sid]],
                 ['motivation', 'unics_purchases', ['student_id' => $sid]],
+                ['motivation', 'unics_equipped', ['student_id' => $sid]],
                 ['communication', 'unics_comments', ['student_id' => $sid]],
             ]);
         }

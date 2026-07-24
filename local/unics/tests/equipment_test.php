@@ -184,4 +184,26 @@ final class equipment_test extends \advanced_testcase {
         $this->assertIsString($res);
         $this->assertNull(equipment_manager::get_equipped($sid, 'title'));
     }
+
+    /**
+     * Удаление пользователя чистит его строки unics_equipped (единая точка
+     * очистки cleanup::purge_user_data + Privacy API). Иначе строка слота
+     * осталась бы сиротой на удаленного ученика (данные детей с ОВЗ, 152-ФЗ).
+     */
+    public function test_purge_user_data_clears_equipped(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $u   = $this->getDataGenerator()->create_user();
+        $sid = (int)$DB->insert_record('unics_students', (object)[
+            'mdl_user_id' => $u->id, 'difficulty_level' => 2,
+        ]);
+        $t = $this->make_title('Умник');
+        $this->buy($sid, $t);
+        equipment_manager::auto_equip_if_empty($sid, $t);
+        $this->assertNotNull(equipment_manager::get_equipped($sid, 'title'));
+
+        \local_unics\cleanup::purge_user_data((int)$u->id);
+
+        $this->assertSame(0, $DB->count_records('unics_equipped', ['student_id' => $sid]));
+    }
 }

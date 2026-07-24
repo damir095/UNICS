@@ -94,7 +94,7 @@ class cleanup {
                 $DB->delete_records_select('unics_cat_step', "session_id $insql", $params);
             }
             foreach (['unics_teacher_student', 'unics_parent_student', 'unics_umk_students',
-                'unics_achievements', 'unics_points_log', 'unics_purchases',
+                'unics_achievements', 'unics_points_log', 'unics_purchases', 'unics_equipped',
                 'unics_learning_path', 'unics_skill_mastery', 'unics_mastery_history',
                 'unics_adaptive_suggestion', 'unics_cat_session', 'unics_reports',
                 'unics_comments', 'unics_comment_seen', 'unics_level_history',
