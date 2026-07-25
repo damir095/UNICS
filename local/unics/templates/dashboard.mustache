@@ -23,7 +23,9 @@
 }}
 {{#welcome}}
 <div class="unics-welcome mb-4{{#avatar}} unics-welcome--avatar{{/avatar}}{{#accent_class}} {{accent_class}}{{/accent_class}}">
-    {{#avatar}}<span class="unics-avatar-frame{{#frame_class}} {{frame_class}}{{/frame_class}}">{{{avatar_html}}}</span>{{/avatar}}
+    {{#avatar}}
+    <span class="unics-avatar-frame{{#frame_class}} {{frame_class}}{{/frame_class}}">{{{avatar_html}}}</span>
+    {{/avatar}}
     <h2>{{greeting}}{{#title_badge}} <span class="badge badge-warning ml-1" style="font-size:.8em;">{{#iconurl}}<img src="{{iconurl}}" width="20" height="20" alt="" style="vertical-align:-4px;margin-right:4px;">{{/iconurl}}{{name}}</span>{{/title_badge}}</h2>
     <div class="sub">{{subline}}</div>
 </div>

@@ -128,4 +128,33 @@ final class dashboard_template_test extends \advanced_testcase {
         $this->assertStringNotContainsString('stat-value', $html);
         $this->assertStringNotContainsString('<tbody>', $html);
     }
+
+    /**
+     * Золотой тест: не-ученические роли (без avatar/accent_class в контексте welcome)
+     * обязаны рендерить блок welcome ПОБАЙТОВО как дошаблонная (до аватара, срез 2)
+     * разметка - без паразитных пустых строк между открывающим div и <h2>, которые
+     * появляются, если секция {{#avatar}} не standalone (см. [[mustache-dashboard-design]]).
+     */
+    public function test_minimal_context_welcome_is_byte_for_byte_pre_avatar_markup(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $PAGE->set_context(\context_system::instance());
+        $renderer = $PAGE->get_renderer('core');
+
+        $html = $renderer->render_from_template('local_unics/dashboard', [
+            'welcome' => ['greeting' => 'Добро пожаловать, Иван', 'subline' => 'Панель'],
+        ]);
+
+        // Точная разметка welcome-блока для не-ученических ролей (без avatar/accent_class):
+        // ровно та, что была ДО добавления аватара - без лишних строк-пробелов.
+        $expectedwelcome = "<div class=\"unics-welcome mb-4\">\n"
+            . "    <h2>Добро пожаловать, Иван</h2>\n"
+            . "    <div class=\"sub\">Панель</div>\n"
+            . "</div>";
+        $this->assertStringContainsString($expectedwelcome, $html);
+
+        // Явная защита от паразитной строки-пробела между открывающим div и <h2>,
+        // которую оставляет не-standalone секция {{#avatar}}...{{/avatar}} на своей строке.
+        $this->assertStringNotContainsString(">\n    \n    <h2", $html);
+    }
 }
