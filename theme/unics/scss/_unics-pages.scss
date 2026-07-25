@@ -151,6 +151,43 @@
     }
 }
 
+// Аватар в приветствии ученика (мотивация этап 3, срез 2). Аватар слева обтеканием -
+// h2/sub текут справа; у прочих ролей аватара нет, раскладка прежняя.
+.unics-welcome--avatar {
+    overflow: hidden; // содержит float аватара
+}
+
+.unics-avatar-frame {
+    float: left;
+    margin-right: var(--unics-space-4);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid var(--unics-border);
+    box-sizing: content-box;
+    overflow: hidden;
+    background: var(--unics-surface);
+
+    img,
+    .userinitials {
+        display: block;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+    }
+}
+
+// Варианты рамок (декоративное кольцо - контраст текста не требуется).
+.unics-frame-bronze { border-color: #A97142; }
+.unics-frame-silver { border-color: #9AA3AB; }
+.unics-frame-gold   { border-color: #C9A227; }
+
+// Акцент - только цвет левой полосы плашки (декор; текст/фон темы не трогаются).
+.unics-welcome--accent-coral  { border-left-color: #F26545; }
+.unics-welcome--accent-teal   { border-left-color: #2A8C7F; }
+.unics-welcome--accent-violet { border-left-color: #7B5EA7; }
+.unics-welcome--accent-amber  { border-left-color: #B4791F; }
+
 // -----------------------------------------------------------------------------
 // Stat-карточка — наследует .card, но крупное центрированное значение.
 // -----------------------------------------------------------------------------
