@@ -80,4 +80,21 @@ final class points_manager_test extends \advanced_testcase {
         $this->assertFalse($col['complete']); // complete только при total > 0
         $this->assertSame([], $col['items']);
     }
+
+    public function test_inactive_sticker_excluded_even_if_owned(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $sid = 780;
+        $active   = $this->make_item('Молния', 3, 30, 1, 'lightning');
+        $inactive = $this->make_item('Скрытый', 3, 30, 2, 'hidden');
+        $DB->set_field('unics_shop_items', 'is_active', 0, ['id' => $inactive]);
+        $this->buy($sid, $active);
+        $this->buy($sid, $inactive); // владеет, но товар деактивирован
+
+        $col = points_manager::get_sticker_collection($sid);
+        $this->assertSame(1, $col['total']);        // деактивированный вне каталога
+        $this->assertSame(1, $col['owned_count']);  // и вне owned_count
+        $ids = array_column($col['items'], 'id');
+        $this->assertNotContains($inactive, $ids);
+    }
 }
