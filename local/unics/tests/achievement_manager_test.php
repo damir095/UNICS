@@ -96,7 +96,7 @@ final class achievement_manager_test extends \advanced_testcase {
         $this->assertSame(3, $d['current']);
         $this->assertSame(5, $d['target']);
 
-        // Ещё 2 теста -> всего 5, avg 90 -> pct-воротце к 85.
+        // Еще 2 теста -> всего 5, avg 90 -> pct-воротце к 85.
         $this->graded_quiz($uid, 90.0);
         $this->graded_quiz($uid, 90.0);
         $d2 = achievement_manager::get_badge_progress($sid, $uid)[achievement_manager::BADGE_DILIGENT];
@@ -107,15 +107,17 @@ final class achievement_manager_test extends \advanced_testcase {
     }
 
     public function test_evaluate_student_still_awards_after_refactor(): void {
-        // Гард: переписанные check_* сохранили поведение.
+        // Гард переписанных check_*: 5 тестов с ОДИНАКОВЫМ баллом 90 (проверяет фикс g.id -
+        // прежние запросы схлопнули бы дубли и недосчитали тесты) -> все 4 значка.
         [$sid, $uid] = $this->make_student();
-        $this->enrol_new_course($uid);
-        $this->enrol_new_course($uid);
-        $this->enrol_new_course($uid); // 3 курса -> Активный
-        $this->graded_quiz($uid, 70.0); // >=60% -> Завершитель
+        for ($i = 0; $i < 5; $i++) {
+            $this->graded_quiz($uid, 90.0);
+        }
 
         $awarded = achievement_manager::evaluate_student($sid, $uid);
-        $this->assertContains(achievement_manager::BADGE_ACTIVE, $awarded);
-        $this->assertContains(achievement_manager::BADGE_COMPLETER, $awarded);
+        $this->assertContains(achievement_manager::BADGE_ACTIVE, $awarded);     // 5 курсов
+        $this->assertContains(achievement_manager::BADGE_COMPLETER, $awarded);  // тест >=60%
+        $this->assertContains(achievement_manager::BADGE_DILIGENT, $awarded);   // last5 avg 90 >=85
+        $this->assertContains(achievement_manager::BADGE_EXCELLENT, $awarded);  // all avg 90 >=90
     }
 }

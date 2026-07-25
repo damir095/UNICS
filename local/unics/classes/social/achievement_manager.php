@@ -184,6 +184,9 @@ class achievement_manager {
     /** Проценты (finalgrade/grademax*100) по тестам ученика; $limit последних по времени, null - все. */
     private static function quiz_grade_pcts(int $mdl_user_id, ?int $limit): array {
         global $DB;
+        // g.id первым столбцом ОБЯЗАТЕЛЕН: get_records_sql ключует по первому полю и требует
+        // уникальности - иначе тесты с одинаковым баллом схлопнутся в одну строку (латентный
+        // баг прежних inline-запросов, исправлен здесь).
         $sql = "SELECT g.id, g.finalgrade, gi.grademax
                   FROM {grade_grades} g
                   JOIN {grade_items} gi ON gi.id = g.itemid
