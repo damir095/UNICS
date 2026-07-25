@@ -116,6 +116,52 @@ class achievement_manager {
         ];
     }
 
+    /**
+     * Прогресс ученика к каждому значку ([[badge-progress-design]], срез 4).
+     * earned читается из unics_achievements; прогресс - по связывающему воротцу.
+     *
+     * @return array<int, array{earned:bool, awarded_at:?int, unit:?string,
+     *                          current:int, target:int, pct:int}>
+     */
+    public static function get_badge_progress(int $student_id, int $mdl_user_id): array {
+        global $DB;
+        $awarded = $DB->get_records('unics_achievements', ['student_id' => $student_id],
+            '', 'badge_type, awarded_at');
+
+        $last5   = self::quiz_grade_pcts($mdl_user_id, 5);
+        $all     = self::quiz_grade_pcts($mdl_user_id, null);
+        $courses = self::count_courses($mdl_user_id);
+        $passed  = self::count_passed($mdl_user_id);
+        $avg     = fn(array $p) => $p ? array_sum($p) / count($p) : 0;
+        $clamp   = fn($cur, $target) => max(0, min(100, (int)round($cur / $target * 100)));
+
+        // Связывающее воротце по каждому значку.
+        $gate = [
+            self::BADGE_ACTIVE    => ['unit' => 'count', 'current' => $courses, 'target' => 3],
+            self::BADGE_COMPLETER => ['unit' => 'count', 'current' => $passed,  'target' => 1],
+        ];
+        $gate[self::BADGE_DILIGENT] = (count($last5) < 5)
+            ? ['unit' => 'count', 'current' => count($last5), 'target' => 5]
+            : ['unit' => 'pct',   'current' => (int)round($avg($last5)), 'target' => 85];
+        $gate[self::BADGE_EXCELLENT] = (count($all) < 3)
+            ? ['unit' => 'count', 'current' => count($all), 'target' => 3]
+            : ['unit' => 'pct',   'current' => (int)round($avg($all)), 'target' => 90];
+
+        $out = [];
+        foreach (array_keys(self::get_badge_info()) as $type) {
+            if (isset($awarded[$type])) {
+                $out[$type] = ['earned' => true, 'awarded_at' => (int)$awarded[$type]->awarded_at,
+                    'unit' => null, 'current' => 0, 'target' => 0, 'pct' => 100];
+            } else {
+                $g = $gate[$type];
+                $out[$type] = ['earned' => false, 'awarded_at' => null,
+                    'unit' => $g['unit'], 'current' => (int)$g['current'],
+                    'target' => (int)$g['target'], 'pct' => $clamp($g['current'], $g['target'])];
+            }
+        }
+        return $out;
+    }
+
     // ----------------------------------------------------------------
     // Внутренние проверки
     // ----------------------------------------------------------------
@@ -135,68 +181,40 @@ class achievement_manager {
         return true;
     }
 
-    private static function check_diligent(int $student_id, int $mdl_user_id): bool {
+    /** Проценты (finalgrade/grademax*100) по тестам ученика; $limit последних по времени, null - все. */
+    private static function quiz_grade_pcts(int $mdl_user_id, ?int $limit): array {
         global $DB;
-        $grades = $DB->get_records_sql(
-            "SELECT g.finalgrade, gi.grademax
-               FROM {grade_grades} g
-               JOIN {grade_items} gi ON gi.id = g.itemid
-              WHERE g.userid = :uid
-                AND gi.itemtype   = 'mod'
-                AND gi.itemmodule = 'quiz'
-                AND g.finalgrade IS NOT NULL
-                AND gi.grademax   > 0
-              ORDER BY g.timemodified DESC
-              LIMIT 5",
-            ['uid' => $mdl_user_id]
-        );
-        if (count($grades) < 5) return false;
-        $pcts = array_map(fn($g) => $g->finalgrade / $g->grademax * 100, $grades);
-        if ((array_sum($pcts) / count($pcts)) >= 85) {
-            return self::award($student_id, self::BADGE_DILIGENT, 'avg ≥ 85% за 5 тестов');
-        }
-        return false;
+        $sql = "SELECT g.id, g.finalgrade, gi.grademax
+                  FROM {grade_grades} g
+                  JOIN {grade_items} gi ON gi.id = g.itemid
+                 WHERE g.userid = :uid
+                   AND gi.itemtype   = 'mod'
+                   AND gi.itemmodule = 'quiz'
+                   AND g.finalgrade IS NOT NULL
+                   AND gi.grademax   > 0
+                 ORDER BY g.timemodified DESC";
+        $records = $limit !== null
+            ? $DB->get_records_sql($sql, ['uid' => $mdl_user_id], 0, $limit)
+            : $DB->get_records_sql($sql, ['uid' => $mdl_user_id]);
+        return array_map(fn($g) => (float)$g->finalgrade / (float)$g->grademax * 100,
+            array_values($records));
     }
 
-    private static function check_active(int $student_id, int $mdl_user_id): bool {
+    /** Число курсов, где ученик записан (кроме сайтового id=1). */
+    private static function count_courses(int $mdl_user_id): int {
         global $DB;
-        $count = (int)$DB->count_records_sql(
+        return (int)$DB->count_records_sql(
             "SELECT COUNT(DISTINCT e.courseid)
                FROM {user_enrolments} ue
                JOIN {enrol} e ON e.id = ue.enrolid
               WHERE ue.userid = :uid AND ue.status = 0 AND e.courseid != 1",
-            ['uid' => $mdl_user_id]
-        );
-        if ($count >= 3) {
-            return self::award($student_id, self::BADGE_ACTIVE, "записан на {$count} курсов");
-        }
-        return false;
+            ['uid' => $mdl_user_id]);
     }
 
-    private static function check_excellent(int $student_id, int $mdl_user_id): bool {
+    /** Число тестов, сданных на >= 60%. */
+    private static function count_passed(int $mdl_user_id): int {
         global $DB;
-        $grades = $DB->get_records_sql(
-            "SELECT g.finalgrade, gi.grademax
-               FROM {grade_grades} g
-               JOIN {grade_items} gi ON gi.id = g.itemid
-              WHERE g.userid = :uid
-                AND gi.itemtype   = 'mod'
-                AND gi.itemmodule = 'quiz'
-                AND g.finalgrade IS NOT NULL
-                AND gi.grademax   > 0",
-            ['uid' => $mdl_user_id]
-        );
-        if (count($grades) < 3) return false;
-        $pcts = array_map(fn($g) => $g->finalgrade / $g->grademax * 100, $grades);
-        if ((array_sum($pcts) / count($pcts)) >= 90) {
-            return self::award($student_id, self::BADGE_EXCELLENT, 'avg ≥ 90% по всем тестам');
-        }
-        return false;
-    }
-
-    private static function check_completer(int $student_id, int $mdl_user_id): bool {
-        global $DB;
-        $passed = (int)$DB->count_records_sql(
+        return (int)$DB->count_records_sql(
             "SELECT COUNT(*)
                FROM {grade_grades} g
                JOIN {grade_items} gi ON gi.id = g.itemid
@@ -206,9 +224,41 @@ class achievement_manager {
                 AND g.finalgrade IS NOT NULL
                 AND gi.grademax   > 0
                 AND (g.finalgrade / gi.grademax) >= 0.6",
-            ['uid' => $mdl_user_id]
-        );
-        if ($passed >= 1) {
+            ['uid' => $mdl_user_id]);
+    }
+
+    private static function check_diligent(int $student_id, int $mdl_user_id): bool {
+        $pcts = self::quiz_grade_pcts($mdl_user_id, 5);
+        if (count($pcts) < 5) {
+            return false;
+        }
+        if ((array_sum($pcts) / count($pcts)) >= 85) {
+            return self::award($student_id, self::BADGE_DILIGENT, 'avg ≥ 85% за 5 тестов');
+        }
+        return false;
+    }
+
+    private static function check_active(int $student_id, int $mdl_user_id): bool {
+        $count = self::count_courses($mdl_user_id);
+        if ($count >= 3) {
+            return self::award($student_id, self::BADGE_ACTIVE, "записан на {$count} курсов");
+        }
+        return false;
+    }
+
+    private static function check_excellent(int $student_id, int $mdl_user_id): bool {
+        $pcts = self::quiz_grade_pcts($mdl_user_id, null);
+        if (count($pcts) < 3) {
+            return false;
+        }
+        if ((array_sum($pcts) / count($pcts)) >= 90) {
+            return self::award($student_id, self::BADGE_EXCELLENT, 'avg ≥ 90% по всем тестам');
+        }
+        return false;
+    }
+
+    private static function check_completer(int $student_id, int $mdl_user_id): bool {
+        if (self::count_passed($mdl_user_id) >= 1) {
             return self::award($student_id, self::BADGE_COMPLETER, 'сдан тест ≥ 60%');
         }
         return false;
