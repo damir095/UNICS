@@ -869,3 +869,54 @@
     &.is-warning { background: var(--unics-warning-bg); .unics-meter__fill { background: var(--unics-warning); } }
     &.is-danger  { background: var(--unics-error-bg);   .unics-meter__fill { background: var(--unics-error); } }
 }
+
+// -----------------------------------------------------------------------------
+// Полка стикеров-коллекция (мотивация этап 3, срез 3, [[sticker-collection-design]]).
+// «Собери все»: купленные - в цвете, некупленные - серый силуэт-ссылка в магазин.
+// Смысл несут название и цена ТЕКСТОМ - не только цвет (a11y). Иконки декоративны.
+// -----------------------------------------------------------------------------
+.unics-collection__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--unics-space-3);
+    margin-bottom: var(--unics-space-3);
+}
+.unics-collection__count { font-weight: 700; }
+.unics-collection__done  { color: var(--unics-success); font-weight: 600; }
+
+.unics-collection__grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--unics-space-3);
+}
+
+.unics-sticker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 88px;
+    min-height: 88px;
+    padding: var(--unics-space-2);
+    border-radius: var(--unics-radius);
+    border: 1px solid var(--unics-border);
+    background: var(--unics-surface);
+    text-decoration: none;
+    color: inherit;
+
+    img { display: block; margin-bottom: var(--unics-space-1); }
+    .unics-sticker__name { font-size: .8rem; line-height: 1.2; }
+    .unics-sticker__cost { font-size: .75rem; color: var(--unics-muted, #6c757d); margin-top: 2px; }
+}
+
+// Заблокированный (не куплен) - силуэт со ссылкой в магазин; наведение/фокус подсвечивают.
+.unics-sticker--locked {
+    img { filter: grayscale(1); opacity: .45; }
+    .unics-sticker__name { color: var(--unics-muted, #6c757d); }
+
+    &:hover,
+    &:focus {
+        border-color: var(--unics-primary);
+        img { opacity: .7; }
+    }
+}
