@@ -145,7 +145,7 @@ if (empty($shop_items)) {
         $can_afford     = $balance >= $item->cost;
 
         $card_class = $already_bought ? 'border-success' : ($can_afford ? '' : 'border-secondary');
-        echo '<div class="col-md-4 col-sm-6 mb-3">';
+        echo '<div class="col-md-4 col-sm-6 mb-3" id="shop-item-' . (int)$item->id . '">';
         echo '<div class="card h-100 ' . $card_class . '">';
         echo '<div class="card-body text-center">';
         if (!empty($item->icon)) {
