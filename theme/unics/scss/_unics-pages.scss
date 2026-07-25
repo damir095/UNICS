@@ -906,7 +906,7 @@
 
     img { display: block; margin-bottom: var(--unics-space-1); }
     .unics-sticker__name { font-size: .8rem; line-height: 1.2; }
-    .unics-sticker__cost { font-size: .75rem; color: var(--unics-muted, #6c757d); margin-top: 2px; }
+    .unics-sticker__cost { font-size: .75rem; color: var(--unics-muted, #6c757d); margin-top: var(--unics-space-1); }
 }
 
 // Заблокированный (не куплен) - силуэт со ссылкой в магазин; наведение/фокус подсвечивают.
