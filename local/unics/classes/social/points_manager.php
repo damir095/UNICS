@@ -179,6 +179,51 @@ class points_manager {
     }
 
     /**
+     * Коллекция стикеров ученика (мотивация этап 3, срез 3, [[sticker-collection-design]]).
+     * ВСЕ активные стикеры каталога (item_type=3) + флаг владения по unics_purchases.
+     * Не читает unics_students - нужен лишь student_id для сопоставления покупок.
+     *
+     * @return array{items: array<array{id:int,name:string,icon:string,cost:int,owned:bool}>,
+     *               owned_count:int, total:int, complete:bool}
+     */
+    public static function get_sticker_collection(int $student_id): array {
+        global $DB;
+
+        $stickers = $DB->get_records('unics_shop_items',
+            ['item_type' => 3, 'is_active' => 1], 'sort_order, cost',
+            'id, name, icon, cost');
+
+        $owned_ids = $DB->get_fieldset_sql(
+            "SELECT p.item_id
+               FROM {unics_purchases} p
+               JOIN {unics_shop_items} s ON s.id = p.item_id
+              WHERE p.student_id = :sid AND s.item_type = 3",
+            ['sid' => $student_id]);
+        $owned = array_flip(array_map('intval', $owned_ids));
+
+        $items = [];
+        foreach ($stickers as $s) {
+            $items[] = [
+                'id'    => (int)$s->id,
+                'name'  => $s->name,
+                'icon'  => (string)$s->icon,
+                'cost'  => (int)$s->cost,
+                'owned' => isset($owned[(int)$s->id]),
+            ];
+        }
+
+        $total       = count($items);
+        $owned_count = count(array_filter($items, static fn($i) => $i['owned']));
+
+        return [
+            'items'       => $items,
+            'owned_count' => $owned_count,
+            'total'       => $total,
+            'complete'    => $total > 0 && $owned_count === $total,
+        ];
+    }
+
+    /**
      * Получить активный титул учащегося.
      */
     public static function get_active_title(int $student_id): ?object {
