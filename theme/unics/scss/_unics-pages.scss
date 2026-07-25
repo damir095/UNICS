@@ -183,7 +183,8 @@
 .unics-frame-gold   { border-color: #C9A227; }
 
 // Акцент - только цвет левой полосы плашки (декор; текст/фон темы не трогаются).
-.unics-welcome--accent-coral  { border-left-color: #F26545; }
+.unics-welcome--accent-coral  { border-left-color: var(--unics-primary); } // коралл = бренд-цвет: через токен, чтобы не расходиться при перекраске
+
 .unics-welcome--accent-teal   { border-left-color: #2A8C7F; }
 .unics-welcome--accent-violet { border-left-color: #7B5EA7; }
 .unics-welcome--accent-amber  { border-left-color: #B4791F; }
