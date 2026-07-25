@@ -1488,5 +1488,43 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026072300, 'local', 'unics');
     }
 
+    if ($oldversion < 2026072500) {
+        // Мотивация этап 3, срез 2 ([[frame-accent-equipment-design]]): слоты рамки/акцента.
+        // Колонка визуального варианта + сид каталога рамок (item_type 2) и акцентов (4).
+        $table = new xmldb_table('unics_shop_items');
+        $field = new xmldb_field('effect_key', XMLDB_TYPE_CHAR, '32', null, null, null, null, 'icon');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Сид каталога (идемпотентно - guard по name+item_type).
+        $catalog = [
+            // [name, item_type, effect_key, cost, icon]
+            ['Бронзовая рамка',    2, 'bronze',        100, 'frame'],
+            ['Серебряная рамка',   2, 'silver',        200, 'frame'],
+            ['Золотая рамка',      2, 'gold',          350, 'frame'],
+            ['Коралловый акцент',  4, 'accent-coral',   80, 'palette'],
+            ['Бирюзовый акцент',   4, 'accent-teal',    80, 'palette'],
+            ['Фиолетовый акцент',  4, 'accent-violet',  80, 'palette'],
+            ['Янтарный акцент',    4, 'accent-amber',   80, 'palette'],
+        ];
+        foreach ($catalog as [$name, $type, $ekey, $cost, $icon]) {
+            if (!$DB->record_exists('unics_shop_items', ['name' => $name, 'item_type' => $type])) {
+                $DB->insert_record('unics_shop_items', (object)[
+                    'name'       => $name,
+                    'cost'       => $cost,
+                    'icon'       => $icon,
+                    'icon_emoji' => 'X',
+                    'item_type'  => $type,
+                    'effect_key' => $ekey,
+                    'is_active'  => 1,
+                    'sort_order' => 100 + $type, // рамки/акценты после титулов
+                ]);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026072500, 'local', 'unics');
+    }
+
     return true;
 }
