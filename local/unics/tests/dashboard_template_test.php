@@ -157,4 +157,47 @@ final class dashboard_template_test extends \advanced_testcase {
         // которую оставляет не-standalone секция {{#avatar}}...{{/avatar}} на своей строке.
         $this->assertStringNotContainsString(">\n    \n    <h2", $html);
     }
+
+    public function test_collection_section_renders_owned_and_locked(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $PAGE->set_context(\context_system::instance());
+        $renderer = $PAGE->get_renderer('core');
+        $context = [
+            'collection' => [
+                'owned_count' => 1,
+                'total'       => 2,
+                'complete'    => false,
+                'pct'         => 50,
+                'items'       => [
+                    ['name' => 'Сова', 'cost' => '40', 'owned' => true,
+                     'iconurl' => 'http://example.com/owl.svg', 'shopurl' => '#'],
+                    ['name' => 'Самоцвет', 'cost' => '60', 'owned' => false,
+                     'iconurl' => 'http://example.com/gem.svg',
+                     'shopurl' => 'http://localhost/local/unics/pages/shop.php#shop-item-10'],
+                ],
+            ],
+        ];
+        $html = $renderer->render_from_template('local_unics/dashboard', $context);
+
+        $this->assertStringContainsString('unics-collection', $html);
+        $this->assertStringContainsString('1 из 2', $html);
+        $this->assertStringContainsString('unics-sticker--owned', $html);
+        $this->assertStringContainsString('unics-sticker--locked', $html);
+        // Локед ведет в магазин к конкретному товару и показывает цену текстом.
+        $this->assertStringContainsString('shop.php#shop-item-10', $html);
+        $this->assertStringContainsString('60 баллов', $html);
+        // Прогресс-бар с шириной по проценту.
+        $this->assertStringContainsString('width:50%', $html);
+    }
+
+    public function test_collection_absent_when_no_context(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $PAGE->set_context(\context_system::instance());
+        $renderer = $PAGE->get_renderer('core');
+        $html = $renderer->render_from_template('local_unics/dashboard',
+            ['welcome' => ['greeting' => 'Привет!', 'subline' => '-']]);
+        $this->assertStringNotContainsString('unics-collection', $html);
+    }
 }

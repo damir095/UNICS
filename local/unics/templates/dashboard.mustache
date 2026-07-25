@@ -3,7 +3,7 @@
 
     Один каркас на все роли: опциональные секции в супер-порядке
     welcome -> child_switcher -> attention -> actions -> weak_widget ->
-    metrics -> umk_table -> grades_table -> children_cards -> children_link;
+    metrics -> collection -> umk_table -> grades_table -> children_cards -> children_link;
     относительный порядок блоков каждой роли сохранен. Контекст собирает
     pages/dashboard.php. icon_html - доверенный пре-рендер $OUTPUT->pix_icon
     (хелпер pix не умеет доп. класс карточки); пользовательские данные
@@ -82,6 +82,35 @@
     {{/items}}
 </div>
 {{/metrics}}
+{{#collection}}
+<h2 class="unics-section-title">Моя коллекция</h2>
+<div class="card unics-collection mb-4">
+    <div class="card-body">
+        <div class="unics-collection__head">
+            <span class="unics-collection__count">{{owned_count}} из {{total}}</span>
+            {{#complete}}<span class="unics-collection__done">Коллекция собрана!</span>{{/complete}}
+        </div>
+        <div class="unics-collection__grid">
+            {{#items}}
+            {{#owned}}
+            <div class="unics-sticker unics-sticker--owned" title="{{name}}">
+                {{#iconurl}}<img src="{{iconurl}}" width="48" height="48" alt="">{{/iconurl}}
+                <span class="unics-sticker__name">{{name}}</span>
+            </div>
+            {{/owned}}
+            {{^owned}}
+            <a class="unics-sticker unics-sticker--locked" href="{{shopurl}}" title="Купить «{{name}}» за {{cost}} баллов">
+                {{#iconurl}}<img src="{{iconurl}}" width="48" height="48" alt="">{{/iconurl}}
+                <span class="unics-sticker__name">{{name}}</span>
+                <span class="unics-sticker__cost">{{cost}} баллов</span>
+            </a>
+            {{/owned}}
+            {{/items}}
+        </div>
+        <div class="unics-meter is-success mt-3"><span class="unics-meter__fill" style="width:{{pct}}%;"></span></div>
+    </div>
+</div>
+{{/collection}}
 {{#umk_table}}
 <h2 class="unics-section-title">Последние генерации УМК</h2>
 {{#empty}}<p class="text-muted">УМК ещё не создавались.</p>{{/empty}}

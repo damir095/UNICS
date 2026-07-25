@@ -480,6 +480,32 @@ if ($is_admin) {
         }
         $context['welcome'] = $welcome;
 
+        // Коллекция стикеров «собери все» (мотивация этап 3, срез 3): все активные стикеры,
+        // купленные - в цвете, остальные - силуэт со ссылкой в магазин. Только свой вид ученика.
+        $collection = \local_unics\social\points_manager::get_sticker_collection((int)$student->id);
+        if ($collection['total'] > 0) {
+            $col_items = [];
+            foreach ($collection['items'] as $it) {
+                $col_items[] = [
+                    'name'    => $it['name'],
+                    'cost'    => number_format($it['cost']),
+                    'owned'   => $it['owned'],
+                    'iconurl' => $it['icon'] !== ''
+                        ? $OUTPUT->image_url('shop/' . $it['icon'], 'local_unics')->out(false)
+                        : null,
+                    'shopurl' => (new moodle_url('/local/unics/pages/shop.php', [],
+                        'shop-item-' . $it['id']))->out(false),
+                ];
+            }
+            $context['collection'] = [
+                'items'       => $col_items,
+                'owned_count' => $collection['owned_count'],
+                'total'       => $collection['total'],
+                'complete'    => $collection['complete'],
+                'pct'         => (int)round($collection['owned_count'] / $collection['total'] * 100),
+            ];
+        }
+
         // v1-сигналы (дёшево): незавершённый тест, новые заметки педагога, новые сообщения.
         $attention = [];
         $inprogress = $DB->get_record_sql(
