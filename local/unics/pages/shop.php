@@ -63,10 +63,10 @@ if (optional_param('bought', 0, PARAM_INT)) {
     $buy_msg = 'Покупка выполнена! Товар добавлен в ваши приобретения.';
 }
 if (optional_param('equipped', 0, PARAM_INT)) {
-    $buy_msg = 'Титул надет.';
+    $buy_msg = 'Надето.';
 }
 if (optional_param('unequipped', 0, PARAM_INT)) {
-    $buy_msg = 'Титул снят.';
+    $buy_msg = 'Снято.';
 }
 
 // ----------------------------------------------------------------
@@ -76,8 +76,14 @@ $balance  = points_manager::get_balance((int)$student->id);
 $history  = points_manager::get_history((int)$student->id, 10);
 $purchases = points_manager::get_purchases((int)$student->id);
 $bought_ids = array_column($purchases, 'item_id');
-$active_title = equipment_manager::get_equipped((int)$student->id, 'title');
-$active_title_id = $active_title ? (int)$active_title->id : 0;
+// Надетые предметы по всем слотам: slot => item_id.
+$active_by_slot = [];
+foreach (equipment_manager::ITEM_TYPE_SLOT as $slotname) {
+    $eq = equipment_manager::get_equipped((int)$student->id, $slotname);
+    if ($eq) {
+        $active_by_slot[$slotname] = (int)$eq->id;
+    }
+}
 
 $shop_items = $DB->get_records('unics_shop_items', ['is_active' => 1], 'sort_order, cost', '*');
 
@@ -175,17 +181,12 @@ if (empty($shop_items)) {
     echo '</div>';
 }
 
-// Мои покупки. У товаров-титулов (item_type=1) - управление активным титулом.
+// Мои покупки. У слот-товаров (титул/рамка/акцент) - управление надетым по слоту.
 if (!empty($purchases)) {
     echo '<h5 class="mt-4 mb-3">Мои приобретения</h5>';
 
-    $has_title = false;
-    foreach ($purchases as $p) {
-        if ((int)$p->item_type === 1) {
-            $has_title = true;
-            break;
-        }
-    }
+    // Понятные названия слотов для кнопки «Снять».
+    $slot_labels = ['title' => 'титул', 'frame' => 'рамку', 'accent' => 'акцент'];
 
     echo '<div class="d-flex flex-wrap gap-2 align-items-center">';
     foreach ($purchases as $p) {
@@ -193,15 +194,15 @@ if (!empty($purchases)) {
             ? '<img src="' . $OUTPUT->image_url('shop/' . $p->icon, 'local_unics')
               . '" width="22" height="22" alt="" class="mr-1" style="vertical-align:-5px;">'
             : '';
-        $is_title  = (int)$p->item_type === 1;
-        $is_active = $is_title && (int)$p->item_id === $active_title_id;
+        $slot      = equipment_manager::slot_for_item_type((int)$p->item_type);
+        $is_active = $slot !== null && ($active_by_slot[$slot] ?? 0) === (int)$p->item_id;
 
         echo '<span class="badge badge-pill badge-' . ($is_active ? 'success' : 'warning')
            . ' p-2" style="font-size:.9rem;">' . $pic . s($p->name)
-           . ($is_active ? ' - активен' : '') . '</span>';
+           . ($is_active ? ' - активно' : '') . '</span>';
 
-        // Кнопка «Надеть» - у неактивных титулов.
-        if ($is_title && !$is_active) {
+        // «Надеть» - у неактивных слот-товаров.
+        if ($slot !== null && !$is_active) {
             $equip_url = new moodle_url('/local/unics/pages/shop.php', [
                 'equip' => (int)$p->item_id, 'sesskey' => sesskey(),
             ]);
@@ -211,14 +212,17 @@ if (!empty($purchases)) {
     }
     echo '</div>';
 
-    // «Без титула» - если сейчас какой-то титул надет.
-    if ($has_title && $active_title_id > 0) {
-        $unequip_url = new moodle_url('/local/unics/pages/shop.php', [
-            'unequip' => 'title', 'sesskey' => sesskey(),
-        ]);
-        echo '<div class="mt-2">';
-        echo html_writer::link($unequip_url, 'Без титула',
-            ['class' => 'btn btn-outline-secondary btn-sm']);
+    // Кнопки «Снять» по каждому надетому слоту.
+    if (!empty($active_by_slot)) {
+        echo '<div class="mt-2 d-flex flex-wrap gap-2">';
+        foreach ($active_by_slot as $slotname => $itemid) {
+            $label = $slot_labels[$slotname] ?? $slotname;
+            $unequip_url = new moodle_url('/local/unics/pages/shop.php', [
+                'unequip' => $slotname, 'sesskey' => sesskey(),
+            ]);
+            echo html_writer::link($unequip_url, 'Снять ' . $label,
+                ['class' => 'btn btn-outline-secondary btn-sm']);
+        }
         echo '</div>';
     }
 }
