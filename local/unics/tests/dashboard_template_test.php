@@ -231,8 +231,12 @@ final class dashboard_template_test extends \advanced_testcase {
             ],
         ];
         $html = $renderer->render_from_template('local_unics/dashboard', $context);
-        // Надетый стикер виден в плашке приветствия.
-        $this->assertStringContainsString('http://example.com/owl.svg', $html);
+        // Надетый стикер виден в плашке приветствия. Проверка дискриминирующая: и welcome, и
+        // карточка коллекции используют один и тот же iconurl (Сова, owned:true), поэтому просто
+        // искать подстроку url недостаточно - нужен именно welcome-вариант картинки (width="24" +
+        // title), а не коллекционный (width="48", без title).
+        $this->assertStringContainsString(
+            'src="http://example.com/owl.svg" width="24" height="24" alt="" title="Сова"', $html);
         // Коллекция: надетый -> «носится» + «Снять»; купленный ненадетый -> «Носить».
         $this->assertStringContainsString('носится', $html);
         $this->assertStringContainsString('unequip=sticker', $html);
