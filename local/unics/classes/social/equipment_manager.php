@@ -6,7 +6,7 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Слот-модель экипировки учащегося (этап 3 мотивации, [[title-equipment-design]]).
  * Один надетый предмет на слот (UNIQUE student_id+slot в unics_equipped).
- * Три слота: title/frame/accent.
+ * Четыре слота: title/frame/sticker/accent.
  *
  * @package local_unics
  */
