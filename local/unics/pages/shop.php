@@ -181,12 +181,12 @@ if (empty($shop_items)) {
     echo '</div>';
 }
 
-// Мои покупки. У слот-товаров (титул/рамка/акцент) - управление надетым по слоту.
+// Мои покупки. У слот-товаров (титул/рамка/стикер/акцент) - управление надетым по слоту.
 if (!empty($purchases)) {
     echo '<h5 class="mt-4 mb-3">Мои приобретения</h5>';
 
     // Понятные названия слотов для кнопки «Снять».
-    $slot_labels = ['title' => 'титул', 'frame' => 'рамку', 'accent' => 'акцент'];
+    $slot_labels = ['title' => 'титул', 'frame' => 'рамку', 'sticker' => 'стикер', 'accent' => 'акцент'];
 
     echo '<div class="d-flex flex-wrap gap-2 align-items-center">';
     foreach ($purchases as $p) {
