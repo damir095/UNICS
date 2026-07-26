@@ -449,6 +449,19 @@ if ($is_admin) {
         // ---- Учащийся ----
         require_once(__DIR__ . '/../classes/social/points_manager.php');
 
+        // Носить/снять стикер из виджета-коллекции (слот 'sticker'). ДО вывода (header ниже).
+        // Зеркало обработчика shop.php; equip проверяет владение и слот сам.
+        $wear_id = optional_param('equip', 0, PARAM_INT);
+        $unwear  = optional_param('unequip', '', PARAM_ALPHA);
+        if ($wear_id > 0 && confirm_sesskey()) {
+            \local_unics\social\equipment_manager::equip((int)$student->id, $wear_id);
+            redirect(new moodle_url('/local/unics/pages/dashboard.php'));
+        }
+        if ($unwear !== '' && confirm_sesskey()) {
+            \local_unics\social\equipment_manager::unequip((int)$student->id, $unwear);
+            redirect(new moodle_url('/local/unics/pages/dashboard.php'));
+        }
+
         $points_bal   = \local_unics\social\points_manager::get_balance((int)$student->id);
         $active_title = \local_unics\social\points_manager::get_active_title((int)$student->id);
 
@@ -478,14 +491,26 @@ if ($is_admin) {
         if ($eq_accent && $eq_accent->effect_key) {
             $welcome['accent_class'] = 'unics-welcome--' . $eq_accent->effect_key;
         }
+        // Надетый любимый стикер (слот 'sticker') - маленькой иконкой в плашке.
+        $eq_sticker = \local_unics\social\equipment_manager::get_equipped((int)$student->id, 'sticker');
+        if ($eq_sticker) {
+            $welcome['sticker'] = [
+                'name'    => $eq_sticker->name,
+                'iconurl' => !empty($eq_sticker->icon)
+                    ? $OUTPUT->image_url('shop/' . $eq_sticker->icon, 'local_unics')->out(false)
+                    : null,
+            ];
+        }
         $context['welcome'] = $welcome;
 
         // Коллекция стикеров «собери все» (мотивация этап 3, срез 3): все активные стикеры,
         // купленные - в цвете, остальные - силуэт со ссылкой в магазин. Только свой вид ученика.
         $collection = \local_unics\social\points_manager::get_sticker_collection((int)$student->id);
         if ($collection['total'] > 0) {
+            $eq_sticker_id = $eq_sticker ? (int)$eq_sticker->id : 0;
             $col_items = [];
             foreach ($collection['items'] as $it) {
+                $worn = $it['owned'] && (int)$it['id'] === $eq_sticker_id;
                 $col_items[] = [
                     'name'    => $it['name'],
                     'cost'    => number_format($it['cost']),
@@ -495,6 +520,15 @@ if ($is_admin) {
                         : null,
                     'shopurl' => (new moodle_url('/local/unics/pages/shop.php', [],
                         'shop-item-' . $it['id']))->out(false),
+                    'worn'       => $worn,
+                    'wear_url'   => ($it['owned'] && !$worn)
+                        ? (new moodle_url('/local/unics/pages/dashboard.php',
+                            ['equip' => (int)$it['id'], 'sesskey' => sesskey()]))->out(false)
+                        : null,
+                    'unwear_url' => $worn
+                        ? (new moodle_url('/local/unics/pages/dashboard.php',
+                            ['unequip' => 'sticker', 'sesskey' => sesskey()]))->out(false)
+                        : null,
                 ];
             }
             $context['collection'] = [

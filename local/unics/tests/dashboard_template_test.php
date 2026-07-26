@@ -200,4 +200,43 @@ final class dashboard_template_test extends \advanced_testcase {
             ['welcome' => ['greeting' => 'Привет!', 'subline' => '-']]);
         $this->assertStringNotContainsString('unics-collection', $html);
     }
+
+    public function test_welcome_sticker_and_collection_toggle(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $PAGE->set_context(\context_system::instance());
+        $renderer = $PAGE->get_renderer('core');
+        $context = [
+            'welcome' => [
+                'greeting' => 'Привет, Полина!', 'subline' => '8 класс',
+                'sticker'  => ['name' => 'Сова', 'iconurl' => 'http://example.com/owl.svg'],
+            ],
+            'collection' => [
+                'owned_count' => 2, 'total' => 3, 'complete' => false, 'pct' => 67,
+                'items' => [
+                    ['name' => 'Сова', 'cost' => '40', 'owned' => true,
+                     'iconurl' => 'http://example.com/owl.svg', 'shopurl' => '#',
+                     'worn' => true, 'wear_url' => null,
+                     'unwear_url' => 'http://localhost/local/unics/pages/dashboard.php?unequip=sticker&sesskey=x'],
+                    ['name' => 'Кот', 'cost' => '40', 'owned' => true,
+                     'iconurl' => 'http://example.com/cat.svg', 'shopurl' => '#',
+                     'worn' => false,
+                     'wear_url' => 'http://localhost/local/unics/pages/dashboard.php?equip=9&sesskey=x',
+                     'unwear_url' => null],
+                    ['name' => 'Самоцвет', 'cost' => '60', 'owned' => false,
+                     'iconurl' => 'http://example.com/gem.svg',
+                     'shopurl' => 'http://localhost/local/unics/pages/shop.php#shop-item-10',
+                     'worn' => false, 'wear_url' => null, 'unwear_url' => null],
+                ],
+            ],
+        ];
+        $html = $renderer->render_from_template('local_unics/dashboard', $context);
+        // Надетый стикер виден в плашке приветствия.
+        $this->assertStringContainsString('http://example.com/owl.svg', $html);
+        // Коллекция: надетый -> «носится» + «Снять»; купленный ненадетый -> «Носить».
+        $this->assertStringContainsString('носится', $html);
+        $this->assertStringContainsString('unequip=sticker', $html);
+        $this->assertStringContainsString('Носить', $html);
+        $this->assertStringContainsString('equip=9', $html);
+    }
 }

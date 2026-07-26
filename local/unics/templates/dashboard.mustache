@@ -26,7 +26,7 @@
     {{#avatar}}
     <span class="unics-avatar-frame{{#frame_class}} {{frame_class}}{{/frame_class}}">{{{avatar_html}}}</span>
     {{/avatar}}
-    <h2>{{greeting}}{{#title_badge}} <span class="badge badge-warning ml-1" style="font-size:.8em;">{{#iconurl}}<img src="{{iconurl}}" width="20" height="20" alt="" style="vertical-align:-4px;margin-right:4px;">{{/iconurl}}{{name}}</span>{{/title_badge}}</h2>
+    <h2>{{greeting}}{{#title_badge}} <span class="badge badge-warning ml-1" style="font-size:.8em;">{{#iconurl}}<img src="{{iconurl}}" width="20" height="20" alt="" style="vertical-align:-4px;margin-right:4px;">{{/iconurl}}{{name}}</span>{{/title_badge}}{{#sticker}} <img src="{{iconurl}}" width="24" height="24" alt="" title="{{name}}" style="vertical-align:-5px;margin-left:4px;">{{/sticker}}</h2>
     <div class="sub">{{subline}}</div>
 </div>
 {{/welcome}}
@@ -96,6 +96,9 @@
             <div class="unics-sticker unics-sticker--owned" title="{{name}}">
                 {{#iconurl}}<img src="{{iconurl}}" width="48" height="48" alt="">{{/iconurl}}
                 <span class="unics-sticker__name">{{name}}</span>
+                {{#worn}}<span class="unics-sticker__cost">носится</span>
+                <a href="{{unwear_url}}" class="btn btn-outline-secondary btn-sm mt-1">Снять</a>{{/worn}}
+                {{#wear_url}}<a href="{{wear_url}}" class="btn btn-outline-warning btn-sm mt-1">Носить</a>{{/wear_url}}
             </div>
             {{/owned}}
             {{^owned}}
