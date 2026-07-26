@@ -133,6 +133,9 @@ foreach ($badge_info as $badge_type => $info) {
                 'style' => 'width:' . $pct . '%;']),
             ['class' => 'unics-meter is-warning mx-auto', 'role' => 'progressbar',
              'aria-valuenow' => $pct, 'aria-valuemin' => 0, 'aria-valuemax' => 100,
+             // aria-valuetext = видимая подпись: скринридер ученика слышит фразу, а не
+             // число-процент (у детского вида проценты-недостача скрыты; ОВЗ-аудитория).
+             'aria-valuetext' => $line,
              'aria-label' => 'Прогресс к значку ' . $info['name']]);
         echo html_writer::tag('div', s($line), ['class' => 'small mt-1']);
         echo '</div>';
