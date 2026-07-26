@@ -57,6 +57,9 @@ $PAGE->set_pagelayout('standard');
 // Достижения из БД
 $awards     = $DB->get_records('unics_achievements', ['student_id' => $student_id], '', 'badge_type, awarded_at, note');
 $badge_info = \local_unics\social\achievement_manager::get_badge_info();
+$progress = \local_unics\social\achievement_manager::get_badge_progress(
+    (int)$student_id, (int)$student->mdl_user_id);
+$is_own = ((int)$USER->id === (int)$student->mdl_user_id);
 $total_all  = count($badge_info);
 $total_got  = count($awards);
 
@@ -105,7 +108,34 @@ foreach ($badge_info as $badge_type => $info) {
     if ($awarded) {
         echo '<span class="badge badge-success px-3 py-2 mt-auto">Получен ' . $awarded_date . '</span>';
     } else {
-        echo '<span class="badge badge-secondary px-3 py-2 mt-auto">Еще не получен</span>';
+        $pr  = $progress[$badge_type];
+        $pct = (int)$pr['pct'];
+
+        // Ободряющая/точная подпись.
+        if ($is_own) {
+            $line = $pct >= 70 ? 'Почти получен!' : 'Ты на пути';
+            // Нейтральный счет ребенку не ранит; проценты-недостачу не показываем.
+            if ($pr['unit'] === 'count') {
+                $suffix = $pr['target'] > 1
+                    ? ' - ' . (int)$pr['current'] . ' из ' . (int)$pr['target']
+                    : '';
+                $line .= $suffix;
+            }
+        } else {
+            $line = $pr['unit'] === 'pct'
+                ? (int)$pr['current'] . '% / ' . (int)$pr['target'] . '%'
+                : (int)$pr['current'] . ' / ' . (int)$pr['target'];
+        }
+
+        echo '<div class="mt-auto w-100">';
+        echo html_writer::tag('div',
+            html_writer::tag('div', '', ['class' => 'unics-meter__fill',
+                'style' => 'width:' . $pct . '%;']),
+            ['class' => 'unics-meter is-warning mx-auto', 'role' => 'progressbar',
+             'aria-valuenow' => $pct, 'aria-valuemin' => 0, 'aria-valuemax' => 100,
+             'aria-label' => 'Прогресс к значку ' . $info['name']]);
+        echo html_writer::tag('div', s($line), ['class' => 'small mt-1']);
+        echo '</div>';
     }
     echo '</div></div>';
     echo '</div>';
