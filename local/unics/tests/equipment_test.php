@@ -52,7 +52,7 @@ final class equipment_test extends \advanced_testcase {
     public function test_slot_for_item_type(): void {
         $this->resetAfterTest();
         $this->assertSame('title', equipment_manager::slot_for_item_type(1));
-        $this->assertNull(equipment_manager::slot_for_item_type(3)); // стикер - без слота
+        $this->assertSame('sticker', equipment_manager::slot_for_item_type(3)); // стикер - слот
     }
 
     public function test_auto_equip_first_only(): void {
@@ -182,15 +182,15 @@ final class equipment_test extends \advanced_testcase {
         global $DB;
         $this->resetAfterTest();
         $sid = $this->make_student();
-        // Товар без слота (стикер, item_type=3): даже купленный - надеть нельзя.
-        $sticker = (int)$DB->insert_record('unics_shop_items', (object)[
-            'name' => 'Сова', 'cost' => 30, 'icon_emoji' => 'X',
-            'item_type' => 3, 'is_active' => 1, 'sort_order' => 0,
+        // Товар без слота (несуществующий item_type=99): даже купленный - надеть нельзя.
+        $noslot = (int)$DB->insert_record('unics_shop_items', (object)[
+            'name' => 'Без слота', 'cost' => 30, 'icon_emoji' => 'X',
+            'item_type' => 99, 'is_active' => 1, 'sort_order' => 0,
         ]);
         $DB->insert_record('unics_purchases', (object)[
-            'student_id' => $sid, 'item_id' => $sticker, 'purchased_at' => time(),
+            'student_id' => $sid, 'item_id' => $noslot, 'purchased_at' => time(),
         ]);
-        $res = equipment_manager::equip($sid, $sticker);
+        $res = equipment_manager::equip($sid, $noslot);
         $this->assertIsString($res);
         $this->assertNull(equipment_manager::get_equipped($sid, 'title'));
     }
@@ -221,7 +221,7 @@ final class equipment_test extends \advanced_testcase {
         $this->resetAfterTest();
         $this->assertSame('frame',  equipment_manager::slot_for_item_type(2));
         $this->assertSame('accent', equipment_manager::slot_for_item_type(4));
-        $this->assertNull(equipment_manager::slot_for_item_type(3)); // стикер - без слота
+        $this->assertSame('sticker', equipment_manager::slot_for_item_type(3)); // стикер - слот
     }
 
     public function test_three_slots_coexist(): void {

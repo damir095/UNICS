@@ -14,12 +14,13 @@ class equipment_manager {
 
     /** Тип товара (unics_shop_items.item_type) -> слот. Расширяется одной строкой. */
     const ITEM_TYPE_SLOT = [
-        1 => 'title',  // Титул/звание
-        2 => 'frame',  // Рамка аватара
-        4 => 'accent', // Акцент дашборда
+        1 => 'title',   // Титул/звание
+        2 => 'frame',   // Рамка аватара
+        3 => 'sticker', // Стикер-карточка (носимый любимый стикер)
+        4 => 'accent',  // Акцент дашборда
     ];
 
-    /** Слот для типа товара, или null (тип без слота - напр. стикеры type=3). */
+    /** Слот для типа товара, или null (тип без слота, напр. несуществующий/резервный). */
     public static function slot_for_item_type(int $item_type): ?string {
         return self::ITEM_TYPE_SLOT[$item_type] ?? null;
     }
