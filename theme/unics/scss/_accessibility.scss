@@ -46,7 +46,7 @@ html.unics-a11y-dark {
     // Нейтральные поверхности -> тёмная приподнятая поверхность / лёгкий оверлей.
     --unics-neutral-bg:      var(--unics-surface-2);
     --unics-activity-hover:  var(--unics-surface-2);
-    --unics-table-head-bg:    #322b2c;   // тёплый тёмный заголовок
+    --unics-table-head-bg:    #322b2c;   // теплый темный заголовок
     --unics-table-head-text:  #f0cabb;
     --unics-table-head-border:#4a3b39;
     --unics-table-border:     #39404e;
@@ -91,8 +91,8 @@ html.unics-a11y-dark {
     --bs-body-color: var(--unics-text);
     // `.generaltable { color: var(--bs-emphasis-color); }` (ядро Boost) + наследование
     // ячеек (`.generaltable tbody td/th { color: inherit; }`, тоже ядро) - без этого
-    // переопределения текст ЛЮБОЙ generaltable-таблицы на тёмной теме остаётся почти
-    // чёрным (bs-emphasis-color по умолчанию тёмный) поверх тёмного фона - невидим.
+    // переопределения текст ЛЮБОЙ generaltable-таблицы на темной теме остается почти
+    // черным (bs-emphasis-color по умолчанию темный) поверх темного фона - невидим.
     // Найдено при проверке контраста новой системы таблиц; чиним у истока (переменная
     // Bootstrap), а не точечными !important по ячейкам.
     --bs-emphasis-color: var(--unics-text);
@@ -280,9 +280,9 @@ html.unics-a11y-dark {
     // Таблицы. Bootstrap 5 красит строки через --bs-table-*; иначе striped/hover
     // дают белый фон поверх тёмной страницы.
     // .generaltable/.unics-table исключены (:not()) - они несут единую систему
-    // «Мягкие карточки» (_tables.scss) и берут тёмную палитру из --unics-table-*
+    // «Мягкие карточки» (_tables.scss) и берут темную палитру из --unics-table-*
     // токенов выше (head-bg/stripe/row-hover и т.д.), а не из этого блока -
-    // иначе более специфичный селектор здесь забивал бы их тёплую тёмную палитру
+    // иначе более специфичный селектор здесь забивал бы их теплую темную палитру
     // серым нейтральным оверлеем.
     .table:not(.generaltable):not(.unics-table) {
         --bs-table-bg: transparent;
@@ -300,8 +300,8 @@ html.unics-a11y-dark {
         // страницу, thead/striped-оверлеи остаются.
         background-color: transparent;
     }
-    .table th,
-    .table td {
+    .table:not(.generaltable):not(.unics-table) th,
+    .table:not(.generaltable):not(.unics-table) td {
         border-color: var(--unics-border);
     }
     .table:not(.generaltable):not(.unics-table) thead th,

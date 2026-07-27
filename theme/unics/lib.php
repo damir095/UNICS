@@ -85,7 +85,7 @@ function theme_unics_get_extra_scss($theme): string {
         '_layout',
         '_login',
         '_unics-pages',
-        '_tables',        // единая система таблиц (после наших страниц, до core и тёмной темы)
+        '_tables',        // единая система таблиц (после наших страниц, до core и темной темы)
         // Оболочка под роль (G3): боковой рельс + центр уведомлений (toast - позже).
         // После _unics-pages (наши страницы — эталон), перед core/accessibility.
         '_shell-rail',

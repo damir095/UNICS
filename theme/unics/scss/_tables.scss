@@ -1,13 +1,13 @@
 /*
  * Единая система таблиц «Мягкие карточки».
- * Бьёт по .generaltable (ядро/html_writer) и .unics-table (наши mustache).
+ * Бьет по .generaltable (ядро/html_writer) и .unics-table (наши mustache).
  * Разметка наших таблиц: .table-responsive > table.table.table-striped.table-hover.unics-table
- *   (+ .unics-compact для плотных матриц). generaltable ядро уже несёт .table-striped.table-hover.
- * Цвета/плотности - из токенов --unics-table-* (_variables); тёмная A1 их переопределяет
+ *   (+ .unics-compact для плотных матриц). generaltable ядро уже несет .table-striped.table-hover.
+ * Цвета/плотности - из токенов --unics-table-* (_variables); темная A1 их переопределяет
  * (_accessibility) последней по каскаду.
  */
 
-// Карточка-обёртка: рамка, радиус, мягкая тень, горизонтальный скролл на узких.
+// Карточка-обертка: рамка, радиус, мягкая тень, горизонтальный скролл на узких.
 .table-responsive {
     border: 1px solid var(--unics-table-border);
     border-radius: var(--unics-radius);
@@ -28,9 +28,9 @@
     --bs-table-border-color: var(--unics-table-row-border);
 
     width: 100%;
-    margin-bottom: 0;   // рамку/радиус даёт .table-responsive
+    margin-bottom: 0;   // рамку/радиус дает .table-responsive
 
-    // Фирменная тёплая шапка.
+    // Фирменная теплая шапка.
     thead th,
     thead td,
     th.header {
