@@ -115,6 +115,14 @@ final class org_report_template_test extends \advanced_testcase {
         $this->assertStringContainsString('падение динамики &gt; 10 п.п.', $html);
         $this->assertStringContainsString('нет сданных тестов &gt; 21 дн.', $html);
 
+        // Единая система таблиц (задача 3 tables-redesign): таблица отчета
+        // обернута в table-responsive и несет table-striped table-hover
+        // unics-table; старая разметка table-sm/table-bordered не осталась.
+        $this->assertSame(1, substr_count($html, 'table-responsive'));
+        $this->assertStringContainsString('table table-striped table-hover unics-table', $html);
+        $this->assertStringNotContainsString('table-sm', $html);
+        $this->assertStringNotContainsString('table-bordered', $html);
+
         // Экранирование пользовательских данных не протекло тегами.
         $this->assertStringNotContainsString('<орг>', $html);
         $this->assertStringNotContainsString('<тест>', $html);

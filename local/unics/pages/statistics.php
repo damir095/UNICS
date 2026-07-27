@@ -125,7 +125,7 @@ function local_unics_build_slice_ctx(string $title, string $colhead, array $aggs
         $chart_html = $OUTPUT->render_chart($chart, false);
     }
     $t = new html_table();
-    $t->attributes['class'] = 'table table-striped table-hover';
+    $t->attributes['class'] = 'table table-striped table-hover unics-table unics-compact';
     $t->head = [$colhead, 'Учащихся', 'Активны', 'Ср. балл', 'Завершаемость',
         'Просмотры', 'Время', 'Тесты', 'УМК', 'Смен уровня'];
     foreach ($aggs as $label => $a) {
@@ -256,7 +256,7 @@ if (!$codifiers_all) {
             $codifier_ctx['no_elements'] = true;
         } else {
             $t = new html_table();
-            $t->attributes['class'] = 'table table-striped table-hover';
+            $t->attributes['class'] = 'table table-striped table-hover unics-table';
             $t->head = ['Элемент содержания', 'Средний %', 'Оценок (пар)'];
             foreach ($prog as $r) {
                 $indent = str_repeat('&nbsp;&nbsp;&nbsp;', (int)$r->depth);

@@ -90,6 +90,16 @@ final class gradebook_template_test extends \advanced_testcase {
         $this->assertStringContainsString('<td><span class="badge badge-warning">3.3</span></td>', $html);
         $this->assertStringContainsString('PAGEMARK', $html);
         $this->assertStringNotContainsString('<xss>', $html);
+
+        // Единая система таблиц (задача 3 tables-redesign): матрица журнала -
+        // плотная (unics-compact) поверх системы (unics-table), с сохраненным
+        // unics-gradebook (стили ячеек-карандашей); обертка table-responsive
+        // уже была одна (не задваивается), старая разметка не осталась.
+        $this->assertSame(1, substr_count($html, 'table-responsive'));
+        $this->assertStringContainsString(
+            'table table-striped table-hover unics-table unics-compact unics-gradebook', $html);
+        $this->assertStringNotContainsString('table-sm', $html);
+        $this->assertStringNotContainsString('table-bordered', $html);
     }
 
     /** Вид «по заданиям»: именованные колонки + footer-строка средних. */

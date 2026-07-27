@@ -28,7 +28,8 @@
     {{/charts}}
 </div>
 {{#risk_toggle}}<p><a href="{{url}}" class="{{cls}}">{{label}}</a></p>{{/risk_toggle}}
-<table class="table table-sm table-bordered table-hover">
+<div class="table-responsive">
+<table class="table table-striped table-hover unics-table">
     <thead class="table-light"><tr>
         <th>Учащийся</th><th>Класс</th><th>Категория</th><th>Уровень</th>
         <th>Средний балл</th><th>Риск</th><th>Курсов</th><th>УМК</th><th>Отчёт</th>
@@ -49,6 +50,7 @@
         {{/rows}}
     </tbody>
 </table>
+</div>
 {{#org_avg}}<p class="mt-2"><strong>Средний балл по организации:</strong> <span class="badge badge-{{badge_class}} badge-lg">{{text}}</span> (по последним 5 тестам каждого учащегося)</p>{{/org_avg}}
 {{#risk_alert}}<div class="alert alert-warning mt-3"><strong>Рекомендации по группе риска:</strong> индивидуальная консультация педагога; пересмотр уровня сложности; генерация повторного УМК по слабым темам; контакт с родителями. Критерии риска: средний балл &lt; {{low_avg_text}}, падение динамики &gt; {{trend_drop}} п.п., нет сданных тестов &gt; {{idle_days}} дн.</div>{{/risk_alert}}
 {{/report}}
