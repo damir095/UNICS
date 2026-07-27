@@ -107,7 +107,7 @@
 /* ---- Таблицы ---- */
 /* #0D47A1 ≈ 8.7:1 на #E3F2FD - AAA. Решает axe color-contrast 2.73:1
    (var(--unics-primary) → #F26545 из темы) для ВСЕХ таблиц плагин-страниц. */
-.path-local-unics .table thead th {
+.path-local-unics .table:not(.unics-table) thead th {
     background: #E3F2FD;
     color: #0D47A1;
     font-size: .8rem;
@@ -115,7 +115,7 @@
     letter-spacing: .05em;
     border-bottom: 2px solid var(--unics-accent) !important;
 }
-.path-local-unics .table td {
+.path-local-unics .table:not(.unics-table) td {
     vertical-align: middle;
 }
 
