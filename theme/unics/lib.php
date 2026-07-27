@@ -68,6 +68,7 @@ function theme_unics_get_pre_scss($theme): string {
  *   _layout     → typography, links, sidebar, body
  *   _login      → login page only
  *   _unics-pages → plugin-specific (local_unics) components
+ *   _tables     → единая система таблиц «Мягкие карточки» (.generaltable/.unics-table)
  *
  * @param theme_config $theme
  * @return string SCSS
@@ -84,6 +85,7 @@ function theme_unics_get_extra_scss($theme): string {
         '_layout',
         '_login',
         '_unics-pages',
+        '_tables',        // единая система таблиц (после наших страниц, до core и тёмной темы)
         // Оболочка под роль (G3): боковой рельс + центр уведомлений (toast - позже).
         // После _unics-pages (наши страницы — эталон), перед core/accessibility.
         '_shell-rail',

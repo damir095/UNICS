@@ -46,9 +46,14 @@ html.unics-a11y-dark {
     // Нейтральные поверхности -> тёмная приподнятая поверхность / лёгкий оверлей.
     --unics-neutral-bg:      var(--unics-surface-2);
     --unics-activity-hover:  var(--unics-surface-2);
-    --unics-table-head-bg:   var(--unics-surface-2);
-    --unics-table-stripe:    rgba(255, 255, 255, .045);
-    --unics-table-row-hover: rgba(255, 255, 255, .08);
+    --unics-table-head-bg:    #322b2c;   // тёплый тёмный заголовок
+    --unics-table-head-text:  #f0cabb;
+    --unics-table-head-border:#4a3b39;
+    --unics-table-border:     #39404e;
+    --unics-table-stripe:     #272c36;
+    --unics-table-row-border: #333a47;
+    --unics-table-row-hover:  #2f3743;
+    --unics-table-shadow:     0 1px 2px rgba(0,0,0,.4);
     // Семантика: ФОН (`-bg`) -> тёмный тинт; "цвет" (используется как текст /
     // бордер / глиф ✓✗) -> СВЕТЛЫЙ тинт, читаемый на тёмном тинте (AA).
     // Единственное место, где `--unics-error` - это ФОН (с белым текстом), -
@@ -84,6 +89,13 @@ html.unics-a11y-dark {
     // светлым #F5F6F9 на тёмной теме. Привязываем к нашим тёмным токенам.
     --bs-body-bg: var(--unics-bg);
     --bs-body-color: var(--unics-text);
+    // `.generaltable { color: var(--bs-emphasis-color); }` (ядро Boost) + наследование
+    // ячеек (`.generaltable tbody td/th { color: inherit; }`, тоже ядро) - без этого
+    // переопределения текст ЛЮБОЙ generaltable-таблицы на тёмной теме остаётся почти
+    // чёрным (bs-emphasis-color по умолчанию тёмный) поверх тёмного фона - невидим.
+    // Найдено при проверке контраста новой системы таблиц; чиним у истока (переменная
+    // Bootstrap), а не точечными !important по ячейкам.
+    --bs-emphasis-color: var(--unics-text);
 
     background-color: var(--unics-bg);
     color: var(--unics-text);
@@ -267,7 +279,12 @@ html.unics-a11y-dark {
 
     // Таблицы. Bootstrap 5 красит строки через --bs-table-*; иначе striped/hover
     // дают белый фон поверх тёмной страницы.
-    .table {
+    // .generaltable/.unics-table исключены (:not()) - они несут единую систему
+    // «Мягкие карточки» (_tables.scss) и берут тёмную палитру из --unics-table-*
+    // токенов выше (head-bg/stripe/row-hover и т.д.), а не из этого блока -
+    // иначе более специфичный селектор здесь забивал бы их тёплую тёмную палитру
+    // серым нейтральным оверлеем.
+    .table:not(.generaltable):not(.unics-table) {
         --bs-table-bg: transparent;
         --bs-table-color: var(--unics-text);
         --bs-table-striped-bg: rgba(255, 255, 255, .045);
@@ -287,7 +304,7 @@ html.unics-a11y-dark {
     .table td {
         border-color: var(--unics-border);
     }
-    .table thead th,
+    .table:not(.generaltable):not(.unics-table) thead th,
     .table-light,
     .table-light th,
     .table-light td,

@@ -45,16 +45,10 @@
     &--arts      { border-left-color: #9C4F9C; }
 }
 
-// Таблица отчётов УНИКС — горизонтальный скролл на мобильных (plan §4.5).
-.unics-report-table {
-    width: 100%;
-
-    @media (max-width: 575.98px) {
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-}
+// Таблица отчётов УНИКС: класс .unics-report-table удалён (2026-07-27) — не
+// использовался ни в одном шаблоне/странице, а его правила (width:100%,
+// мобильный overflow-x) полностью дублировали новую единую систему таблиц
+// «Мягкие карточки» (.table-responsive + .unics-table, см. _tables.scss).
 
 // -----------------------------------------------------------------------------
 // Бейджи статусов (используются в student_report, dashboard, очереди ИИ).

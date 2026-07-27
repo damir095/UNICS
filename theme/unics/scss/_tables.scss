@@ -1,0 +1,80 @@
+/*
+ * Единая система таблиц «Мягкие карточки».
+ * Бьёт по .generaltable (ядро/html_writer) и .unics-table (наши mustache).
+ * Разметка наших таблиц: .table-responsive > table.table.table-striped.table-hover.unics-table
+ *   (+ .unics-compact для плотных матриц). generaltable ядро уже несёт .table-striped.table-hover.
+ * Цвета/плотности - из токенов --unics-table-* (_variables); тёмная A1 их переопределяет
+ * (_accessibility) последней по каскаду.
+ */
+
+// Карточка-обёртка: рамка, радиус, мягкая тень, горизонтальный скролл на узких.
+.table-responsive {
+    border: 1px solid var(--unics-table-border);
+    border-radius: var(--unics-radius);
+    box-shadow: var(--unics-table-shadow);
+    overflow: auto hidden;
+    background: var(--unics-surface);
+}
+
+.generaltable,
+.unics-table {
+    // Bootstrap-механика полос/ховера через CSS-переменные .table - подменяем токенами.
+    --bs-table-bg: var(--unics-surface);
+    --bs-table-color: var(--unics-text);
+    --bs-table-striped-bg: var(--unics-table-stripe);
+    --bs-table-striped-color: var(--unics-text);
+    --bs-table-hover-bg: var(--unics-table-row-hover);
+    --bs-table-hover-color: var(--unics-text);
+    --bs-table-border-color: var(--unics-table-row-border);
+
+    width: 100%;
+    margin-bottom: 0;   // рамку/радиус даёт .table-responsive
+
+    // Фирменная тёплая шапка.
+    thead th,
+    thead td,
+    th.header {
+        background-color: var(--unics-table-head-bg);
+        color: var(--unics-table-head-text);
+        border-bottom: 2px solid var(--unics-table-head-border);
+        font-weight: 600;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    // Ячейки: плотность из токенов, только горизонтальные разделители (без вертикальных линий).
+    th,
+    td {
+        padding: var(--unics-table-cell-y) var(--unics-table-cell-x);
+        vertical-align: middle;
+        border-top: 1px solid var(--unics-table-row-border);
+        border-left: 0;
+        border-right: 0;
+        border-bottom: 0;
+    }
+
+    // Ссылки сортировки в шапке наследуют цвет шапки (не оранжевый ссылочный).
+    thead th a {
+        color: var(--unics-table-head-text);
+        text-decoration: none;
+
+        &:hover,
+        &:focus {
+            color: var(--unics-primary-text);
+            text-decoration: underline;
+        }
+    }
+}
+
+// Плотная плотность (журнал-матрица, статистика): применяется к таблице классом .unics-compact.
+.unics-compact {
+    font-size: .9375rem;
+    --unics-table-cell-y: var(--unics-table-cell-y-compact);
+    --unics-table-cell-x: var(--unics-table-cell-x-compact);
+}
+
+// Числовые столбцы: выравнивание вправо + табличные цифры.
+.unics-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}

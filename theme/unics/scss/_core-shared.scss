@@ -3,13 +3,14 @@
 //
 // Единая визуальная грамматика для элементов, которые встречаются на ВСЕХ
 // core-поверхностях (курс, mod, тест, журнал, settings): вкладки страницы,
-// generic-таблицы, формы mform, алерты. Цель — чтобы граница "наши страницы"
+// формы mform, алерты. Цель — чтобы граница "наши страницы"
 // (_unics-pages) <-> "ядро Moodle" не читалась глазом (DESIGN_BRIEF §Solution).
 //
 // Что НЕ дублируем здесь (уже покрыто раньше по каскаду):
 //   - #page-header (фирменный баннер) — _navbar.scss
 //   - form-control / focus-ring         — _forms.scss
 //   - ссылки / типографика / #courseindex база — _layout.scss
+//   - generic-таблицы (.generaltable/.unics-table) — _tables.scss (единая система «Мягкие карточки»)
 // Здесь только то, чего ещё нет, и только в светлой теме. Тёмная/контраст
 // перекрываются позже в _accessibility.scss (per-user A1), поэтому селекторы
 // держим без !important там, где это возможно.
@@ -63,66 +64,6 @@
         background-color: transparent;
         border-bottom-color: var(--unics-primary);
         font-weight: 600;
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Generic-таблицы ядра (table.generaltable): участники, отчёты, списки.
-// Разметка: table.flexible.table.table-striped.table-hover.generaltable,
-// обёрнута в .table-responsive (горизонтальный скролл на узких экранах — ядро
-// уже умеет, сохраняем). Брендируем через --bs-table-* (как это делает тёмная
-// тема в _accessibility) + фирменный заголовок. Staff-плотность.
-// -----------------------------------------------------------------------------
-.table-responsive {
-    // Скруглённая рамка вокруг таблицы — карточный вид, как у наших блоков.
-    border: 1px solid var(--unics-table-border);
-    border-radius: var(--unics-radius);
-    overflow: auto hidden;   // вертикаль не режем, горизонталь — скролл (мобайл)
-}
-
-.generaltable {
-    // Bootstrap 5 управляет полосами/ховером через CSS-переменные на .table —
-    // подменяем их нашими токенами вместо переопределения фонов напрямую.
-    --bs-table-bg: var(--unics-surface);
-    --bs-table-color: var(--unics-text);
-    --bs-table-striped-bg: var(--unics-table-stripe);
-    --bs-table-striped-color: var(--unics-text);
-    --bs-table-hover-bg: var(--unics-table-row-hover);
-    --bs-table-hover-color: var(--unics-text);
-    --bs-table-border-color: var(--unics-table-border);
-
-    margin-bottom: 0;   // рамку/радиус даёт .table-responsive — лишний зазор снизу убираем
-
-    // Фирменный заголовок: нейтральный фон, тёмный текст (~13:1), вес.
-    thead th,
-    thead td,
-    th.header {
-        background-color: var(--unics-table-head-bg);
-        color: var(--unics-table-head-text);
-        border-bottom: 2px solid var(--unics-table-border);
-        font-weight: 600;
-        vertical-align: middle;
-    }
-
-    // Ячейки — staff-плотность из токенов, читаемое вертикальное выравнивание.
-    th,
-    td {
-        padding: var(--unics-table-cell-y) var(--unics-table-cell-x);
-        vertical-align: middle;
-        border-color: var(--unics-table-border);
-    }
-
-    // Ссылки сортировки в шапке наследуют тёмный текст заголовка (а не оранжевый
-    // ссылочный) — иначе шапка пестрит; акцент оставляем активной сортировке.
-    thead th a {
-        color: var(--unics-table-head-text);
-        text-decoration: none;
-
-        &:hover,
-        &:focus {
-            color: var(--unics-primary-text);
-            text-decoration: underline;
-        }
     }
 }
 

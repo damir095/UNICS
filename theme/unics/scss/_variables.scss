@@ -100,14 +100,21 @@
     --unics-activity-hover:   #eef0f4;   // = neutral-bg: подсветка строки активности при наведении
     --unics-current-marker:   var(--unics-primary);  // маркер текущей секции/активности (всегда в паре с меткой/иконкой)
 
-    // Таблицы журнала/оценок/отчётов (staff-плотность).
-    --unics-table-head-bg:    #eef0f4;   // нейтральный фирменный заголовок (текст #1F2430 = ~13:1)
-    --unics-table-head-text:  var(--unics-text);
-    --unics-table-border:     var(--unics-border);
-    --unics-table-stripe:     #f7f8fb;   // zebra: очень мягкая
-    --unics-table-row-hover:  #e9ecf2;   // заметный hover строки
-    --unics-table-cell-y:     var(--unics-space-2);  // 8px вертикальный padding ячейки
-    --unics-table-cell-x:     var(--unics-space-3);  // 12px горизонтальный padding ячейки
+    // Таблицы (единая система «Мягкие карточки»). Тёплый фирменный тон.
+    --unics-table-head-bg:    #fbe9e3;   // мягкий персик (шапка)
+    --unics-table-head-text:  #8f3a22;   // глубокий коралл, AA на персике
+    --unics-table-head-border:#f0c7b9;   // граница под шапкой
+    --unics-table-border:     var(--unics-border);  // внешняя рамка карточки
+    --unics-table-stripe:     #faf7f5;   // тёплая мягкая зебра
+    --unics-table-row-border: #edeff3;   // hairline между строками
+    --unics-table-row-hover:  #f4ece9;   // hover строки
+    --unics-table-shadow:     0 1px 3px rgba(20,24,32,.06), 0 6px 18px rgba(20,24,32,.05);
+    // Плотность «удобная» (по умолчанию): кегль наследуется от body.
+    --unics-table-cell-y:     12px;
+    --unics-table-cell-x:     16px;
+    // Плотность «компактная» (переопределяется классом .unics-compact).
+    --unics-table-cell-y-compact: 7px;
+    --unics-table-cell-x-compact: 11px;
     --unics-row-min:          2.5rem;    // минимальная высота строки staff-таблицы (40px)
 
     // -------------------------------------------------------------------------
