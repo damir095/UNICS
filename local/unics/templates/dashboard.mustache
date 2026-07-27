@@ -118,7 +118,8 @@
 <h2 class="unics-section-title">Последние генерации УМК</h2>
 {{#empty}}<p class="text-muted">УМК ещё не создавались.</p>{{/empty}}
 {{^empty}}
-<table class="table table-sm table-bordered">
+<div class="table-responsive">
+<table class="table table-striped table-hover unics-table">
     <thead class="table-light"><tr>
         <th>Материал</th><th>Уровень</th><th>Учащихся</th><th>Статус</th><th>Дата</th>
     </tr></thead>
@@ -134,23 +135,26 @@
         {{/rows}}
     </tbody>
 </table>
+</div>
 {{/empty}}
 {{/umk_table}}
 {{#grades_table}}
 <h2 class="unics-section-title">Последние тесты</h2>
-<table class="table table-sm table-bordered">
-    <thead class="table-light"><tr><th>Тест</th><th>Курс</th><th>Балл</th><th>%</th></tr></thead>
+<div class="table-responsive">
+<table class="table table-striped table-hover unics-table">
+    <thead class="table-light"><tr><th>Тест</th><th>Курс</th><th class="unics-num">Балл</th><th class="unics-num">%</th></tr></thead>
     <tbody>
         {{#rows}}
         <tr>
             <td>{{quiz}}</td>
             <td>{{course}}</td>
-            <td>{{score}}</td>
-            <td><span class="badge badge-{{tone}}">{{pct}}%</span></td>
+            <td class="unics-num">{{score}}</td>
+            <td class="unics-num"><span class="badge badge-{{tone}}">{{pct}}%</span></td>
         </tr>
         {{/rows}}
     </tbody>
 </table>
+</div>
 {{/grades_table}}
 {{#children_cards}}
 <h2 class="unics-section-title">Мои дети</h2>

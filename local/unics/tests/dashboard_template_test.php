@@ -110,6 +110,17 @@ final class dashboard_template_test extends \advanced_testcase {
         $this->assertStringContainsString('unics-lvl unics-lvl-2', $html);
         $this->assertStringContainsString('badge badge-warning', $html);
         $this->assertStringContainsString('71.9%', $html);
+
+        // Единая система таблиц (задача 2 tables-redesign): обе таблицы (УМК, тесты)
+        // обернуты в table-responsive и несут table-striped table-hover unics-table;
+        // старая разметка table-sm/table-bordered не должна остаться нигде.
+        $this->assertSame(2, substr_count($html, 'table-responsive'));
+        $this->assertSame(2, substr_count($html, 'table table-striped table-hover unics-table'));
+        $this->assertStringNotContainsString('table-sm', $html);
+        $this->assertStringNotContainsString('table-bordered', $html);
+        // Числовые столбцы (Балл/%) таблицы последних тестов помечены unics-num
+        // (2 заголовка + 2 ячейки на единственную строку фикстуры).
+        $this->assertSame(4, substr_count($html, 'unics-num'));
     }
 
     public function test_minimal_context_renders_welcome_only(): void {
@@ -127,6 +138,7 @@ final class dashboard_template_test extends \advanced_testcase {
         $this->assertStringNotContainsString('Быстрые действия', $html);
         $this->assertStringNotContainsString('stat-value', $html);
         $this->assertStringNotContainsString('<tbody>', $html);
+        $this->assertStringNotContainsString('table-responsive', $html);
     }
 
     /**

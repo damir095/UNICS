@@ -197,6 +197,18 @@ final class student_report_template_test extends \advanced_testcase {
         // Экранирование: пользовательский текст не протек тегами.
         $this->assertStringNotContainsString('<script>alert(1)</script>', $html);
         $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $html);
+
+        // Единая система таблиц (задача 2 tables-redesign): все 6 таблиц отчета
+        // (тесты/задания, контрольные точки, повторения, пробелы, курсы, УМК)
+        // обернуты в table-responsive и несут table-striped table-hover unics-table;
+        // старая разметка table-sm/table-bordered нигде не осталась.
+        $this->assertSame(6, substr_count($html, 'table-responsive'));
+        $this->assertSame(6, substr_count($html, 'table table-striped table-hover unics-table'));
+        $this->assertStringNotContainsString('table-sm', $html);
+        $this->assertStringNotContainsString('table-bordered', $html);
+        // Числовые столбцы (балл/%): Баллы+Балл (тесты/задания, 2 строки), Балл
+        // (контрольные точки), Результат (повторения) - заголовки + ячейки.
+        $this->assertSame(10, substr_count($html, 'unics-num'));
     }
 
     /** Минимальный контекст = детский вид: staff-части не рисуются. */
@@ -240,5 +252,6 @@ final class student_report_template_test extends \advanced_testcase {
         $this->assertStringNotContainsString('chart-area', $html);
         $this->assertStringNotContainsString('Редактировать маршрут', $html);
         $this->assertStringNotContainsString('<tbody>', $html);
+        $this->assertStringNotContainsString('table-responsive', $html);
     }
 }
