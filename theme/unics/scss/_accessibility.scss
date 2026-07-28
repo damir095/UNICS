@@ -314,19 +314,38 @@ html.unics-a11y-dark {
         border-color: var(--unics-border);
     }
     // Контекстные строки/ячейки (группа риска, успех и т.п.).
+    // Полосатость/hover/active красятся box-shadow-ом через --bs-table-*-bg (не
+    // background-color) - переопределяем и их, иначе светлый bootstrap-оттенок
+    // просвечивает в темной теме на группе риска.
     .table-success, .table-success > th, .table-success > td {
+        --bs-table-bg: var(--unics-d-success-bg);
+        --bs-table-striped-bg: var(--unics-d-success-bg);
+        --bs-table-hover-bg: var(--unics-d-success-bg);
+        --bs-table-active-bg: var(--unics-d-success-bg);
         background-color: var(--unics-d-success-bg) !important;
         color: var(--unics-d-success-tx) !important;
     }
     .table-danger, .table-danger > th, .table-danger > td {
+        --bs-table-bg: var(--unics-d-danger-bg);
+        --bs-table-striped-bg: var(--unics-d-danger-bg);
+        --bs-table-hover-bg: var(--unics-d-danger-bg);
+        --bs-table-active-bg: var(--unics-d-danger-bg);
         background-color: var(--unics-d-danger-bg) !important;
         color: var(--unics-d-danger-tx) !important;
     }
     .table-warning, .table-warning > th, .table-warning > td {
+        --bs-table-bg: var(--unics-d-warning-bg);
+        --bs-table-striped-bg: var(--unics-d-warning-bg);
+        --bs-table-hover-bg: var(--unics-d-warning-bg);
+        --bs-table-active-bg: var(--unics-d-warning-bg);
         background-color: var(--unics-d-warning-bg) !important;
         color: var(--unics-d-warning-tx) !important;
     }
     .table-info, .table-info > th, .table-info > td {
+        --bs-table-bg: var(--unics-d-info-bg);
+        --bs-table-striped-bg: var(--unics-d-info-bg);
+        --bs-table-hover-bg: var(--unics-d-info-bg);
+        --bs-table-active-bg: var(--unics-d-info-bg);
         background-color: var(--unics-d-info-bg) !important;
         color: var(--unics-d-info-tx) !important;
     }
