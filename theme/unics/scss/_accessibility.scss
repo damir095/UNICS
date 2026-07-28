@@ -313,6 +313,15 @@ html.unics-a11y-dark {
         color: var(--unics-text);
         border-color: var(--unics-border);
     }
+    // Теплая темная шапка наших таблиц должна побеждать .table-light: конвертированные
+    // mustache-таблицы несут thead class="table-light", и правило .table-light th выше
+    // (0,2,2) иначе перекрывает системную шапку .unics-table thead th (0,1,2) нейтральным
+    // серым. Возвращаем теплый head-токен явно (0,2,3), как у generaltable-таблиц.
+    .generaltable thead th,
+    .unics-table thead th {
+        background-color: var(--unics-table-head-bg);
+        color: var(--unics-table-head-text);
+    }
     // Контекстные строки/ячейки (группа риска, успех и т.п.).
     // Полосатость/hover/active красятся box-shadow-ом через --bs-table-*-bg (не
     // background-color) - переопределяем и их, иначе светлый bootstrap-оттенок
