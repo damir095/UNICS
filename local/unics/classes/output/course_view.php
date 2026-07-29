@@ -191,7 +191,13 @@ class course_view {
                 }
             }
             $complete = ($done === count($tracked));
-            $sections[(string)$section->section] = ['done' => $done, 'total' => count($tracked), 'complete' => $complete];
+            $total = count($tracked);
+            $a = (object)['done' => $done, 'total' => $total];
+            $sections[(string)$section->section] = [
+                'done' => $done, 'total' => $total, 'complete' => $complete,
+                'label' => get_string('section_progress', 'local_unics', $a),
+                'aria' => get_string('section_progress_aria', 'local_unics', $a),
+            ];
             $themestotal++;
             if ($complete) {
                 $themesdone++;

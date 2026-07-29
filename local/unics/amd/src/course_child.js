@@ -120,10 +120,13 @@ define([], function() {
     }
 
     /**
-     * Прогресс секции («темы») в штатном месте под бейджи секции: «N/M» + мягкий бар, либо -
-     * если тема пройдена целиком - плашка вместо бара (числа уже не нужны). Идемпотентно.
+     * Прогресс секции («темы») в штатном месте под бейджи секции: готовая фраза secData.label
+     * («1 из 2») + мягкий бар, либо - если тема пройдена целиком - плашка вместо бара (числа уже
+     * не нужны). Фразы (label/aria) приходят готовыми из PHP (course_view::build_payload) -
+     * JS не склеивает строки payload с числами в слова, только с числовыми/пунктуационными
+     * подписями (см. renderCourseHeader). Идемпотентно.
      * @param {HTMLElement} li li#section-<num>
-     * @param {Object} secData {done, total, complete} - элемент data.sections
+     * @param {Object} secData {done, total, complete, label, aria} - элемент data.sections
      * @param {Object} strings data.strings
      */
     function renderSectionProgress(li, secData, strings) {
@@ -144,10 +147,11 @@ define([], function() {
             wrap.setAttribute('aria-valuenow', String(done));
             wrap.setAttribute('aria-valuemin', '0');
             wrap.setAttribute('aria-valuemax', String(total));
-            // aria-valuetext - словами, не только числами; строим только из строк payload.
-            wrap.setAttribute('aria-valuetext', (strings.done || '') + ' ' + done + '/' + total);
+            if (secData.aria) {
+                wrap.setAttribute('aria-valuetext', secData.aria);
+            }
             wrap.appendChild(el('div', 'unics-sec-progress-bar')).style.width = percentOf(done, total) + '%';
-            wrap.appendChild(el('span', 'unics-sec-progress-label', done + '/' + total));
+            wrap.appendChild(el('span', 'unics-sec-progress-label', secData.label || (done + '/' + total)));
         }
 
         var badges = li.querySelector('[data-region="sectionbadges"]');

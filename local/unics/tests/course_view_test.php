@@ -122,8 +122,14 @@ final class course_view_test extends \advanced_testcase {
         $this->assertSame($ctx['expectedSectionDone'], $p['sections'][$ctx['secnum']]['done']);
         $this->assertSame(count($ctx['trackedInSec']), $p['sections'][$ctx['secnum']]['total']);
         $this->assertFalse($p['sections'][$ctx['secnum']]['complete']);
+        // label/aria - готовая фраза для секции (JS не должен склеивать числа со словами сам).
+        $this->assertSame('1 из 3', $p['sections'][$ctx['secnum']]['label']);
+        $this->assertSame('Выполнено 1 из 3', $p['sections'][$ctx['secnum']]['aria']);
         // Секция 2 - обе активности выполнены, тема пройдена целиком.
-        $this->assertSame(['done' => 2, 'total' => 2, 'complete' => true], $p['sections']['2']);
+        $this->assertSame([
+            'done' => 2, 'total' => 2, 'complete' => true,
+            'label' => '2 из 2', 'aria' => 'Выполнено 2 из 2',
+        ], $p['sections']['2']);
     }
 
     public function test_next_step_is_first_available_incomplete(): void {
