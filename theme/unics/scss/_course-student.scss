@@ -24,9 +24,11 @@
 //       span.unics-tile (первый ребёнок, до .activity-icon)
 //       .activity-icon (нативная — скрываем, тайл её заменяет)
 //       .activity-name-area (d-flex flex-column) > .activitytitle + div.unics-act-sub
-//       .activity-completion (нативная — ОСТАВЛЯЕМ: у части активностей это
-//           единственный способ вручную отметить выполнение, прятать нельзя —
-//           см. task-4-report.md)
+//       .activity-completion (нативная): информационный дропдаун
+//           [data-region="completionrequirements"] (автоматическое отслеживание) —
+//           ПРЯЧЕМ (дублирует наш чип текстом); кнопка-действие
+//           [data-action="toggle-manual-completion"] (ручная отметка) — НЕ трогаем,
+//           реальное действие ребёнка. См. task-4-report.md (fix-отчёт).
 //       span.unics-chip.unics-chip-<done|todo|locked|continue|open>
 //     .activity-item > p.unics-lock-why (только у заблокированных, после grid)
 // =============================================================================
@@ -221,25 +223,35 @@
     .unics-act .activity-icon {
         display: none;
     }
-    // Нативный виджет выполнения (дропдаун "Выполнено"/"Надо сделать" с
-    // разбором критериев) НЕ прячем полностью, в отличие от иконки и
-    // .activity-availability: для части активностей (ручное отслеживание
-    // выполнения) это единственный способ отметить себя выполнившим задание,
-    // спрятать — значит сломать функциональность (проверено живьём: у части
-    // активностей дропдаун информационный, но заранее не отличить надёжно
-    // одну разметку от другой средствами CSS). Визуально уменьшаем и
-    // приглушаем — наш .unics-chip остаётся главным сигналом, это лишь
-    // вспомогательный контрол рядом. См. task-4-report.md.
+    // Нативный виджет выполнения — ДВЕ разные разметки ядра
+    // (course/format/templates/local/content/cm/completion.mustache), различаются
+    // структурно (не угадывание — прочитан код core_courseformat\output\local\
+    // content\cm\completion.php + core_course\output\activity_completion.php +
+    // подтверждено живьём временной активностью с ручным выполнением):
+    //   - Автоматическое отслеживание (cm.completion=2, isautomatic) - ВСЕГДА
+    //     рендерит информационный дропдаун [data-region="completionrequirements"]
+    //     (класс .completion-dropdown) - дублирует наш чип текстом, ручного
+    //     действия не даёт (клик просто раскрывает список критериев).
+    //   - Ручное отслеживание (cm.completion=1) под самим отслеживаемым
+    //     пользователем (istrackeduser - у ребёнка на СВОЕЙ странице курса это
+    //     всегда так) - рендерит РЕАЛЬНУЮ кнопку-действие
+    //     [data-action="toggle-manual-completion"], БЕЗ дропдорна вообще (два
+    //     блока в mustache взаимоисключающие по шаблонной логике: completiondialog
+    //     заполняется только когда isautomatic || (ismanual && !istrackeduser) -
+    //     для ребёнка на своей странице это условие истинно ТОЛЬКО при
+    //     автоматическом отслеживании).
+    // Прячем ТОЛЬКО информационный дропдаун (доступно - display:none, а не
+    // просто визуально: текст полностью дублирует наш чип, скрывать частично
+    // означало бы оставить скринридеру дубль). Кнопку ручной отметки НЕ трогаем
+    // вообще - это реальное действие ребёнка; она уже получает тач-цель 44px
+    // от ядрового правила `.activity-completion .btn` (_core-course.scss),
+    // подтверждено живьём (getBoundingClientRect().height === 44).
     .unics-act .activity-completion {
         grid-area: completion;
         align-self: center;
-
-        .completion-dropdown .btn {
-            min-height: auto;
-            padding: 3px var(--unics-space-2);
-            font-size: .8125rem;
-            opacity: .8;
-        }
+    }
+    .unics-act [data-region="completionrequirements"] {
+        display: none;
     }
 
     .unics-act-sub {
