@@ -26,7 +26,7 @@ function local_unics_dashboard_button(): string {
  * (там видны их курсы Moodle).
  */
 function local_unics_before_http_headers(): void {
-    global $DB, $USER, $PAGE;
+    global $DB, $USER, $PAGE, $COURSE;
     if (!isloggedin() || isguestuser()) {
         return;
     }
@@ -41,6 +41,20 @@ function local_unics_before_http_headers(): void {
     } catch (\Throwable $e) {
         // Нефатально - поллер просто не запустится.
         debugging('local_unics: подавленное исключение: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
+    }
+
+    // Ученический вид страницы курса (course/view.php, формат topics): дружелюбные карточки,
+    // прогресс, next-step. Только для ребенка и не в режиме редактирования.
+    try {
+        $coursepath = $PAGE->url ? $PAGE->url->get_path() : '';
+        if ($coursepath === '/course/view.php' && isset($COURSE) && $COURSE->id > 1
+                && $COURSE->format === 'topics'
+                && \local_unics\output\course_view::is_child_view($COURSE)) {
+            $payload = \local_unics\output\course_view::build_payload($COURSE, $USER->id);
+            $PAGE->requires->js_call_amd('local_unics/course_child', 'init', [$payload]);
+        }
+    } catch (\Throwable $e) {
+        debugging('local_unics course_child: ' . $e->getMessage(), DEBUG_DEVELOPER);
     }
 
     // Стандартный Moodle-дашборд (`/my/index.php`) и страница «Мои курсы»

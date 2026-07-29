@@ -219,3 +219,28 @@ $string['eventorganizationupdated'] = 'Organization updated';
 $string['eventorganizationdeleted'] = 'Organization deleted';
 $string['eventteacherstudentunassigned'] = 'Teacher unassigned from student';
 $string['eventparentstudentunassigned'] = 'Parent unassigned from student';
+
+// Ученический вид страницы курса (course/view.php, формат topics): карточки активностей,
+// прогресс, next-step (course-student-view). Значения русские - как принято в плагине.
+$string['status_done'] = 'Выполнено';
+$string['status_todo'] = 'Надо сделать';
+$string['status_locked'] = 'Заблокировано';
+$string['status_continue'] = 'Продолжить';
+$string['status_open'] = 'Открыть';
+$string['theme_done'] = 'Тема пройдена';
+$string['course_done'] = 'Курс пройден!';
+$string['course_progress_one'] = 'Пройдена {$a->done} тема из {$a->total}';
+$string['course_progress_few'] = 'Пройдено {$a->done} темы из {$a->total}';
+$string['course_progress_many'] = 'Пройдено {$a->done} тем из {$a->total}';
+$string['course_encourage'] = 'Отличное начало! Продолжай в своем темпе.';
+$string['continue_to'] = 'Продолжить: {$a}';
+$string['type_material'] = 'Материал для чтения';
+$string['type_quiz'] = 'Тест';
+$string['type_task'] = 'Задание';
+$string['type_cert'] = 'Сертификат';
+$string['type_other'] = 'Активность';
+$string['lock_completion'] = 'Откроется, когда пройдешь «{$a}».';
+$string['lock_date'] = 'Откроется {$a}.';
+$string['lock_grade'] = 'Откроется, когда наберешь нужный балл.';
+$string['lock_level'] = 'Откроется на твоем уровне.';
+$string['lock_generic'] = 'Откроется позже - сначала выполни предыдущие задания.';
