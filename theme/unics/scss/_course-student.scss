@@ -1,0 +1,352 @@
+// =============================================================================
+// Страница курса — ученический вид (course-student, дипломная доводка).
+//
+// local_unics ВЫЧИСЛЯЕТ и ДВИЖЕТ (course_view::build_payload + AMD
+// local_unics/course_child), theme_unics только СТИЛИЗУЕТ готовую разметку.
+// Контракт разметки (классы/структура) — task-3-report.md; здесь не меняется.
+//
+// Гейт: JS вешает body.unics-child-course ТОЛЬКО ребёнку вне режима
+// редактирования (серверная проверка — course_view::is_child_view). Все
+// правила ниже вложены в .unics-child-course — на педагога/админа/режим
+// редактирования не влияют вообще (класса на body нет).
+//
+// Разметка (см. course_child.js, task-3-report.md):
+//   .unics-course-head (перед .course-content)
+//     .unics-course-progress[role=progressbar] > .unics-course-progress-bar
+//     .unics-course-progress-label / .unics-course-encourage
+//     a.unics-cta  ИЛИ  p.unics-course-done  ИЛИ  ничего
+//   li.section > .section-item > .course-section-header > [data-region=sectionbadges]
+//     .unics-sec-progress[role=progressbar] > .unics-sec-progress-bar + .unics-sec-progress-label
+//     ИЛИ .unics-sec-progress.unics-sec-progress-done > .unics-sec-done
+//   li.activity.unics-act.unics-type-<type>[.unics-locked][.unics-next]
+//     .activity-item > .activity-grid (display:grid, ядровые именованные области
+//         icon/name/groupmode/completion/actions — см. theme/boost/style/moodle.css)
+//       span.unics-tile (первый ребёнок, до .activity-icon)
+//       .activity-icon (нативная — скрываем, тайл её заменяет)
+//       .activity-name-area (d-flex flex-column) > .activitytitle + div.unics-act-sub
+//       .activity-completion (нативная — ОСТАВЛЯЕМ: у части активностей это
+//           единственный способ вручную отметить выполнение, прятать нельзя —
+//           см. task-4-report.md)
+//       span.unics-chip.unics-chip-<done|todo|locked|continue|open>
+//     .activity-item > p.unics-lock-why (только у заблокированных, после grid)
+// =============================================================================
+
+.unics-child-course {
+
+    // -------------------------------------------------------------------------
+    // Шапка курса — карточка с общим прогрессом и CTA «Продолжить».
+    // Оранжевый баннер с названием курса уже даёт #page-header (_navbar.scss) —
+    // здесь только белое тело карточки под ним.
+    // -------------------------------------------------------------------------
+    .unics-course-head {
+        background: var(--unics-surface);
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius-lg);
+        box-shadow: var(--unics-shadow-md);
+        padding: var(--unics-density-child);
+        margin-bottom: var(--unics-section-gap);
+    }
+
+    // Бар — простой блочный div (не flex/grid), процентная ширина инлайн-стиля
+    // JS резолвится надёжно относительно ширины родителя (никакой двусмысленности,
+    // в отличие от прогресса секции ниже — там рядом ещё и подпись).
+    .unics-course-progress {
+        height: 14px;
+        border-radius: var(--unics-radius-pill);
+        background: var(--unics-neutral-bg);
+        overflow: hidden;
+        margin-bottom: var(--unics-space-3);
+    }
+    .unics-course-progress-bar {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--unics-primary-hover), var(--unics-primary));
+        transition: width var(--unics-duration-normal) var(--unics-ease-default);
+    }
+    .unics-course-progress-label {
+        margin: 0 0 var(--unics-space-1);
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--unics-text);
+        font-variant-numeric: tabular-nums;
+    }
+    .unics-course-encourage {
+        margin: 0 0 var(--unics-space-4);
+        color: var(--unics-text-muted);   // статичная карточка, фон не меняется по hover — AA безопасно
+    }
+
+    // CTA переиспользует размер/тач-цель .unics-cta (_buttons.scss, 60px) — здесь
+    // только фирменный вид (фон/цвет/раскладка), т.к. в разметке курса .unics-cta
+    // используется БЕЗ класса .btn (в отличие от messenger.php).
+    .unics-course-head .unics-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--unics-space-2);
+        background-color: var(--unics-primary-btn);
+        color: #fff;
+        text-decoration: none;
+
+        &::before {
+            content: "\25B6";           // ▶ декоративный треугольник «играть/продолжить»
+            font-size: .85em;
+        }
+        &:hover, &:focus, &:active {
+            background-color: var(--unics-primary-btn-hover);
+            color: #fff;
+            text-decoration: none;
+        }
+        &:focus, &:focus-visible {
+            box-shadow: var(--unics-focus-ring);
+            outline: none;
+        }
+    }
+
+    // Курс пройден целиком — без кнопки, зелёная строка с галочкой.
+    .unics-course-done {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--unics-space-2);
+        margin: var(--unics-space-2) 0 0;
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: var(--unics-success);
+
+        &::before { content: "\2713"; font-size: 1.2em; }
+    }
+
+    // -------------------------------------------------------------------------
+    // Прогресс секции (в штатном [data-region=sectionbadges], справа в шапке
+    // секции). Разметка кладёт подпись-текст РЯДОМ с баром внутри ОДНОГО общего
+    // div (в отличие от шапки курса, где подпись — отдельный сосед). Две грабли,
+    // проверенные живьём на course/view.php?id=21:
+    //   1. Простой блочный % от auto-ширины родителя (inline/flex без явной
+    //      ширины) даёт НЕОПРЕДЕЛЁННУЮ процентную базу — инлайн style="width:X%"
+    //      от JS схлопывается почти в 0.
+    //   2. Подпись, вынесенная absolute слева от узкой дорожки (right:100%),
+    //      выпадает из потока шапки секции и у длинных заголовков секции
+    //      («Климат и климатические пояса Земли») геометрически наезжает на
+    //      текст заголовка — тоже проверено живьём.
+    // Решение: .unics-sec-progress — flex-КОЛОНКА фиксированной ширины (только
+    // ширина колонки, а не сам бар, даёт надёжную процентную базу — на
+    // кросс-оси flex-элемента % резолвится предсказуемо, в отличие от
+    // основной оси), подпись и бар СТЕКОМ (подпись сверху, бар снизу —
+    // column-reverse разворачивает DOM-порядок [бар, подпись] в нужный
+    // визуальный [подпись, бар]). Колонка остаётся компактной фиксированной
+    // ширины и в потоке — не наезжает на заголовок независимо от его длины.
+    // Дорожка (фон под баром) — ::before колонки (красится ДО её детей, бар
+    // ложится поверх).
+    // -------------------------------------------------------------------------
+    .unics-sec-progress {
+        position: relative;
+        display: flex;
+        flex-direction: column-reverse;
+        align-items: flex-end;
+        gap: 2px;
+        width: 4.5rem;
+        margin-inline-start: var(--unics-space-3);
+
+        &::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 8px;
+            border-radius: var(--unics-radius-pill);
+            background: var(--unics-neutral-bg);
+        }
+    }
+    .unics-sec-progress-bar {
+        position: relative;   // обычный поток-ребёнок красится поверх ::before колонки выше
+        height: 8px;
+        border-radius: var(--unics-radius-pill);
+        background: linear-gradient(90deg, var(--unics-primary-hover), var(--unics-primary));
+        // ширина — инлайн от JS, резолвится относительно фиксированной ширины .unics-sec-progress.
+    }
+    .unics-sec-progress-label {
+        font-size: .875rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--unics-text);
+    }
+
+    // Тема пройдена целиком — бар/подпись заменены плашкой (снимаем track-стили).
+    .unics-sec-progress-done {
+        display: block;
+        width: auto;
+        margin-inline-start: 0;
+
+        &::before { content: none; }
+    }
+    .unics-sec-done {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px var(--unics-space-3);
+        border-radius: var(--unics-radius-pill);
+        background: var(--unics-success-bg);
+        color: var(--unics-success);
+        font-weight: 700;
+        font-size: .9375rem;
+
+        &::before { content: "\2713"; }
+    }
+
+    // -------------------------------------------------------------------------
+    // Карточка активности. .activity-grid — ядровый CSS Grid с именованными
+    // областями (icon/name/groupmode/completion/actions, theme/boost/style/
+    // moodle.css). Наши узлы вставлены JS без grid-area — без явного
+    // размещения тайл/чип встают в автопоток и наезжают на соседей (проверено
+    // живьём). Явно кладём их в существующие ядровые области:
+    //   .unics-tile  -> icon      (заменяет нативную .activity-icon визуально)
+    //   .unics-chip  -> actions   (у ученика она всегда пустая — не занята
+    //                              меню редактирования, проверено живьём)
+    // Так порядок в DOM (тайл, иконка, имя, completion, чип) не важен — сетка
+    // сама расставляет визуально «тайл слева / имя по центру / чип справа».
+    // -------------------------------------------------------------------------
+    .unics-tile {
+        grid-area: icon;
+        align-self: center;
+        width: var(--unics-touch-min);     // 44px — токен уже = нужному размеру тайла
+        height: var(--unics-touch-min);
+        border-radius: var(--unics-radius);
+        display: grid;
+        place-items: center;
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+    // Нативная иконка активности не нужна — тайл её полностью заменяет
+    // (разрешено контрактом task-3-report.md).
+    .unics-act .activity-icon {
+        display: none;
+    }
+    // Нативный виджет выполнения (дропдаун "Выполнено"/"Надо сделать" с
+    // разбором критериев) НЕ прячем полностью, в отличие от иконки и
+    // .activity-availability: для части активностей (ручное отслеживание
+    // выполнения) это единственный способ отметить себя выполнившим задание,
+    // спрятать — значит сломать функциональность (проверено живьём: у части
+    // активностей дропдаун информационный, но заранее не отличить надёжно
+    // одну разметку от другой средствами CSS). Визуально уменьшаем и
+    // приглушаем — наш .unics-chip остаётся главным сигналом, это лишь
+    // вспомогательный контрол рядом. См. task-4-report.md.
+    .unics-act .activity-completion {
+        grid-area: completion;
+        align-self: center;
+
+        .completion-dropdown .btn {
+            min-height: auto;
+            padding: 3px var(--unics-space-2);
+            font-size: .8125rem;
+            opacity: .8;
+        }
+    }
+
+    .unics-act-sub {
+        margin-top: 2px;
+        font-size: .875rem;
+        // НЕ --unics-text-muted: строка живёт внутри .activity-item, чей фон
+        // на hover становится --unics-activity-hover (=neutral-bg) — text-muted
+        // на нём даёт ~4.24:1 (провал AA). --unics-neutral достаточно тёмный
+        // и на белом, и на hover-фоне (см. таблицу контрастов в отчёте).
+        color: var(--unics-neutral);
+    }
+
+    // Единый статус-чип.
+    .unics-chip {
+        grid-area: actions;
+        justify-self: end;
+        align-self: center;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px var(--unics-space-4);
+        border-radius: var(--unics-radius-pill);
+        border: 1px solid transparent;
+        font-weight: 700;
+        font-size: .9375rem;
+        white-space: nowrap;
+        // Чип не самостоятельная тач-цель (span, без клика) — весь ряд
+        // .activity-item уже >= 44px (_core-course.scss), это и есть цель.
+    }
+    .unics-chip-done {
+        background: var(--unics-success-bg);
+        color: var(--unics-success);
+        border-color: var(--unics-success);
+        &::before { content: "\2713"; }
+    }
+    .unics-chip-todo {
+        background: var(--unics-warning-bg);
+        color: var(--unics-cchip-todo-tx);   // не --unics-warning: ~4.28:1 на этом фоне, ниже AA
+        border-color: var(--unics-warning);
+    }
+    .unics-chip-locked {
+        background: var(--unics-neutral-bg);
+        color: var(--unics-neutral);
+        border-color: var(--unics-neutral);
+    }
+    .unics-chip-continue {
+        background: var(--unics-primary-btn);   // фирменный коралл, тот же токен, что .btn-primary/.unics-cta
+        color: #fff;
+        border-color: var(--unics-primary-btn);
+        &::before { content: "\25B6"; font-size: .85em; }
+    }
+    .unics-chip-open {
+        // Нейтральный, но НЕ такой же плотный, как locked (иначе неотличимы) —
+        // контурный стиль на непрозрачной поверхности карточки: гарантирует AA
+        // и на белом, и на hover-фоне (см. таблицу контрастов в отчёте).
+        background: var(--unics-surface);
+        color: var(--unics-text-muted);
+        border-color: var(--unics-border);
+    }
+
+    // Next-step — тёплая подсветка всей карточки. Отдельно дублируем :hover:
+    // без него специфичность совпадает с ядровым .course-content .activity-item:hover
+    // (_core-course.scss, тоже 3 класса) - при наведении победил бы серый ядровой
+    // hover просто по порядку подключения партиалов. :hover добавляет 4-й класс
+    // специфичности - выигрываем без !important.
+    .unics-next .activity-item,
+    .unics-next .activity-item:hover {
+        background-color: var(--unics-highlight-bg);
+        border-color: var(--unics-highlight-border);
+    }
+
+    // Заблокировано — карточка приглушена, ссылки/клика нет (нет <a>), поэтому
+    // снимаем hover-подсветку ядра (_core-course.scss), чтобы не намекать на
+    // кликабельность там, где её нет.
+    .unics-locked {
+        opacity: .85;
+
+        .activity-item:hover {
+            background-color: transparent;
+            border-color: transparent;
+        }
+    }
+    // Нативное техническое объяснение блокировки (сырое условие доступности,
+    // напр. по полю профиля) прячем — заменено человекочитаемым .unics-lock-why
+    // из PHP (course_view::humanize_lock). Сама блокировка это не отменяет —
+    // .activity-availability чисто информационная, без обязательных действий.
+    .unics-locked .activity-availability {
+        display: none;
+    }
+    .unics-lock-why {
+        margin: 0 0 0 calc(var(--unics-touch-min) + var(--unics-space-3));   // под текст имени (тайл + отступ)
+        padding-bottom: var(--unics-space-2);
+        color: var(--unics-neutral);
+        font-size: .9375rem;
+    }
+
+    // -------------------------------------------------------------------------
+    // Цветовой код типов активностей (тайл). audio/video заведены по спеке
+    // заранее — сейчас course_view::activity_type_meta() их не определяет
+    // (аудио/видео сворачиваются в material), поэтому здесь эти два правила
+    // пока не задействуются реальными данными. См. task-4-report.md.
+    // -------------------------------------------------------------------------
+    .unics-type-material .unics-tile { background: var(--unics-ctype-material-bg); color: var(--unics-ctype-material); }
+    .unics-type-audio    .unics-tile { background: var(--unics-ctype-audio-bg);    color: var(--unics-ctype-audio); }
+    .unics-type-video    .unics-tile { background: var(--unics-ctype-video-bg);    color: var(--unics-ctype-video); }
+    .unics-type-quiz     .unics-tile { background: var(--unics-ctype-quiz-bg);     color: var(--unics-ctype-quiz); }
+    .unics-type-task     .unics-tile { background: var(--unics-ctype-task-bg);     color: var(--unics-ctype-task); }
+    .unics-type-cert     .unics-tile { background: var(--unics-ctype-cert-bg);     color: var(--unics-ctype-cert); }
+    .unics-type-other    .unics-tile { background: var(--unics-ctype-other-bg);    color: var(--unics-ctype-other); }
+}
