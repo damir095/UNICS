@@ -23,7 +23,7 @@ class course_view {
     ];
 
     /**
-     * Гейт «ученический вид»: текущий пользователь - ребёнок (запись unics_students)
+     * Гейт «ученический вид»: текущий пользователь - ребенок (запись unics_students)
      * и страница не в режиме редактирования. Педагог/методист/админ и режим
      * редактирования - штатный Moodle, ничего не подменяем.
      */
@@ -47,7 +47,7 @@ class course_view {
         ];
     }
 
-    /** done | todo | locked | open. $userid - чей прогресс считаем (ребёнок). */
+    /** done | todo | locked | open. $userid - чей прогресс считаем (ребенок). */
     private static function activity_status(\cm_info $cm, \completion_info $ci, int $userid): string {
         if (!$cm->available) {
             return 'locked';
@@ -113,18 +113,18 @@ class course_view {
     }
 
     /**
-     * Активность показывается ребёнку карточкой на странице курса: обычная (доступна)
+     * Активность показывается ребенку карточкой на странице курса: обычная (доступна)
      * или заблокированная с человекочитаемой причиной (уже вычислено ядром в
      * cm_info::is_visible_on_course_page() - учитывает и полное скрытие, и
      * availability-показ «серым с текстом»). Используется и для payload cms, и для
-     * подсчёта прогресса секции - иначе «N из M» разойдётся с числом видимых карточек
+     * подсчета прогресса секции - иначе «N из M» разойдется с числом видимых карточек
      * (у заблокированной активности uservisible=false, но карточка на странице есть).
      */
     private static function visible_to_child(\cm_info $cm): bool {
         return $cm->is_visible_on_course_page();
     }
 
-    /** Видимые ребёнку активности секции с включённым completion. @return \cm_info[] */
+    /** Видимые ребенку активности секции с включенным completion. @return \cm_info[] */
     private static function tracked_cms_in_section(\section_info $section, \course_modinfo $modinfo, \completion_info $ci): array {
         $res = [];
         foreach ($modinfo->get_cms() as $cm) {
