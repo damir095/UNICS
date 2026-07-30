@@ -9,7 +9,8 @@ defined('MOODLE_INTERNAL') || die();
  * Тесты хелпера данных ученического вида страницы курса
  * ({@see \local_unics\output\course_view::build_payload}, course/view.php, формат topics):
  * статусы карточек активностей, прогресс секции/курса (с русской формой числительного),
- * next-step, человекочитаемая причина блокировки, гейт is_child_view.
+ * next-step, уточнение под меткой типа (sub), человекочитаемая причина блокировки,
+ * гейт is_child_view.
  *
  * @package local_unics
  */
@@ -258,6 +259,203 @@ final class course_view_test extends \advanced_testcase {
         $this->assertSame('many', $method->invoke(null, 0));
         $this->assertSame('many', $method->invoke(null, 11));
         $this->assertSame('one', $method->invoke(null, 21));
+    }
+
+    /**
+     * Активность БЕЗ отслеживания выполнения и доступная - статус 'open' («Открыть»).
+     * Самая частая ветка на реальных курсах: completion у активности выключен, значит
+     * ни 'done', ни 'todo' быть не может (честно: не «выполнено», а «можно открыть»).
+     */
+    public function test_activity_without_completion_is_open(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(
+            ['numsections' => 1, 'format' => 'topics', 'enablecompletion' => 1],
+            ['createsections' => true]
+        );
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $page = $gen->create_module('page', ['course' => $course->id, 'section' => 1,
+            'completion' => COMPLETION_TRACKING_NONE]);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertSame('open', $p['cms'][(string)$page->cmid]['status']);
+    }
+
+    /**
+     * Курс, где выполнение не отслеживается ни у одной активности: тем для прогресса нет
+     * (course.total === 0) и next-step тоже нет. Это состояние, в котором AMD не рисует
+     * шапку курса вообще (ни бара, ни подписи, ни ободряющей строки).
+     */
+    public function test_course_without_tracked_activities_has_zero_total(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(
+            ['numsections' => 1, 'format' => 'topics', 'enablecompletion' => 1],
+            ['createsections' => true]
+        );
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $gen->create_module('page', ['course' => $course->id, 'section' => 1,
+            'completion' => COMPLETION_TRACKING_NONE]);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertSame(0, $p['course']['total']);
+        $this->assertSame(0, $p['course']['done']);
+        $this->assertSame([], $p['sections']);
+        $this->assertNull($p['next']);
+    }
+
+    /** Все отслеживаемые активности выполнены - next-step нет (состояние «Курс пройден!»). */
+    public function test_next_step_is_null_when_everything_is_done(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(
+            ['numsections' => 1, 'format' => 'topics', 'enablecompletion' => 1],
+            ['createsections' => true]
+        );
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $one = $gen->create_module('page', ['course' => $course->id, 'section' => 1,
+            'completion' => COMPLETION_TRACKING_AUTOMATIC]);
+        $two = $gen->create_module('page', ['course' => $course->id, 'section' => 1,
+            'completion' => COMPLETION_TRACKING_AUTOMATIC]);
+
+        $ci = new \completion_info($course);
+        $this->mark_done($ci, 'page', $one->cmid, $student->id);
+        $this->mark_done($ci, 'page', $two->cmid, $student->id);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertNull($p['next']);
+        $this->assertSame(1, $p['course']['done']);
+        $this->assertSame(1, $p['course']['total']);
+    }
+
+    /**
+     * Курс с одним тестом на $numquestions вопросов.
+     * @return array{0:\stdClass,1:\stdClass,2:\stdClass} курс, тест (модуль), студент
+     */
+    private function make_course_with_quiz_questions(int $numquestions): array {
+        global $CFG;
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['numsections' => 1, 'format' => 'topics'], ['createsections' => true]);
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $quiz = $gen->create_module('quiz', ['course' => $course->id, 'section' => 1]);
+
+        $qgen = $gen->get_plugin_generator('core_question');
+        $cat = $qgen->create_question_category();
+        for ($i = 0; $i < $numquestions; $i++) {
+            $question = $qgen->create_question('truefalse', null, ['category' => $cat->id]);
+            quiz_add_quiz_question($question->id, $quiz);
+        }
+
+        return [$course, $quiz, $student];
+    }
+
+    /** Тест с одним вопросом - единственное число («1 вопрос»). */
+    public function test_quiz_sub_uses_singular_form(): void {
+        [$course, $quiz, $student] = $this->make_course_with_quiz_questions(1);
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertSame('Тест', $p['cms'][(string)$quiz->cmid]['typeLabel']);
+        $this->assertSame('1 вопрос', $p['cms'][(string)$quiz->cmid]['sub']);
+    }
+
+    /** Тест с двумя вопросами - форма few («2 вопроса»). */
+    public function test_quiz_sub_uses_few_form(): void {
+        [$course, $quiz, $student] = $this->make_course_with_quiz_questions(2);
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertSame('2 вопроса', $p['cms'][(string)$quiz->cmid]['sub']);
+    }
+
+    /** Тест с пятью вопросами - форма many («5 вопросов»). */
+    public function test_quiz_sub_uses_many_form(): void {
+        [$course, $quiz, $student] = $this->make_course_with_quiz_questions(5);
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertSame('5 вопросов', $p['cms'][(string)$quiz->cmid]['sub']);
+    }
+
+    /** Тест без вопросов - подписи нет (число не показываем, а не пишем «0 вопросов»). */
+    public function test_quiz_without_questions_has_no_sub(): void {
+        [$course, $quiz, $student] = $this->make_course_with_quiz_questions(0);
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertNull($p['cms'][(string)$quiz->cmid]['sub']);
+    }
+
+    /** Задание - фиксированная подпись «с проверкой» (педагог проверит работу). */
+    public function test_assign_sub_is_checked_by_teacher(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['numsections' => 1, 'format' => 'topics'], ['createsections' => true]);
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $assign = $gen->create_module('assign', ['course' => $course->id, 'section' => 1]);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertSame('Задание', $p['cms'][(string)$assign->cmid]['typeLabel']);
+        $this->assertSame('с проверкой', $p['cms'][(string)$assign->cmid]['sub']);
+    }
+
+    /** У материалов уточнять нечего - метка типа уже говорящая, sub остается null. */
+    public function test_material_modules_have_no_sub(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['numsections' => 1, 'format' => 'topics'], ['createsections' => true]);
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $page = $gen->create_module('page', ['course' => $course->id, 'section' => 1]);
+        $this->setAdminUser();
+        $resource = $gen->create_module('resource', ['course' => $course->id, 'section' => 1]);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertNull($p['cms'][(string)$page->cmid]['sub']);
+        $this->assertNull($p['cms'][(string)$resource->cmid]['sub']);
+    }
+
+    /**
+     * Модуль без собственной страницы (mod_label) в payload не попадает: открывать нечего,
+     * чип «Открыть» был бы обманом. Соседняя обычная активность при этом на месте.
+     */
+    public function test_module_without_view_page_is_skipped(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['numsections' => 1, 'format' => 'topics'], ['createsections' => true]);
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $label = $gen->create_module('label', ['course' => $course->id, 'section' => 1]);
+        $page = $gen->create_module('page', ['course' => $course->id, 'section' => 1]);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertArrayNotHasKey((string)$label->cmid, $p['cms']);
+        $this->assertArrayHasKey((string)$page->cmid, $p['cms']);
+    }
+
+    /**
+     * Имя активности приходит в payload БЕЗ html-экранирования: AMD вставляет его через
+     * textContent, и «&» должен доехать до ребенка амперсандом, а не «&amp;».
+     */
+    public function test_activity_names_are_not_html_escaped(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(
+            ['numsections' => 1, 'format' => 'topics', 'enablecompletion' => 1],
+            ['createsections' => true]
+        );
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $gen->create_module('page', ['course' => $course->id, 'section' => 1,
+            'name' => 'Ноты & ритм', 'completion' => COMPLETION_TRACKING_AUTOMATIC]);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $this->assertNotNull($p['next']);
+        $this->assertStringContainsString('Ноты & ритм', $p['next']['label']);
+        $this->assertStringNotContainsString('&amp;', $p['next']['label']);
     }
 
     /**

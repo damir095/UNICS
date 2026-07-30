@@ -9,17 +9,17 @@ defined('MOODLE_INTERNAL') || die();
  */
 class course_view {
 
-    /** modname -> [ключ типа, css-класс, lang-ключ метки]. Прочие -> нейтральный 'other'. */
+    /** modname -> [ключ типа, lang-ключ метки]. Прочие -> нейтральный 'other'. */
     private const TYPES = [
-        'page'       => ['material', 'material', 'type_material'],
-        'resource'   => ['material', 'material', 'type_material'],
-        'book'       => ['material', 'material', 'type_material'],
-        'url'        => ['material', 'material', 'type_material'],
-        'quiz'       => ['quiz',     'quiz',     'type_quiz'],
-        'assign'     => ['task',     'task',     'type_task'],
-        'customcert' => ['cert',     'cert',     'type_cert'],
-        'scorm'      => ['quiz',     'quiz',     'type_quiz'],
-        'forum'      => ['other',    'other',    'type_other'],
+        'page'       => ['material', 'type_material'],
+        'resource'   => ['material', 'type_material'],
+        'book'       => ['material', 'type_material'],
+        'url'        => ['material', 'type_material'],
+        'quiz'       => ['quiz',     'type_quiz'],
+        'assign'     => ['task',     'type_task'],
+        'customcert' => ['cert',     'type_cert'],
+        'scorm'      => ['quiz',     'type_quiz'],
+        'forum'      => ['other',    'type_other'],
     ];
 
     /**
@@ -35,19 +35,58 @@ class course_view {
         return \local_unics\access::student_record() !== null;
     }
 
-    /** @return array{type:string,cssclass:string,typeLabel:string,sub:?string} */
+    /** @return array{type:string,typeLabel:string,sub:?string} */
     private static function activity_type_meta(\cm_info $cm): array {
         if ($cm->modname === 'resource') {
-            [$type, $css, $labelkey] = self::detect_resource_type($cm);
+            [$type, $labelkey] = self::detect_resource_type($cm);
         } else {
-            [$type, $css, $labelkey] = self::TYPES[$cm->modname] ?? ['other', 'other', 'type_other'];
+            [$type, $labelkey] = self::TYPES[$cm->modname] ?? ['other', 'type_other'];
         }
         return [
             'type'      => $type,
-            'cssclass'  => $css,
             'typeLabel' => get_string($labelkey, 'local_unics'),
-            'sub'       => null,
+            'sub'       => self::activity_sub($cm),
         ];
+    }
+
+    /**
+     * Уточнение под меткой типа («Тест - 10 вопросов», «Задание - с проверкой») или null,
+     * если у типа уточнять нечего (материал/аудио/видео/сертификат: метка типа уже
+     * говорящая). Строки серверные, форма числительного - общая {@see self::plural_form()}.
+     */
+    private static function activity_sub(\cm_info $cm): ?string {
+        if ($cm->modname === 'assign') {
+            return get_string('sub_assign', 'local_unics');
+        }
+        if ($cm->modname !== 'quiz') {
+            return null;
+        }
+        $count = self::quiz_question_count($cm);
+        if ($count === null || $count <= 0) {
+            return null;
+        }
+        return get_string('sub_quiz_' . self::plural_form($count), 'local_unics', $count);
+    }
+
+    /**
+     * Число вопросов теста или null, если посчитать не удалось.
+     * Считаем строки {quiz_slots}: слот - ровно один вопрос, который увидит ребенок
+     * (случайный вопрос тоже занимает один слот), то же множество слотов разбирает
+     * mod_quiz\structure. Прямой count_records идет по уникальному индексу quizid-slot,
+     * то есть один дешевый запрос; полный structure::create_for_quiz() ради одного
+     * числа поднял бы quiz_settings и qbank_helper с join'ами по банку вопросов, а
+     * метод зовется на каждую активность курса.
+     * Устойчиво: любая ошибка -> null, подписи просто не будет, страница не ломается.
+     */
+    private static function quiz_question_count(\cm_info $cm): ?int {
+        global $DB;
+        try {
+            return (int)$DB->count_records('quiz_slots', ['quizid' => (int)$cm->instance]);
+        } catch (\Throwable $e) {
+            debugging('local_unics course_view: подавленное исключение: ' . $e->getMessage()
+                . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
+            return null;
+        }
     }
 
     /**
@@ -60,7 +99,7 @@ class course_view {
      * (resource_get_file_details): сортировка 'sortorder DESC, id ASC', у типичного
      * ресурса sortorder=1 у главного файла и 0 у остальных.
      * Устойчиво: любая проблема (нет контекста, нет файлов, исключение) -> material.
-     * @return array{0:string,1:string,2:string} [тип, css-класс, lang-ключ] - формат TYPES.
+     * @return array{0:string,1:string} [тип, lang-ключ] - формат TYPES.
      */
     private static function detect_resource_type(\cm_info $cm): array {
         try {
@@ -71,19 +110,26 @@ class course_view {
             if ($mainfile) {
                 $mime = strtolower((string)$mainfile->get_mimetype());
                 if (strpos($mime, 'audio/') === 0) {
-                    return ['audio', 'audio', 'type_audio'];
+                    return ['audio', 'type_audio'];
                 }
                 if (strpos($mime, 'video/') === 0) {
-                    return ['video', 'video', 'type_video'];
+                    return ['video', 'type_video'];
                 }
             }
         } catch (\Throwable $e) {
             // Контекст/хранилище недоступны - тихо остаемся material, страница не должна падать.
+            debugging('local_unics course_view: подавленное исключение: ' . $e->getMessage()
+                . ' @ ' . $e->getFile() . ':' . $e->getLine(), DEBUG_DEVELOPER);
         }
         return self::TYPES['resource'];
     }
 
-    /** done | todo | locked | open. $userid - чей прогресс считаем (ребенок). */
+    /**
+     * done | todo | locked | open. $userid - чей прогресс считаем (ребенок).
+     * get_data() зовем в пакетном режиме ($wholecourse = true) - ядро на этой же
+     * странице делает так же: первый вызов поднимает выполнение всего курса одним
+     * запросом, остальные активности берутся из кеша (поштучный путь дал бы N запросов).
+     */
     private static function activity_status(\cm_info $cm, \completion_info $ci, int $userid): string {
         if (!$cm->available) {
             return 'locked';
@@ -91,7 +137,7 @@ class course_view {
         if (!$ci->is_enabled($cm)) {
             return 'open';
         }
-        $data = $ci->get_data($cm, false, $userid);
+        $data = $ci->get_data($cm, true, $userid);
         return in_array((int)$data->completionstate, [COMPLETION_COMPLETE, COMPLETION_COMPLETE_PASS], true)
             ? 'done' : 'todo';
     }
@@ -107,7 +153,9 @@ class course_view {
         if (count($conds) === 1) {
             $c = $conds[0];
             if (($c['type'] ?? '') === 'completion' && !empty($c['cm'])) {
-                $modinfo = get_fast_modinfo($cm->course);
+                // Тот же modinfo, из которого пришел $cm (уже построен для нужного
+                // пользователя) - без повторного get_course()/get_fast_modinfo().
+                $modinfo = $cm->get_modinfo();
                 // get_cm() бросает исключение, если cm не найден (а не возвращает null) -
                 // зависимость могла быть удалена; в этом случае - общий фолбэк ниже.
                 try {
@@ -116,7 +164,7 @@ class course_view {
                     $dep = null;
                 }
                 if ($dep) {
-                    return get_string('lock_completion', 'local_unics', $dep->get_formatted_name());
+                    return get_string('lock_completion', 'local_unics', self::plain_name($dep));
                 }
             }
             if (($c['type'] ?? '') === 'date') {
@@ -130,6 +178,15 @@ class course_view {
             }
         }
         return get_string('lock_generic', 'local_unics');
+    }
+
+    /**
+     * Имя активности для payload - БЕЗ html-экранирования: AMD вставляет тексты только
+     * через textContent (экранирование там и так не нужно, а «&» приехал бы к ребенку
+     * как «&amp;»). Фильтры при этом отрабатывают как обычно.
+     */
+    private static function plain_name(\cm_info $cm): string {
+        return $cm->get_formatted_name(['escape' => false]);
     }
 
     /** Собрать листовые условия из дерева availability (op &/|, c[]). */
@@ -152,19 +209,26 @@ class course_view {
      * Активность показывается ребенку карточкой на странице курса: обычная (доступна)
      * или заблокированная с человекочитаемой причиной (уже вычислено ядром в
      * cm_info::is_visible_on_course_page() - учитывает и полное скрытие, и
-     * availability-показ «серым с текстом»). Используется и для payload cms, и для
-     * подсчета прогресса секции - иначе «N из M» разойдется с числом видимых карточек
-     * (у заблокированной активности uservisible=false, но карточка на странице есть).
+     * availability-показ «серым с текстом»). Дополнительно отсекаем модули без своей
+     * страницы (mod_label и подобные с FEATURE_NO_VIEW_LINK): открывать у них нечего,
+     * карточка с чипом «Открыть» была бы обманом и ломала бы сетку.
+     * Один и тот же фильтр используется везде (payload cms, прогресс секции, next-step) -
+     * иначе «N из M» разойдется с числом видимых карточек, а next-step может указать на
+     * активность, узла которой на странице нет.
      */
     private static function visible_to_child(\cm_info $cm): bool {
-        return $cm->is_visible_on_course_page();
+        return $cm->has_view() && $cm->is_visible_on_course_page();
     }
 
-    /** Видимые ребенку активности секции с включенным completion. @return \cm_info[] */
-    private static function tracked_cms_in_section(\section_info $section, \course_modinfo $modinfo, \completion_info $ci): array {
+    /**
+     * Показываемые ребенку активности секции с включенным completion.
+     * @param \cm_info[] $visible уже отфильтрованные активности курса в порядке курса
+     * @return \cm_info[]
+     */
+    private static function tracked_cms_in_section(\section_info $section, array $visible, \completion_info $ci): array {
         $res = [];
-        foreach ($modinfo->get_cms() as $cm) {
-            if ((int)$cm->sectionnum === (int)$section->section && self::visible_to_child($cm) && $ci->is_enabled($cm)) {
+        foreach ($visible as $cm) {
+            if ((int)$cm->sectionnum === (int)$section->section && $ci->is_enabled($cm)) {
                 $res[] = $cm;
             }
         }
@@ -172,8 +236,9 @@ class course_view {
     }
 
     /**
-     * Русская форма числительного для строк course_progress_{one,few,many}
-     * («Пройдена 1 тема» / «Пройдено 2 темы» / «Пройдено 5 тем»).
+     * Русская форма числительного для строк вида course_progress_{one,few,many}
+     * («Пройдена 1 тема» / «Пройдено 2 темы» / «Пройдено 5 тем») и sub_quiz_{one,few,many}
+     * («1 вопрос» / «2 вопроса» / «10 вопросов»).
      * Правило: последняя цифра 1 (кроме ...11) - one; 2-4 (кроме ...12-14) - few; иначе many.
      */
     private static function plural_form(int $n): string {
@@ -198,13 +263,23 @@ class course_view {
         $modinfo = get_fast_modinfo($course, $userid);
         $ci = new \completion_info($course);
 
-        $cms = [];
+        // Один общий список показываемых ребенку активностей (в порядке курса) и одна
+        // карта статусов: activity_status() зовется ровно по разу на активность, а
+        // карточки, прогресс секций и next-step берут готовый результат.
+        $visible = [];
+        $statuses = [];
         foreach ($modinfo->get_cms() as $cm) {
             if (!self::visible_to_child($cm)) {
                 continue;
             }
+            $visible[] = $cm;
+            $statuses[(int)$cm->id] = self::activity_status($cm, $ci, $userid);
+        }
+
+        $cms = [];
+        foreach ($visible as $cm) {
             $meta = self::activity_type_meta($cm);
-            $status = self::activity_status($cm, $ci, $userid);
+            $status = $statuses[(int)$cm->id];
             $cms[(string)$cm->id] = [
                 'type' => $meta['type'], 'typeLabel' => $meta['typeLabel'], 'sub' => $meta['sub'],
                 'status' => $status,
@@ -216,13 +291,13 @@ class course_view {
         $themesdone = 0;
         $themestotal = 0;
         foreach ($modinfo->get_section_info_all() as $section) {
-            $tracked = self::tracked_cms_in_section($section, $modinfo, $ci);
+            $tracked = self::tracked_cms_in_section($section, $visible, $ci);
             if (!$tracked) {
                 continue;
             }
             $done = 0;
             foreach ($tracked as $cm) {
-                if (self::activity_status($cm, $ci, $userid) === 'done') {
+                if ($statuses[(int)$cm->id] === 'done') {
                     $done++;
                 }
             }
@@ -240,7 +315,7 @@ class course_view {
             }
         }
 
-        $next = self::next_step($modinfo, $ci, $userid);
+        $next = self::next_step($visible, $ci, $statuses);
 
         return [
             'strings' => [
@@ -262,14 +337,20 @@ class course_view {
         ];
     }
 
-    /** @return array{cmid:int,label:string}|null */
-    private static function next_step(\course_modinfo $modinfo, \completion_info $ci, int $userid): ?array {
-        foreach ($modinfo->get_cms() as $cm) {   // get_cms() в порядке курса
+    /**
+     * Первая доступная невыполненная активность в порядке курса.
+     * @param \cm_info[] $visible показываемые ребенку активности (тот же фильтр, что у cms -
+     *        иначе next-step мог бы указать на активность, узла которой на странице нет)
+     * @param array<int,string> $statuses готовая карта cmid -> статус
+     * @return array{cmid:int,label:string}|null
+     */
+    private static function next_step(array $visible, \completion_info $ci, array $statuses): ?array {
+        foreach ($visible as $cm) {
             if (!$cm->uservisible || !$cm->available || !$ci->is_enabled($cm)) {
                 continue;
             }
-            if (self::activity_status($cm, $ci, $userid) === 'todo') {
-                return ['cmid' => (int)$cm->id, 'label' => get_string('continue_to', 'local_unics', $cm->get_formatted_name())];
+            if (($statuses[(int)$cm->id] ?? null) === 'todo') {
+                return ['cmid' => (int)$cm->id, 'label' => get_string('continue_to', 'local_unics', self::plain_name($cm))];
             }
         }
         return null;

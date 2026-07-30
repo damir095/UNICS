@@ -245,6 +245,11 @@ $string['type_quiz'] = 'Тест';
 $string['type_task'] = 'Задание';
 $string['type_cert'] = 'Сертификат';
 $string['type_other'] = 'Активность';
+// Уточнение под меткой типа активности: «Тест - 10 вопросов», «Задание - с проверкой».
+$string['sub_quiz_one'] = '{$a} вопрос';
+$string['sub_quiz_few'] = '{$a} вопроса';
+$string['sub_quiz_many'] = '{$a} вопросов';
+$string['sub_assign'] = 'с проверкой';
 $string['lock_completion'] = 'Откроется, когда пройдешь «{$a}».';
 $string['lock_date'] = 'Откроется {$a}.';
 $string['lock_grade'] = 'Откроется, когда наберешь нужный балл.';

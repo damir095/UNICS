@@ -5,7 +5,9 @@
  * формат topics) уже проверен на сервере (local_unics\output\course_view::is_child_view) -
  * модуль только оформляет DOM данными из payload, ничего заново не проверяет. Если разметка
  * страницы не совпадает с ожидаемой или payload неполный - модуль молча ничего не делает
- * (прогрессивное дополнение, никаких исключений наружу).
+ * (прогрессивное дополнение, никаких исключений наружу). Единственное «живое» поведение -
+ * подписка на ядровое событие ручной отметки выполнения, чтобы чип не расходился с кнопкой
+ * (см. watchManualCompletion).
  *
  * Разметка Moodle 5.0 (Boost, формат topics), снятая живьем на course/view.php?id=21 под
  * ребенком (см. отчет задачи 3 - там же примеры HTML):
@@ -37,16 +39,31 @@ define([], function() {
     // Декоративные тайл-глифы по типу активности - только язык-нейтральные символы блока
     // "Geometric Shapes"/музыкальных нот, без эмодзи и без зашитых русских слов. Неизвестный
     // тип - 'other'. quiz был '?' (читалось как "неизвестно/ошибка", а не "тест") - заменен на
-    // ◉ (мишень - тест проверяет знания, попадание в цель).
+    // ◉ (мишень - тест проверяет знания, попадание в цель). video был '▶', но тот же
+    // треугольник (U+25B6) тема ставит перед CTA «Продолжить» и чипом «Продолжить»
+    // (_course-student.scss) - один знак нес бы два смысла на одном экране, поэтому у видео
+    // теперь ▭ (широкий прямоугольник - экран).
     var TILE_GLYPHS = {
         material: '▤', // ▤ страница текста
         audio: '♪',    // ♪ нота
-        video: '▶',    // ▶ треугольник воспроизведения
+        video: '▭',    // ▭ экран
         quiz: '◉',     // ◉ мишень
         task: '▣',     // ▣
         cert: '◈',     // ◈
         other: '●'     // ●
     };
+
+    // Имя ядрового события ручной отметки выполнения. Источник - core_course/events.js
+    // (course/amd/src/events.js: manualCompletionToggled: 'core_course:manualcompletiontoggled');
+    // диспатчит его course/amd/src/manual_completion_toggle.js на НОВОЙ кнопке после подмены
+    // шаблона, событие всплывает (bubbles: true), detail = {cmid, activityname, completed,
+    // withAvailability}. Имя зашито строкой намеренно: модуль - обычный AMD без сборки, а
+    // core_course/events - ES-модуль с default-экспортом (через define() пришлось бы лезть
+    // в .default и получить лишнюю зависимость ради константы).
+    var MANUAL_TOGGLED_EVENT = 'core_course:manualcompletiontoggled';
+
+    // Подписка на ядровое событие ставится ровно один раз на страницу.
+    var toggleSyncRegistered = false;
 
     /**
      * Мини-хелпер создания элемента.
@@ -180,20 +197,33 @@ define([], function() {
      * (ссылка берется из уже отрисованной ссылки нужной активности - не строится вручную), либо
      * состояние «Курс пройден!» (next === null и все темы пройдены), либо ничего третьего (next
      * === null, но пройдено не все - остальное заблокировано). Идемпотентно.
+     *
+     * Курс, где выполнение не отслеживается ни у одной активности (course.total === 0), шапки
+     * НЕ получает вовсе: прогресса нет, next-step при total === 0 не бывает, а пустая дорожка
+     * с «0 тем из 0» и ободряющей строкой обманывали бы ребенка (плюс role="progressbar" с
+     * aria-valuemin === aria-valuemax === 0 - невалидный диапазон). Карточки типов, тайлы и
+     * чипы «Открыть» при этом остаются - они не про прогресс.
+     *
      * @param {Object} data полный payload
+     * @return {?HTMLElement} созданная CTA «Продолжить: ...» либо null (нужна для синхронизации
+     *         с ручной отметкой выполнения)
      */
     function renderCourseHeader(data) {
         if (document.querySelector('.unics-course-head')) {
-            return;
+            return null;
         }
         var root = document.querySelector(ROOT_SELECTOR);
         if (!root || !root.parentNode) {
-            return;
+            return null;
         }
         var course = data.course || {};
         var strings = data.strings || {};
         var done = course.done || 0;
         var total = course.total || 0;
+        if (total <= 0) {
+            return null;
+        }
+        var cta = null;
 
         var head = el('div', 'unics-course-head');
 
@@ -223,15 +253,95 @@ define([], function() {
             var link = document.querySelector('#module-' + data.next.cmid + ' .aalink') ||
                 document.querySelector('#module-' + data.next.cmid + ' .activityname a');
             if (link && link.href) {
-                var cta = el('a', 'unics-cta', data.next.label || strings.continue || '');
+                cta = el('a', 'unics-cta', data.next.label || strings.continue || '');
                 cta.href = link.href;
                 head.appendChild(cta);
             }
-        } else if (total > 0 && done === total && strings.courseDone) {
+        } else if (done === total && strings.courseDone) {
             head.appendChild(el('p', 'unics-course-done', strings.courseDone));
         }
 
         root.parentNode.insertBefore(head, root);
+        return cta;
+    }
+
+    /**
+     * Перекрашивает карточку активности после ручной отметки выполнения: ребенок нажал ядровую
+     * кнопку «Отметить как выполненное», ядро подменило кнопку и сообщило об этом событием -
+     * наш чип обязан согласиться с ней сразу, без перезагрузки.
+     *
+     * Что делаем: статус активности в payload и ее чип (done/todo, у next-step - continue),
+     * подсветка .unics-next и присутствие CTA «Продолжить: ...» в шапке (выполненная активность -
+     * уже не «продолжить», вести туда нельзя; отметку можно снять обратно, поэтому CTA не
+     * уничтожаем, а возвращаем на прежнее место). Что НЕ делаем: не пересчитываем next-step и
+     * числа прогресса секции/курса - это серверные величины, а их подписи («1 из 3», «Пройдена
+     * 1 тема из 2») собраны из русских слов в PHP, и склеить их заново в JS нельзя (правило
+     * фичи: никаких русских строк и числительных на клиенте). Числа обновятся при следующей
+     * загрузке страницы.
+     *
+     * @param {Event} e ядровое событие MANUAL_TOGGLED_EVENT
+     * @param {Object} data полный payload
+     * @param {?HTMLElement} cta CTA «Продолжить: ...» из шапки либо null
+     * @param {?HTMLElement} ctaHome узел-родитель CTA (куда ее вернуть, если отметку сняли)
+     */
+    function applyManualToggle(e, data, cta, ctaHome) {
+        var detail = e.detail || {};
+        var cmid = parseInt(detail.cmid, 10);
+        if (!cmid) {
+            return;
+        }
+        var info = (data.cms || {})[String(cmid)];
+        var li = document.getElementById('module-' + cmid);
+        if (!info || !li) {
+            return;
+        }
+        var chip = li.querySelector('.unics-chip');
+        if (!chip) {
+            return;
+        }
+        var strings = data.strings || {};
+        var nextCmid = (data.next && data.next.cmid) ? parseInt(data.next.cmid, 10) : null;
+        var isNext = nextCmid === cmid;
+        var completed = !!detail.completed;
+        // 'continue' - тот же частный случай 'todo' у next-step активности, что в enhanceActivity.
+        var chipKey = completed ? 'done' : (isNext ? 'continue' : 'todo');
+
+        info.status = completed ? 'done' : 'todo';
+        chip.className = 'unics-chip unics-chip-' + chipKey;
+        chip.textContent = strings[chipKey] || '';
+        if (isNext) {
+            li.classList.toggle('unics-next', !completed);
+            if (cta && completed && cta.parentNode) {
+                cta.parentNode.removeChild(cta);
+            } else if (cta && !completed && !cta.parentNode && ctaHome) {
+                ctaHome.appendChild(cta);
+            }
+        }
+    }
+
+    /**
+     * Подписка на ядровое событие ручной отметки выполнения (см. MANUAL_TOGGLED_EVENT).
+     * Слушаем на document - событие всплывает от кнопки, которую ядро каждый раз пересоздает.
+     * Одна подписка на страницу; любая ошибка обработчика гасится (прогрессивное дополнение).
+     * @param {Object} data полный payload
+     * @param {?HTMLElement} cta CTA «Продолжить: ...» из шапки либо null
+     */
+    function watchManualCompletion(data, cta) {
+        if (toggleSyncRegistered) {
+            return;
+        }
+        toggleSyncRegistered = true;
+        // CTA - последний ребенок шапки; запоминаем родителя сейчас, пока узел в документе.
+        var ctaHome = cta ? cta.parentNode : null;
+        document.addEventListener(MANUAL_TOGGLED_EVENT, function(e) {
+            try {
+                applyManualToggle(e, data, cta, ctaHome);
+            } catch (err) {
+                if (window.console) {
+                    console.warn('unics course_child', err);
+                }
+            }
+        });
     }
 
     return {
@@ -247,7 +357,7 @@ define([], function() {
                 }
                 document.body.classList.add('unics-child-course');
 
-                renderCourseHeader(data);
+                var cta = renderCourseHeader(data);
 
                 var cms = data.cms || {};
                 var nextCmid = (data.next && data.next.cmid) ? data.next.cmid : null;
@@ -265,6 +375,8 @@ define([], function() {
                         renderSectionProgress(sec, sections[num], data.strings || {});
                     }
                 });
+
+                watchManualCompletion(data, cta);
             } catch (e) {
                 if (window.console) {
                     console.warn('unics course_child', e);
