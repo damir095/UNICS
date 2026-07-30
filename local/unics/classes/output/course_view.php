@@ -37,14 +37,50 @@ class course_view {
 
     /** @return array{type:string,cssclass:string,typeLabel:string,sub:?string} */
     private static function activity_type_meta(\cm_info $cm): array {
-        [$type, $css, $labelkey] = self::TYPES[$cm->modname] ?? ['other', 'other', 'type_other'];
-        // Аудио/видео определяем по имени файла-ресурса не всегда возможно; тип оставляем material.
+        if ($cm->modname === 'resource') {
+            [$type, $css, $labelkey] = self::detect_resource_type($cm);
+        } else {
+            [$type, $css, $labelkey] = self::TYPES[$cm->modname] ?? ['other', 'other', 'type_other'];
+        }
         return [
             'type'      => $type,
             'cssclass'  => $css,
             'typeLabel' => get_string($labelkey, 'local_unics'),
             'sub'       => null,
         ];
+    }
+
+    /**
+     * Уточняет тип mod_resource по mimetype главного файла ресурса: audio/* -> 'audio',
+     * video/* -> 'video', иначе (или файл не найден/недоступен) - обычный material.
+     * Обращение к file storage происходит ТОЛЬКО для этого modname (activity_type_meta
+     * вызывается на каждую активность курса build_payload() - для остальных типов
+     * (page/book/url и т.д.) дорогого обращения к файловому хранилищу нет).
+     * Главный файл - тот же принцип, что в mod/resource/locallib.php
+     * (resource_get_file_details): сортировка 'sortorder DESC, id ASC', у типичного
+     * ресурса sortorder=1 у главного файла и 0 у остальных.
+     * Устойчиво: любая проблема (нет контекста, нет файлов, исключение) -> material.
+     * @return array{0:string,1:string,2:string} [тип, css-класс, lang-ключ] - формат TYPES.
+     */
+    private static function detect_resource_type(\cm_info $cm): array {
+        try {
+            $context = \context_module::instance($cm->id);
+            $fs = get_file_storage();
+            $files = $fs->get_area_files($context->id, 'mod_resource', 'content', 0, 'sortorder DESC, id ASC', false);
+            $mainfile = $files ? reset($files) : null;
+            if ($mainfile) {
+                $mime = (string)$mainfile->get_mimetype();
+                if (strpos($mime, 'audio/') === 0) {
+                    return ['audio', 'audio', 'type_audio'];
+                }
+                if (strpos($mime, 'video/') === 0) {
+                    return ['video', 'video', 'type_video'];
+                }
+            }
+        } catch (\Throwable $e) {
+            // Контекст/хранилище недоступны - тихо остаемся material, страница не должна падать.
+        }
+        return self::TYPES['resource'];
     }
 
     /** done | todo | locked | open. $userid - чей прогресс считаем (ребенок). */

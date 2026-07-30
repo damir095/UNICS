@@ -149,6 +149,88 @@ final class course_view_test extends \advanced_testcase {
     }
 
     /**
+     * mod_resource с главным файлом заданного mimetype - создает курс с одной секцией
+     * и одной активностью resource, у которой дефолтный файл генератора (текстовый)
+     * заменен на файл нужного mime (сохраняем sortorder=1 - тот же принцип, что
+     * mod_resource\locallib.php::resource_set_mainfile использует для единственного файла).
+     * @return array{0:\stdClass,1:\stdClass,2:\stdClass} курс, ресурс, студент
+     */
+    private function make_course_with_resource_file(string $filename, string $mimetype): array {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(
+            ['numsections' => 1, 'format' => 'topics'],
+            ['createsections' => true]
+        );
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+
+        // Генератору resource нужен текущий пользователь для дефолтного файла (свой draft-контекст).
+        $this->setAdminUser();
+        $resource = $gen->create_module('resource', ['course' => $course->id, 'section' => 1]);
+
+        $context = \context_module::instance($resource->cmid);
+        $fs = get_file_storage();
+        // Дефолтный текстовый файл генератора убираем - оставляем ровно один главный файл
+        // нужного mimetype (sortorder=1, как у единственного файла ресурса в проде).
+        $fs->delete_area_files($context->id, 'mod_resource', 'content', 0);
+        $fs->create_file_from_string([
+            'contextid' => $context->id,
+            'component' => 'mod_resource',
+            'filearea'  => 'content',
+            'itemid'    => 0,
+            'filepath'  => '/',
+            'filename'  => $filename,
+            'mimetype'  => $mimetype,
+            'sortorder' => 1,
+        ], 'test content');
+        rebuild_course_cache($course->id, true);
+
+        return [$course, $resource, $student];
+    }
+
+    public function test_resource_with_audio_file_detected_as_audio(): void {
+        [$course, $resource, $student] = $this->make_course_with_resource_file('zvuk.wav', 'audio/wav');
+        $p = course_view::build_payload($course, $student->id);
+
+        $cm = $p['cms'][(string)$resource->cmid];
+        $this->assertSame('audio', $cm['type']);
+        $this->assertSame('Аудиоматериал', $cm['typeLabel']);
+    }
+
+    public function test_resource_with_video_file_detected_as_video(): void {
+        [$course, $resource, $student] = $this->make_course_with_resource_file('video.mp4', 'video/mp4');
+        $p = course_view::build_payload($course, $student->id);
+
+        $cm = $p['cms'][(string)$resource->cmid];
+        $this->assertSame('video', $cm['type']);
+        $this->assertSame('Видео', $cm['typeLabel']);
+    }
+
+    public function test_resource_with_pdf_file_stays_material(): void {
+        [$course, $resource, $student] = $this->make_course_with_resource_file('doc.pdf', 'application/pdf');
+        $p = course_view::build_payload($course, $student->id);
+
+        $cm = $p['cms'][(string)$resource->cmid];
+        $this->assertSame('material', $cm['type']);
+        $this->assertSame('Материал для чтения', $cm['typeLabel']);
+    }
+
+    /** Регресс: правка детекции resource не должна задеть mod_page (остается material). */
+    public function test_page_module_stays_material(): void {
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['numsections' => 1, 'format' => 'topics'], ['createsections' => true]);
+        $student = $gen->create_user();
+        $gen->enrol_user($student->id, $course->id, 'student');
+        $page = $gen->create_module('page', ['course' => $course->id, 'section' => 1]);
+
+        $p = course_view::build_payload($course, $student->id);
+
+        $cm = $p['cms'][(string)$page->cmid];
+        $this->assertSame('material', $cm['type']);
+        $this->assertSame('Материал для чтения', $cm['typeLabel']);
+    }
+
+    /**
      * Правило выбора русской формы числительного (course_progress_{one,few,many}):
      * последняя цифра 1 (кроме ...11) -> one; 2-4 (кроме ...12-14) -> few; иначе many.
      */
