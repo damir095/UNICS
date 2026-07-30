@@ -124,8 +124,10 @@ define([], function() {
         grid.insertBefore(tile, grid.firstChild);
 
         // Подпись типа под названием - переиспользуем существующий блок с именем активности.
+        // Разделитель метки и уточнения - типографская средняя точка «·» (U+00B7), как в макете
+        // («Тест · 5 вопросов»); это пунктуация, а не тире, склейки русских слов в JS тут нет.
         var nameArea = li.querySelector('.activity-name-area') || grid;
-        var subText = info.sub ? (info.typeLabel + ' - ' + info.sub) : info.typeLabel;
+        var subText = info.sub ? (info.typeLabel + ' · ' + info.sub) : info.typeLabel;
         if (subText) {
             nameArea.appendChild(el('div', 'unics-act-sub', subText));
         }
