@@ -55,10 +55,10 @@ html.unics-a11y-dark {
     --unics-table-row-hover:  #2f3743;
     --unics-table-shadow:     0 1px 2px rgba(0,0,0,.4);
 
-    // Страница курса (ученический вид, _course-student.scss): тёмные тайлы типов +
+    // Страница курса (ученический вид, _course-student.scss): темные тайлы типов +
     // текст чипа "Надо сделать" + подсветка next-step. ctype-task/other и
     // cchip-ok/lock/continue темнеют САМИ (алиасы на success/neutral-bg/primary-btn
-    // выше уже тёмные в этом блоке) — переопределяем только то, что в светлой теме
+    // выше уже темные в этом блоке) - переопределяем только то, что в светлой теме
     // задано отдельным литералом.
     --unics-ctype-material-bg: #1c2c47; --unics-ctype-material: #7ea9ff;
     --unics-ctype-audio-bg:    #2c2440; --unics-ctype-audio:    #b89ae8;
@@ -66,7 +66,7 @@ html.unics-a11y-dark {
     --unics-ctype-quiz-bg:     #3a2418; --unics-ctype-quiz:     #ff9a68;
     --unics-ctype-cert-bg:     #3a3018; --unics-ctype-cert:     #e0c168;
     --unics-cchip-todo-tx:     var(--unics-d-warning-tx); // ~8.3:1 на --unics-warning-bg(dark)
-    --unics-highlight-bg:      #2e2620; // тёплая тёмная подсветка next-step (мягче table-head-bg dark)
+    --unics-highlight-bg:      #2e2620; // теплая темная подсветка next-step (мягче table-head-bg dark)
     // --unics-highlight-border наследует --unics-table-head-border, который уже темнеет выше.
 
     // Семантика: ФОН (`-bg`) -> тёмный тинт; "цвет" (используется как текст /

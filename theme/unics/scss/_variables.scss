@@ -14,6 +14,7 @@
     --unics-primary-deep:   #A93D24;  // 6.0:1 — близко к AAA, для текста на светло-оранжевых поверхностях
     --unics-primary-btn:       #C44A2F;  // фон .btn-primary: белый текст = 4.6:1 (AA при любом размере)
     --unics-primary-btn-hover: #A93D24;  // hover/focus .btn-primary: 6:1
+    --unics-on-primary:        #fff;     // текст/иконки на брендовой заливке (--unics-primary-btn / -hover) - константа: тема A1 не переопределяет --unics-primary-btn, контраст 4.6:1 одинаков в светлой и темной схеме
     --unics-success-btn:       #1e7e34;  // фон .btn-success: белый текст 5.14:1 (AA), не ремапится
     --unics-danger-btn:        #a52022;  // фон .btn-danger:  белый текст 7.42:1
     --unics-info-btn:          #1565c0;  // фон .btn-info:    белый текст 5.75:1
@@ -101,30 +102,30 @@
     --unics-current-marker:   var(--unics-primary);  // маркер текущей секции/активности (всегда в паре с меткой/иконкой)
 
     // -------------------------------------------------------------------------
-    // Страница курса — ученический вид (course-student, _course-student.scss).
-    // Цветовой код типов активностей (тайл 44×44, декоративно/aria-hidden) —
+    // Страница курса - ученический вид (course-student, _course-student.scss).
+    // Цветовой код типов активностей (тайл 44×44, декоративно/aria-hidden) -
     // значения из макета course-mockup.png. task/other переиспользуют существующую
-    // success/neutral-палитру (значения из макета были почти идентичны — не плодим
-    // дубль). Тёмная A1 переопределяет их ниже в _accessibility.scss.
+    // success/neutral-палитру (значения из макета были почти идентичны - не плодим
+    // дубль). Темная A1 переопределяет их ниже в _accessibility.scss.
     // -------------------------------------------------------------------------
     --unics-ctype-material:     #2f6fed; --unics-ctype-material-bg: #e7efff;
     --unics-ctype-audio:        #7c4dd6; --unics-ctype-audio-bg:    #efe8fb;
     --unics-ctype-video:        #0e8f8f; --unics-ctype-video-bg:    #e0f4f4;
     --unics-ctype-quiz:         #d1571f; --unics-ctype-quiz-bg:     #fdece1;
-    --unics-ctype-task:         var(--unics-success);    // макет давал #1f7a3d — практически = --unics-success
-    --unics-ctype-task-bg:      var(--unics-success-bg); // макет давал #e5f3e8 — практически = --unics-success-bg
+    --unics-ctype-task:         var(--unics-success);    // макет давал #1f7a3d - практически = --unics-success
+    --unics-ctype-task-bg:      var(--unics-success-bg); // макет давал #e5f3e8 - практически = --unics-success-bg
     --unics-ctype-cert:         #b8860b; --unics-ctype-cert-bg:     #faf1d6;
-    --unics-ctype-other:        #5a6172; --unics-ctype-other-bg:    var(--unics-neutral-bg); // макет давал #eef0f4 — точный дубль
+    --unics-ctype-other:        #5a6172; --unics-ctype-other-bg:    var(--unics-neutral-bg); // макет давал #eef0f4 - точный дубль
 
     // Чип "Надо сделать": --unics-warning (#b25e09) на --unics-warning-bg (#fff4e0)
-    // даёт лишь ~4.28:1 для некрупного жирного текста чипа (WCAG AA требует 4.5:1) —
-    // заводим более тёмный янтарный ТОЛЬКО для текста чипа; фон/рамка переиспользуют
+    // дает лишь ~4.28:1 для некрупного жирного текста чипа (WCAG AA требует 4.5:1) -
+    // заводим более темный янтарный ТОЛЬКО для текста чипа; фон/рамка переиспользуют
     // существующие --unics-warning / --unics-warning-bg без изменений.
     --unics-cchip-todo-tx:      #9a5b12; // 4.97:1 на --unics-warning-bg (было 4.28:1 у --unics-warning)
 
-    // Тёплая подсветка карточки next-step («Продолжить»). Фон — новый (мягче шапки
+    // Теплая подсветка карточки next-step («Продолжить»). Фон - новый (мягче шапки
     // таблиц, т.к. заливает всю карточку, а не узкую полосу), рамка переиспользует
-    // тон шапки таблиц (тот же тёплый персик, не плодим дубль значения).
+    // тон шапки таблиц (тот же теплый персик, не плодим дубль значения).
     --unics-highlight-bg:       #fff6f2;
     --unics-highlight-border:   var(--unics-table-head-border);
 
