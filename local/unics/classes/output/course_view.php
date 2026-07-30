@@ -69,7 +69,7 @@ class course_view {
             $files = $fs->get_area_files($context->id, 'mod_resource', 'content', 0, 'sortorder DESC, id ASC', false);
             $mainfile = $files ? reset($files) : null;
             if ($mainfile) {
-                $mime = (string)$mainfile->get_mimetype();
+                $mime = strtolower((string)$mainfile->get_mimetype());
                 if (strpos($mime, 'audio/') === 0) {
                     return ['audio', 'audio', 'type_audio'];
                 }

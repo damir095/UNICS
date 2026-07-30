@@ -349,10 +349,8 @@
     }
 
     // -------------------------------------------------------------------------
-    // Цветовой код типов активностей (тайл). audio/video заведены по спеке
-    // заранее - сейчас course_view::activity_type_meta() их не определяет
-    // (аудио/видео сворачиваются в material), поэтому здесь эти два правила
-    // пока не задействуются реальными данными. См. task-4-report.md.
+    // Цветовой код типов активностей (тайл). audio/video определяются
+    // course_view::detect_resource_type() по mimetype главного файла ресурса.
     // -------------------------------------------------------------------------
     .unics-type-material .unics-tile { background: var(--unics-ctype-material-bg); color: var(--unics-ctype-material); }
     .unics-type-audio    .unics-tile { background: var(--unics-ctype-audio-bg);    color: var(--unics-ctype-audio); }

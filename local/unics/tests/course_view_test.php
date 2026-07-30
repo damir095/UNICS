@@ -197,6 +197,16 @@ final class course_view_test extends \advanced_testcase {
         $this->assertSame('Аудиоматериал', $cm['typeLabel']);
     }
 
+    /** Регресс: сравнение mimetype не должно зависеть от регистра (AUDIO/WAV тоже audio). */
+    public function test_resource_with_uppercase_mimetype_detected_as_audio(): void {
+        [$course, $resource, $student] = $this->make_course_with_resource_file('zvuk2.wav', 'AUDIO/WAV');
+        $p = course_view::build_payload($course, $student->id);
+
+        $cm = $p['cms'][(string)$resource->cmid];
+        $this->assertSame('audio', $cm['type']);
+        $this->assertSame('Аудиоматериал', $cm['typeLabel']);
+    }
+
     public function test_resource_with_video_file_detected_as_video(): void {
         [$course, $resource, $student] = $this->make_course_with_resource_file('video.mp4', 'video/mp4');
         $p = course_view::build_payload($course, $student->id);
