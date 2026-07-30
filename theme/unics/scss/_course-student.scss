@@ -359,4 +359,53 @@
     .unics-type-task     .unics-tile { background: var(--unics-ctype-task-bg);     color: var(--unics-ctype-task); }
     .unics-type-cert     .unics-tile { background: var(--unics-ctype-cert-bg);     color: var(--unics-ctype-cert); }
     .unics-type-other    .unics-tile { background: var(--unics-ctype-other-bg);    color: var(--unics-ctype-other); }
+
+    // -------------------------------------------------------------------------
+    // Узкий экран (найдено живой проверкой на 360px): широкий чип «Продолжить»
+    // (текст + декоративная стрелка, `white-space: nowrap` у .unics-chip выше)
+    // не помещается в min-content-колонку ядровой .activity-grid (ядро уже
+    // сжимает разметку до 3 смысловых колонок icon/name/actions с <576px -
+    // theme/boost/scss/moodle/course.scss) рядом с именем активности - вылезает
+    // и за карточку, и за вьюпорт целиком (сама страница получает
+    // горизонтальный скролл). Текст чипа резать многоточием нельзя (это статус
+    // для ребенка), поэтому вместо сжатия на совсем узких экранах переносим
+    // статус-чип на отдельную полноширинную строку ПОД именем/видимостью -
+    // тот же прием, что ядро уже применяет для dates/groupmode/completion на
+    // этом брейкпоинте, просто продолжаем его на actions (те же 3 токена в
+    // строке area, что и у ядра - см. компилированный core CSS). Тач-цель не
+    // страдает: чип и так не самостоятельная цель (весь ряд .activity-item
+    // уже >= 44px по ядровому правилу, перенос лишь увеличивает высоту ряда).
+    // -------------------------------------------------------------------------
+    @media (max-width: 480px) {
+        .unics-act .activity-grid {
+            grid-template-areas:
+                "icon          name          name"
+                "icon          visibility    visibility"
+                "actions       actions       actions"
+                "dates         dates         dates"
+                "groupmode     groupmode     groupmode"
+                "completion    completion    completion"
+                "altcontent    altcontent    altcontent"
+                "afterlink     afterlink     afterlink"
+                "availability  availability  availability";
+        }
+        .unics-chip {
+            justify-self: start;
+            margin-top: var(--unics-space-2);
+        }
+
+        // Колонка прогресса секции (найдено доп. проверкой этого же фикса): шапка
+        // секции - ядровый `.course-section-header.d-flex` (nowrap по умолчанию).
+        // Фиксированная ширина `.unics-sec-progress` (4.5rem, см. выше) рядом с
+        // ДЛИННЫМ заголовком темы («Климат и климатические пояса Земли») на 360px
+        // не помещается в ряд и тоже толкает страницу в горизонтальный скролл -
+        // разрешаем ряду переноситься, бейджи уходят под заголовок отдельной
+        // строкой (заголовок при этом остается в один ряд с шевроном).
+        .course-section-header {
+            flex-wrap: wrap;
+        }
+        [data-region="sectionbadges"] {
+            margin-top: var(--unics-space-2);
+        }
+    }
 }

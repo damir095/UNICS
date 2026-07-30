@@ -114,7 +114,7 @@
     --unics-ctype-quiz:         #d1571f; --unics-ctype-quiz-bg:     #fdece1;
     --unics-ctype-task:         var(--unics-success);    // макет давал #1f7a3d - практически = --unics-success
     --unics-ctype-task-bg:      var(--unics-success-bg); // макет давал #e5f3e8 - практически = --unics-success-bg
-    --unics-ctype-cert:         #b8860b; --unics-ctype-cert-bg:     #faf1d6;
+    --unics-ctype-cert:         #96700a; --unics-ctype-cert-bg:     #faf1d6; // 4.03:1 на -bg (было #b8860b, 2.89:1 - провал AA для крупного текста)
     --unics-ctype-other:        #5a6172; --unics-ctype-other-bg:    var(--unics-neutral-bg); // макет давал #eef0f4 - точный дубль
 
     // Чип "Надо сделать": --unics-warning (#b25e09) на --unics-warning-bg (#fff4e0)

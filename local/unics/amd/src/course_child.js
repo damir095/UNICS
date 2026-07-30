@@ -148,6 +148,12 @@ define([], function() {
             }
         } else {
             wrap.setAttribute('role', 'progressbar');
+            // aria-valuetext описывает ТЕКУЩЕЕ ЗНАЧЕНИЕ, а не имя виджета - role=progressbar обязан
+            // иметь ОТДЕЛЬНОЕ доступное имя (WCAG 4.1.2, axe aria-progressbar-name), даем его строкой
+            // из PHP (готова заранее - как все тексты в этой фиче, не собирается в JS).
+            if (strings.progressSectionName) {
+                wrap.setAttribute('aria-label', strings.progressSectionName);
+            }
             wrap.setAttribute('aria-valuenow', String(done));
             wrap.setAttribute('aria-valuemin', '0');
             wrap.setAttribute('aria-valuemax', String(total));
@@ -193,6 +199,10 @@ define([], function() {
 
         var bar = el('div', 'unics-course-progress');
         bar.setAttribute('role', 'progressbar');
+        // Доступное имя - см. комментарий в renderSectionProgress выше (тот же прием, тот же повод).
+        if (strings.progressCourseName) {
+            bar.setAttribute('aria-label', strings.progressCourseName);
+        }
         bar.setAttribute('aria-valuenow', String(done));
         bar.setAttribute('aria-valuemin', '0');
         bar.setAttribute('aria-valuemax', String(total));

@@ -56,15 +56,20 @@ html.unics-a11y-dark {
     --unics-table-shadow:     0 1px 2px rgba(0,0,0,.4);
 
     // Страница курса (ученический вид, _course-student.scss): темные тайлы типов +
-    // текст чипа "Надо сделать" + подсветка next-step. ctype-task/other и
-    // cchip-ok/lock/continue темнеют САМИ (алиасы на success/neutral-bg/primary-btn
-    // выше уже темные в этом блоке) - переопределяем только то, что в светлой теме
-    // задано отдельным литералом.
+    // текст чипа "Надо сделать" + подсветка next-step. ctype-task и cchip-ok/lock/
+    // continue темнеют САМИ (алиасы на success/neutral-bg/primary-btn выше уже темные
+    // в этом блоке); ctype-other фон тоже алиас (--unics-neutral-bg), а вот сам цвет
+    // глифа в светлой теме - отдельный литерал (#5a6172, _variables.scss) и БЕЗ
+    // явного переопределения здесь оставался тем же темно-серым на темном фоне -
+    // 2.10:1, провал AA (найдено живой проверкой) - переопределяем на --unics-text-muted
+    // (тот же токен, что и у --unics-neutral в этом блоке ниже, ~6:1 на -bg). Остальные
+    // ctype-* переопределяем только там, где в светлой теме задан отдельный литерал.
     --unics-ctype-material-bg: #1c2c47; --unics-ctype-material: #7ea9ff;
     --unics-ctype-audio-bg:    #2c2440; --unics-ctype-audio:    #b89ae8;
     --unics-ctype-video-bg:    #163636; --unics-ctype-video:    #5fd6d6;
     --unics-ctype-quiz-bg:     #3a2418; --unics-ctype-quiz:     #ff9a68;
     --unics-ctype-cert-bg:     #3a3018; --unics-ctype-cert:     #e0c168;
+    --unics-ctype-other:       var(--unics-text-muted); // 6.04:1 на --unics-ctype-other-bg (было 2.10:1)
     --unics-cchip-todo-tx:     var(--unics-d-warning-tx); // ~8.3:1 на --unics-warning-bg(dark)
     --unics-highlight-bg:      #2e2620; // теплая темная подсветка next-step (мягче table-head-bg dark)
     // --unics-highlight-border наследует --unics-table-head-border, который уже темнеет выше.

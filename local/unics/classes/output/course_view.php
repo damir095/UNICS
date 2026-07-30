@@ -248,6 +248,8 @@ class course_view {
                 'locked' => get_string('status_locked', 'local_unics'), 'continue' => get_string('status_continue', 'local_unics'),
                 'open' => get_string('status_open', 'local_unics'), 'themeDone' => get_string('theme_done', 'local_unics'),
                 'courseDone' => get_string('course_done', 'local_unics'),
+                'progressCourseName' => get_string('progress_course_name', 'local_unics'),
+                'progressSectionName' => get_string('progress_section_name', 'local_unics'),
             ],
             'course' => [
                 'done' => $themesdone, 'total' => $themestotal,

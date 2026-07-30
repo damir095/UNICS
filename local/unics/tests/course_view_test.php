@@ -113,6 +113,10 @@ final class course_view_test extends \advanced_testcase {
         $this->assertSame(1, $p['course']['done']);
         $this->assertSame(2, $p['course']['total']);
         $this->assertSame('Пройдена 1 тема из 2', $p['course']['label']);
+        // Доступные имена прогресс-баров (WCAG 4.1.2 - aria-valuetext именем не является, AMD
+        // ставит их отдельным aria-label из этих готовых серверных строк).
+        $this->assertSame('Прогресс по курсу', $p['strings']['progressCourseName']);
+        $this->assertSame('Прогресс по теме', $p['strings']['progressSectionName']);
     }
 
     public function test_section_and_course_progress(): void {
