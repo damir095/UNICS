@@ -255,3 +255,17 @@ $string['lock_date'] = 'Откроется {$a}.';
 $string['lock_grade'] = 'Откроется, когда наберешь нужный балл.';
 $string['lock_level'] = 'Откроется на твоем уровне.';
 $string['lock_generic'] = 'Откроется позже - сначала выполни предыдущие задания.';
+
+// Педагогский вид страницы курса (сигнал по классу).
+$string['staff_done_label'] = 'сделали {$a->done} из {$a->total}';
+$string['staff_grading_label'] = 'на проверке: {$a}';
+$string['staff_stuck_label'] = 'застряли: {$a}';
+$string['staff_section_progress'] = 'прошли тему: {$a->done} из {$a->total}';
+$string['staff_section_progress_aria'] = 'Прошли тему {$a->done} из {$a->total} учеников';
+$string['staff_all_clear'] = 'Все работы проверены, класс движется';
+$string['staff_attention_grading_one'] = '{$a} работа ждет проверки';
+$string['staff_attention_grading_few'] = '{$a} работы ждут проверки';
+$string['staff_attention_grading_many'] = '{$a} работ ждут проверки';
+$string['staff_attention_stuck_one'] = '{$a} ученик застрял';
+$string['staff_attention_stuck_few'] = '{$a} ученика застряли';
+$string['staff_attention_stuck_many'] = '{$a} учеников застряли';
