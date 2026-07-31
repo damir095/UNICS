@@ -246,22 +246,6 @@ final class course_view_test extends \advanced_testcase {
     }
 
     /**
-     * Правило выбора русской формы числительного (course_progress_{one,few,many}):
-     * последняя цифра 1 (кроме ...11) -> one; 2-4 (кроме ...12-14) -> few; иначе many.
-     */
-    public function test_plural_form_selection(): void {
-        $method = new \ReflectionMethod(course_view::class, 'plural_form');
-        $method->setAccessible(true);
-
-        $this->assertSame('one', $method->invoke(null, 1));
-        $this->assertSame('few', $method->invoke(null, 2));
-        $this->assertSame('many', $method->invoke(null, 5));
-        $this->assertSame('many', $method->invoke(null, 0));
-        $this->assertSame('many', $method->invoke(null, 11));
-        $this->assertSame('one', $method->invoke(null, 21));
-    }
-
-    /**
      * Активность БЕЗ отслеживания выполнения и доступная - статус 'open' («Открыть»).
      * Самая частая ветка на реальных курсах: completion у активности выключен, значит
      * ни 'done', ни 'todo' быть не может (честно: не «выполнено», а «можно открыть»).

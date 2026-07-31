@@ -52,7 +52,7 @@ class course_view {
     /**
      * Уточнение под меткой типа («Тест - 10 вопросов», «Задание - с проверкой») или null,
      * если у типа уточнять нечего (материал/аудио/видео/сертификат: метка типа уже
-     * говорящая). Строки серверные, форма числительного - общая {@see self::plural_form()}.
+     * говорящая). Строки серверные, форма числительного - общая {@see plural::form()}.
      */
     private static function activity_sub(\cm_info $cm): ?string {
         if ($cm->modname === 'assign') {
@@ -65,7 +65,7 @@ class course_view {
         if ($count === null || $count <= 0) {
             return null;
         }
-        return get_string('sub_quiz_' . self::plural_form($count), 'local_unics', $count);
+        return get_string('sub_quiz_' . plural::form($count), 'local_unics', $count);
     }
 
     /**
@@ -235,27 +235,9 @@ class course_view {
         return $res;
     }
 
-    /**
-     * Русская форма числительного для строк вида course_progress_{one,few,many}
-     * («Пройдена 1 тема» / «Пройдено 2 темы» / «Пройдено 5 тем») и sub_quiz_{one,few,many}
-     * («1 вопрос» / «2 вопроса» / «10 вопросов»).
-     * Правило: последняя цифра 1 (кроме ...11) - one; 2-4 (кроме ...12-14) - few; иначе many.
-     */
-    private static function plural_form(int $n): string {
-        $mod10 = $n % 10;
-        $mod100 = $n % 100;
-        if ($mod10 === 1 && $mod100 !== 11) {
-            return 'one';
-        }
-        if (in_array($mod10, [2, 3, 4], true) && !in_array($mod100, [12, 13, 14], true)) {
-            return 'few';
-        }
-        return 'many';
-    }
-
     /** Готовая строка прогресса курса с правильной русской формой числительного. */
     private static function course_progress_label(int $done, int $total): string {
-        $key = 'course_progress_' . self::plural_form($done);
+        $key = 'course_progress_' . plural::form($done);
         return get_string($key, 'local_unics', (object)['done' => $done, 'total' => $total]);
     }
 
