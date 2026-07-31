@@ -396,6 +396,37 @@ final class course_staff_view_test extends \advanced_testcase {
         $this->assertSame('на проверке: 1', $p['cms'][(string)$assign->cmid]['gradingLabel']);
     }
 
+    /**
+     * Регресс по ревью: непроверенная работа на СКРЫТОЙ от учеников активности не должна
+     * попадать ни в cms (ее там вообще нет - активность не в $visible), ни в шапку. Контрольная
+     * часть теста (submission на ВИДИМОМ задании) нужна, чтобы тест не проходил просто потому,
+     * что весь агрегат обнулился - visible-задание обязано по-прежнему считаться.
+     */
+    public function test_grading_counts_excludes_hidden_activity(): void {
+        $this->resetAfterTest();
+        [$course, $s1, , $t, $visibleassign] = $this->make_course_with_assign();
+        $hiddenassign = $this->getDataGenerator()->create_module('assign',
+            ['course' => $course->id, 'section' => 1, 'visible' => 0]);
+        // Непроверенная работа ТОЛЬКО на скрытом задании.
+        $this->insert_assign_submission((int)$hiddenassign->id, $s1->id, 1000);
+
+        $p = \local_unics\output\course_staff_view::build_payload($course, $t->id);
+
+        $this->assertArrayNotHasKey((string)$hiddenassign->cmid, $p['cms'],
+            'скрытая активность не должна попадать на страницу вообще');
+        $this->assertNull($p['attention']['grading'],
+            'единственная непроверенная работа - на скрытом задании, в шапке ее быть не должно');
+
+        // Контроль: та же непроверенная работа, но на ВИДИМОМ задании - обязана считаться.
+        $this->insert_assign_submission((int)$visibleassign->id, $s1->id, 1000);
+        $p2 = \local_unics\output\course_staff_view::build_payload($course, $t->id);
+
+        $this->assertSame('на проверке: 1', $p2['cms'][(string)$visibleassign->cmid]['gradingLabel']);
+        $this->assertSame(1, $p2['attention']['grading']['count'],
+            'скрытое задание по-прежнему не должно учитываться в общем счетчике');
+        $this->assertNotNull($p2['attention']['grading']['url']);
+    }
+
     /** Один ученик, застрявший СРАЗУ в двух активностях, в шапке считается один раз. */
     public function test_stuck_in_two_activities_counted_once_in_header(): void {
         $this->resetAfterTest();
@@ -428,6 +459,37 @@ final class course_staff_view_test extends \advanced_testcase {
 
         $this->assertSame('застряли: 1', $p['cms'][(string)$cm->id]['stuckLabel']);
         $this->assertSame(1, $p['attention']['stuck']['count']);
+    }
+
+    /**
+     * Регресс по ревью: открытый повтор темы на СКРЫТОЙ от учеников активности не должен
+     * попадать ни в cms, ни в шапку. Застрявший на скрытой активности - ДРУГОЙ ученик (s2), а не
+     * тот, что уже застрял на видимой (s1 - через фикстуру make_course_with_signals): дедуп шапки
+     * по ученику иначе замаскировал бы баг - если бы фильтр по cmid не работал, header все равно
+     * показал бы 1 (тот же s1), и тест был бы нечувствителен к регрессии. С разными учениками
+     * "утекший" скрытый застрявший поднял бы count до 2, если фильтр сломан.
+     */
+    public function test_stuck_excludes_hidden_activity(): void {
+        $this->resetAfterTest();
+        global $DB;
+        [$course, , $s2, $t, $cm] = $this->make_course_with_signals();
+        $hidden = $this->getDataGenerator()->create_module('page',
+            ['course' => $course->id, 'section' => 1, 'visible' => 0]);
+        $DB->insert_record('unics_retakes', (object)[
+            'mdl_user_id' => $s2->id, 'mdl_course_id' => $course->id, 'cmid' => (int)$hidden->cmid,
+            'status' => 0, 'timecreated' => time(),
+        ]);
+        // Фикстура make_course_with_signals уже заводит открытый topic_retry у s1 на видимой $cm -
+        // это и есть контрольная (видимая) часть, оба условия проверяются одним прогоном.
+
+        $p = \local_unics\output\course_staff_view::build_payload($course, $t->id);
+
+        $this->assertArrayNotHasKey((string)$hidden->cmid, $p['cms'],
+            'скрытая активность не должна попадать на страницу вообще');
+        $this->assertSame('застряли: 1', $p['cms'][(string)$cm->id]['stuckLabel'],
+            'видимая активность по-прежнему должна учитываться');
+        $this->assertSame(1, $p['attention']['stuck']['count'],
+            'застрявший на скрытой активности (другой ученик) не должен попадать в счетчик шапки');
     }
 
     /** Курс без отслеживания выполнения (enablecompletion = 0) - без "прошли тему", без doneLabel. */

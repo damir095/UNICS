@@ -142,14 +142,24 @@ class course_staff_view {
      * актуальной оценки: оценки нет вовсе, она пустая (в mod_assign «нет оценки» это -1) либо
      * выставлена ДО последней отправки (ученик переотправил после проверки).
      * Объекты assign НЕ инстанцируем - метод зовется на страницу курса целиком.
+     *
+     * Ограничено списком $cmids (теми же видимыми на странице активностями, что и в
+     * done_counts()) - ЛОВУШКА, найдена ревью: без этого ограничения агрегат считал ВСЕ задания
+     * курса, включая скрытые/недоступные классу, которых нет в payload['cms']; тогда
+     * attention.grading.count мог быть больше нуля при отсутствующем attention.grading.url
+     * (единственное непроверенное задание невидимо, ссылку строить не на что), а Task 3 полагается
+     * на этот url. Фильтр по cm.id IN (...) делает старый фильтр "a.course = :cid" избыточным -
+     * список cmid уже принадлежит ровно этому курсу (посчитан из get_fast_modinfo($course)).
+     * @param int[] $cmids
      * @param int[] $userids
      * @return array<int,int> cmid -> число работ на проверке
      */
-    private static function grading_counts(int $courseid, array $userids): array {
+    private static function grading_counts(array $cmids, array $userids): array {
         global $DB;
-        if (!$userids) {
+        if (!$cmids || !$userids) {
             return [];
         }
+        [$incm, $pcm] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'cm');
         [$inu, $pu] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'u');
         $rows = $DB->get_records_sql(
             "SELECT cm.id AS cmid, COUNT(DISTINCT sub.userid) AS cnt
@@ -160,11 +170,11 @@ class course_staff_view {
                     AND cm.course = a.course AND cm.deletioninprogress = 0
           LEFT JOIN {assign_grades} g ON g.assignment = sub.assignment AND g.userid = sub.userid
                     AND g.attemptnumber = sub.attemptnumber
-              WHERE a.course = :cid AND sub.latest = 1 AND sub.status = 'submitted'
+              WHERE cm.id {$incm} AND sub.latest = 1 AND sub.status = 'submitted'
                     AND sub.userid {$inu}
                     AND (g.id IS NULL OR g.grade IS NULL OR g.grade < 0 OR g.timemodified < sub.timemodified)
            GROUP BY cm.id",
-            ['cid' => $courseid] + $pu
+            $pcm + $pu
         );
         $out = [];
         foreach ($rows as $r) {
@@ -181,33 +191,45 @@ class course_staff_view {
      * активности, И число РАЗНЫХ учеников по курсу целиком (в шапке ученик считается один раз,
      * даже если застрял в трех активностях).
      *
-     * ВАЖНО про параметры: `get_in_or_equal` для каждой ветки UNION вызывается ОТДЕЛЬНО, с
-     * разными префиксами (u1_/u2_) - Moodle DML считает КОЛИЧЕСТВО ВХОЖДЕНИЙ именованного
-     * плейсхолдера в тексте SQL, а не число уникальных имен (moodle_database::fix_sql_params(),
-     * $named_count = preg_match_all(...)), поэтому один и тот же :u1 не может повторно
-     * использоваться во второй ветке UNION - потребует вдвое больше значений, чем передано.
+     * Ограничено списком $cmids (теми же видимыми на странице активностями, что и в
+     * done_counts()/grading_counts()) - ЛОВУШКА, найдена ревью: без этого ограничения агрегат
+     * учитывал открытые пересдачи/повторы на СКРЫТЫХ от класса активностях, которых нет в
+     * payload['cms']; педагог видел бы в шапке «N учеников застряли», не находя ни одной карточки
+     * с пометкой «застряли».
+     *
+     * ВАЖНО про параметры: `get_in_or_equal` для КАЖДОГО набора (и cmids, и userids) вызывается
+     * ОТДЕЛЬНО на каждую ветку UNION, с разными префиксами (cm1_/cm2_, u1_/u2_) - Moodle DML
+     * считает КОЛИЧЕСТВО ВХОЖДЕНИЙ именованного плейсхолдера в тексте SQL, а не число уникальных
+     * имен (moodle_database::fix_sql_params(), $named_count = preg_match_all(...)), поэтому один
+     * и тот же :u1/:cm1 не может повторно использоваться во второй ветке UNION - потребует вдвое
+     * больше значений, чем передано.
+     * @param int[] $cmids
      * @param int[] $userids
      * @return array{0:array<int,int>,1:int} [cmid -> число застрявших, число разных учеников]
      */
-    private static function stuck_counts(int $courseid, array $userids): array {
+    private static function stuck_counts(int $courseid, array $cmids, array $userids): array {
         global $DB;
-        if (!$userids) {
+        if (!$cmids || !$userids) {
             return [[], 0];
         }
+        [$incm1, $pcm1] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'cm1');
         [$inu1, $pu1] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'u1');
+        [$incm2, $pcm2] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'cm2');
         [$inu2, $pu2] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'u2');
-        $params = ['cid1' => $courseid, 'cid2' => $courseid] + $pu1 + $pu2;
+        $params = ['cid1' => $courseid, 'cid2' => $courseid] + $pcm1 + $pu1 + $pcm2 + $pu2;
         // get_recordset_sql, а не get_records_sql: первый столбец (cmid) НЕ уникален, записи
         // с одинаковым cmid затерли бы друг друга.
         $rs = $DB->get_recordset_sql(
             "SELECT cmid, userid FROM (
                  SELECT r.cmid AS cmid, r.mdl_user_id AS userid
                    FROM {unics_retakes} r
-                  WHERE r.mdl_course_id = :cid1 AND r.status = 0 AND r.mdl_user_id {$inu1}
+                  WHERE r.mdl_course_id = :cid1 AND r.status = 0 AND r.cmid {$incm1}
+                        AND r.mdl_user_id {$inu1}
                  UNION
                  SELECT tr.cmid AS cmid, tr.mdl_user_id AS userid
                    FROM {unics_topic_retries} tr
-                  WHERE tr.mdl_course_id = :cid2 AND tr.status = 0 AND tr.mdl_user_id {$inu2}
+                  WHERE tr.mdl_course_id = :cid2 AND tr.status = 0 AND tr.cmid {$incm2}
+                        AND tr.mdl_user_id {$inu2}
              ) x",
             $params
         );
@@ -244,6 +266,12 @@ class course_staff_view {
      * для того же фильтра «показывается ли активность на странице» - не своя N+1, а
      * унаследованная от Moodle core/сестринского класса стоимость первого обращения к cm_info.
      * Никаких запросов в цикле по ученикам или по активностям в самом course_staff_view.
+     *
+     * ИНВАРИАНТ payload: если attention.grading не null, то attention.grading.url тоже не null.
+     * Держится структурно, а не проверкой: grading_counts() возвращает записи ТОЛЬКО по cmid из
+     * $cmids (видимые активности), то есть каждый cmid с ненулевым счетчиком обязательно
+     * встретится в цикле по $visible ниже и присвоит $firstgradingurl до того, как соберется
+     * $gradingtotal > 0. Task 3 полагается на этот инвариант при построении ссылки в шапке.
      */
     public static function build_payload(\stdClass $course, int $viewerid): array {
         $members = self::class_members($course, $viewerid);
@@ -275,8 +303,8 @@ class course_staff_view {
 
         $cmids = array_map(static fn(\cm_info $cm): int => (int)$cm->id, $visible);
         $done = self::done_counts($cmids, $members);
-        $grading = self::grading_counts((int)$course->id, $members);
-        [$stuck, $stuckusers] = self::stuck_counts((int)$course->id, $members);
+        $grading = self::grading_counts($cmids, $members);
+        [$stuck, $stuckusers] = self::stuck_counts((int)$course->id, $cmids, $members);
 
         $reporturl = (new \moodle_url('/local/unics/pages/course_report.php',
             ['course_id' => (int)$course->id]))->out(false);
