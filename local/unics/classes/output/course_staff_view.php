@@ -39,10 +39,25 @@ class course_staff_view {
     }
 
     /**
-     * Класс смотрящего на этом курсе - активные незаархивированные учащиеся, записанные на курс, из них:
-     * - для педагога (есть строка unics_teachers) - только привязанные к нему (unics_teacher_student);
-     * - для системного админа (local/unics:manage) - все;
-     * - для методиста/скоупного админа - ограниченные его скоупом (scope_checker::user_list_filter_sql).
+     * Класс смотрящего на этом курсе - активные незаархивированные учащиеся, записанные на курс.
+     *
+     * Ветка выбирается по РОЛИ смотрящего, а не по наличию строки в unics_teachers - ЛОВУШКА:
+     * unics_user_manager::create_user() пишет строку в unics_teachers для КАЖДОЙ «учительской»
+     * роли, включая методиста организации (роль 4) и муниципального методиста (роль 9) -
+     * см. {@see \local_unics\access::is_methodist()} («по таблице teacher'ов методиста не
+     * отличить»). Поэтому проверка «методист/скоупный админ» ОБЯЗАНА идти РАНЬШЕ проверки
+     * unics_teachers: иначе методист попадает в ветку привязок, где у него нет ни одной строки
+     * unics_teacher_student, и класс ошибочно выходит пустым.
+     *
+     * Порядок веток:
+     * - системный админ (local/unics:manage) - без фильтра, видит всех записанных на курс;
+     * - методист (роли 4/9) или скоупный админ (роли 1/10, manageorg без manage) -
+     *   ограничен его скоупом (scope_checker::user_list_filter_sql);
+     * - иначе, если есть строка в unics_teachers - педагог, ограничен привязками
+     *   (unics_teacher_student);
+     * - иначе - нетипичная роль с доступом к участникам курса, класс пуст (безопасный дефолт,
+     *   а не «показать всех»).
+     *
      * ВНИМАНИЕ: unics_teacher_student.teacher_id ссылается на unics_teachers.id, а student_id - на
      * unics_students.id (НЕ на user.id) - отсюда join'ы через mdl_user_id.
      * @return int[] Moodle user id по возрастанию, без дублей; пустой массив - класса нет
@@ -54,12 +69,9 @@ class course_staff_view {
         $joins = '';
         $where = '';
 
-        $teacherid = $DB->get_field('unics_teachers', 'id', ['mdl_user_id' => $viewerid]);
-        if ($teacherid) {
-            $joins = ' JOIN {unics_teacher_student} ts
-                            ON ts.student_id = s.id AND ts.teacher_id = :tid ';
-            $params['tid'] = (int)$teacherid;
-        } else if (!has_capability('local/unics:manage', \context_system::instance(), $viewerid)) {
+        if (has_capability('local/unics:manage', \context_system::instance(), $viewerid)) {
+            // Системный админ - фильтра нет, видит всех записанных на курс.
+        } else if (\local_unics\access::is_methodist($viewerid) || \local_unics\access::is_scoped_admin($viewerid)) {
             // Методист/скоупный админ: курсы у нас общие, поэтому без скоуп-фильтра он увидел бы
             // учеников чужих организаций.
             [$scopewhere, $scopeparams] = \local_unics\identity\scope_checker::user_list_filter_sql(
@@ -68,6 +80,17 @@ class course_staff_view {
                        LEFT JOIN {unics_organizations} o ON o.id = uo.organization_id ';
             $where = ' AND (' . $scopewhere . ')';
             $params += $scopeparams;
+        } else {
+            $teacherid = $DB->get_field('unics_teachers', 'id', ['mdl_user_id' => $viewerid]);
+            if ($teacherid) {
+                $joins = ' JOIN {unics_teacher_student} ts
+                                ON ts.student_id = s.id AND ts.teacher_id = :tid ';
+                $params['tid'] = (int)$teacherid;
+            } else {
+                // Ни одна ветка не подошла (нетипичная роль с доступом к участникам курса) -
+                // безопасный дефолт: класс пуст, а не «все ученики курса».
+                $where = ' AND 1=0';
+            }
         }
 
         $sql = "SELECT DISTINCT s.mdl_user_id

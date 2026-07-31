@@ -9,12 +9,62 @@ defined('MOODLE_INTERNAL') || die();
  * Тесты хелпера данных педагогского вида страницы курса ({@see course_staff_view}):
  * гейт is_staff_view и состав класса смотрящего (class_members) - педагог видит только
  * привязанных к нему учеников (unics_teacher_student), привязка без записи на курс
- * в класс не попадает.
+ * в класс не попадает; методист/скоупный админ видит по скоупу, а не по привязкам
+ * (регресс: у методиста тоже есть строка в unics_teachers - см. class_members()); системный
+ * админ видит всех записанных на курс.
  *
  * @package local_unics
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(course_staff_view::class)]
 final class course_staff_view_test extends \advanced_testcase {
+
+    /**
+     * Создать (если такой роли еще нет) Moodle-роль по shortname и назначить ее пользователю
+     * на системном контексте - {@see \local_unics\access::user_has_role()} (и is_methodist())
+     * ищут роль без учета контекста, поэтому системного контекста достаточно.
+     * В окружении PHPUnit роль 'methodist' не создается ни install.xml (там только схема),
+     * ни db/upgrade.php (там создаются только region_admin/district_methodist/region_methodist) -
+     * на живом сайте ее заводят вручную через «Определить роли» (см. pages/setup_roles.php),
+     * поэтому тест обязан завести ее сам.
+     */
+    private function assign_role(string $shortname, string $archetype, int $userid): void {
+        global $DB;
+        $roleid = $DB->get_field('role', 'id', ['shortname' => $shortname]);
+        if (!$roleid) {
+            $roleid = create_role(ucfirst($shortname), $shortname, '', $archetype);
+            set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
+        }
+        role_assign((int)$roleid, $userid, \context_system::instance()->id);
+    }
+
+    /**
+     * Иерархия скоупа регион -> округ -> 2 организации (для проверки, что скоуп-фильтр
+     * ДЕЙСТВИТЕЛЬНО ограничивает список чужой организацией, а не просто "не пустой").
+     * @return array{0:int,1:int} [id организации А, id организации Б]
+     */
+    private function make_two_organizations(): array {
+        global $DB;
+        $rid = $DB->insert_record('unics_regions', (object)['name' => 'Тест-регион']);
+        $did = $DB->insert_record('unics_districts', (object)['region_id' => $rid, 'name' => 'Тест-округ']);
+        $orga = $DB->insert_record('unics_organizations', (object)['district_id' => $did, 'name' => 'Организация А']);
+        $orgb = $DB->insert_record('unics_organizations', (object)['district_id' => $did, 'name' => 'Организация Б']);
+        return [(int)$orga, (int)$orgb];
+    }
+
+    /**
+     * Записать ученика на курс + unics_students + unics_user_org со скоупом организации
+     * (scope_checker::user_list_filter_sql фильтрует именно по unics_user_org записываемого,
+     * а не по unics_students.organization_id).
+     */
+    private function enrol_student_in_org(\stdClass $course, int $orgid): \stdClass {
+        global $DB;
+        $student = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($student->id, $course->id, 'student');
+        $DB->insert_record('unics_students', (object)['mdl_user_id' => $student->id]);
+        $DB->insert_record('unics_user_org',
+            (object)['mdl_user_id' => $student->id, 'organization_id' => $orgid, 'unics_role' => 7]);
+        return $student;
+    }
 
     /**
      * Курс с двумя учениками (оба записаны) и педагогом, привязанным к ПЕРВОМУ.
@@ -80,5 +130,48 @@ final class course_staff_view_test extends \advanced_testcase {
         $this->setUser($t);
 
         $this->assertTrue(course_staff_view::is_staff_view($course));
+    }
+
+    /**
+     * Регресс: методист организации ошибочно уходил в ветку привязок педагога, потому что
+     * unics_user_manager::create_user() пишет строку в unics_teachers и для методиста (роль 4) -
+     * см. докблок class_members(). Заводим методисту строку в unics_teachers НАРОЧНО (как в
+     * проде) и НЕ заводим ни одной unics_teacher_student - если ветка выбирается по этой
+     * таблице, класс будет пуст; должно быть ограничено скоупом (своя организация - виден,
+     * чужая - нет).
+     */
+    public function test_methodist_sees_only_own_organization(): void {
+        $this->resetAfterTest();
+        global $DB;
+        [$orga, $orgb] = $this->make_two_organizations();
+        $course = $this->getDataGenerator()->create_course(['format' => 'topics']);
+
+        $own = $this->enrol_student_in_org($course, $orga);
+        $this->enrol_student_in_org($course, $orgb);
+
+        $methodist = $this->getDataGenerator()->create_user();
+        $DB->insert_record('unics_user_org',
+            (object)['mdl_user_id' => $methodist->id, 'organization_id' => $orga, 'unics_role' => 4]);
+        $DB->insert_record('unics_teachers',
+            (object)['mdl_user_id' => $methodist->id, 'organization_id' => $orga]);
+        $this->assign_role('methodist', 'editingteacher', (int)$methodist->id);
+
+        $members = course_staff_view::class_members($course, (int)$methodist->id);
+
+        $this->assertSame([(int)$own->id], $members,
+            'методист должен видеть только своих учеников по скоупу, а не пустой класс по unics_teachers');
+    }
+
+    /** Системный админ (local/unics:manage) - видит всех записанных на курс, без учета скоупа/привязок. */
+    public function test_system_admin_sees_all_enrolled_students(): void {
+        $this->resetAfterTest();
+        [$course, $s1, $s2, ] = $this->make_course_with_class();
+
+        $expected = [(int)$s1->id, (int)$s2->id];
+        sort($expected);
+
+        $members = course_staff_view::class_members($course, (int)get_admin()->id);
+
+        $this->assertSame($expected, $members);
     }
 }
