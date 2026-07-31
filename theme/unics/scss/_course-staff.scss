@@ -1,0 +1,239 @@
+// =============================================================================
+// Страница курса - педагогский вид (course-staff, сигнал по классу).
+//
+// local_unics ВЫЧИСЛЯЕТ и ДВИЖЕТ (course_staff_view::build_payload + AMD
+// local_unics/course_staff), theme_unics только СТИЛИЗУЕТ готовую разметку.
+// Контракт разметки (классы/структура) - task-3-report.md; здесь не меняется.
+//
+// Гейт: JS вешает body.unics-staff-course ТОЛЬКО когда серверная проверка прав
+// прошла (course_staff_view::is_staff_view - не ребенок, не родитель, режим
+// редактирования выключен, есть право видеть участников). Все правила ниже
+// вложены в .unics-staff-course - на ученика/родителя/режим редактирования не
+// влияют вообще (класса на body нет).
+//
+// Визуальный язык продолжает _course-student.scss: мягкие карточки, чипы-
+// пилюли, бары прогресса, те же радиусы/тени/токены.
+//
+// Разметка (см. course_staff.js, task-3-report.md):
+//   .unics-staff-head (перед .course-content, СОСЕД, а не потомок - поэтому
+//     правила _core-course.scss, все вложенные в .course-content, ее не видят)
+//     a.unics-staff-attention.unics-staff-attention-grading[href] ИЛИ p.*
+//     a.unics-staff-attention.unics-staff-attention-stuck[href] ИЛИ p.*
+//     p.unics-staff-clear (только если обе строки выше отсутствуют)
+//   li#section-N [data-region=sectionbadges] (или сосед сразу после
+//     .course-section-header, если региона нет)
+//     div.unics-staff-sec[role=progressbar] > .unics-staff-sec-bar (инлайн
+//       width:N% от JS) + span.unics-staff-sec-label
+//   li#module-N .activity-item .activity-grid (ПОСЛЕДНИМ ребенком, БЕЗ
+//     grid-area - см. разбор конфликта с ядром ниже)
+//     div.unics-staff-chips > .unics-staff-chip(.done|.grading|.stuck)
+//       (span или a[href])
+//
+// Конфликт с ядром (Boost, theme/boost/scss/moodle/course.scss): .activity-grid
+// - CSS Grid С ПОЛНОСТЬЮ занятыми именованными областями (icon/name/groupmode/
+// completion/actions на 5 колонок x 6 строк). JS вставляет .unics-staff-chips
+// БЕЗ grid-area (по дизайну контракта) - авто-размещение браузера кладет ее в
+// ПЕРВУЮ свободную ячейку НОВОЙ неявной строки, т.е. в узкую icon-колонку
+// (min-content) - проверено живьем ДО стилизации (task-4, скриншот
+// staff-course-view-structure.png): чипы налезали на текст "Отслеживание
+// выполнения". Чиним ниже явным grid-column: 1 / -1 на .unics-staff-chips -
+// не трогает JS/DOM, просто задает позицию уже вставленному элементу.
+// =============================================================================
+.unics-staff-course {
+
+    // -------------------------------------------------------------------------
+    // Карточка «Требует внимания» над содержимым курса.
+    // Сиблинг .course-content (не потомок) - белая мягкая карточка, как
+    // .unics-course-head у ребенка. Внутри - до трех строк-состояний: работы на
+    // проверке, застрявшие ученики, спокойное "все проверено" (без тревожного
+    // цвета - зеленый тон, как .unics-course-done).
+    // -------------------------------------------------------------------------
+    .unics-staff-head {
+        display: flex;
+        flex-direction: column;
+        gap: var(--unics-space-1);
+        background: var(--unics-surface);
+        border: 1px solid var(--unics-border);
+        border-radius: var(--unics-radius-lg);
+        box-shadow: var(--unics-shadow-md);
+        padding: var(--unics-density-staff) var(--unics-space-5);
+        margin-bottom: var(--unics-section-gap);
+    }
+
+    // Общая строка карточки (ссылка-состояние ИЛИ спокойный текст) - единый
+    // ритм высоты/отступов независимо от тона.
+    .unics-staff-attention,
+    .unics-staff-clear {
+        display: flex;
+        align-items: center;
+        gap: var(--unics-space-2);
+        min-height: var(--unics-touch-min);   // тач-цель >= 44px у строк-ссылок
+        margin: 0;
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    a.unics-staff-attention {
+        text-decoration: none;
+
+        &:hover, &:focus {
+            text-decoration: underline;
+        }
+        &:focus-visible {
+            outline: none;
+            box-shadow: var(--unics-focus-ring);
+            border-radius: var(--unics-radius);
+        }
+    }
+
+    // Тон "ждет проверки" - тот же янтарный, что у --unics-warning (4.67:1 на
+    // белом/surface - AA, см. таблицу контрастов в отчете). Маркер - нейтральная
+    // точка (не заявляет "готово"/"ошибка", просто ритм со строкой ниже).
+    .unics-staff-attention-grading {
+        color: var(--unics-warning);
+        &::before { content: "\2022"; }
+    }
+    // Тон "застряли" - тревожный (--unics-error, 7.42:1 на белом/surface).
+    // Крестик - тот же глиф, что в _core-quiz.scss для "неверно" (переиспользуем
+    // уже проверенный визуальный словарь темы, не изобретаем новый).
+    .unics-staff-attention-stuck {
+        color: var(--unics-error);
+        &::before { content: "\2717"; }
+    }
+    // Спокойное состояние - НЕ ошибка и не пустая заглушка: зеленый тон и
+    // галочка, как у .unics-course-done в ученическом виде (тот же прием).
+    .unics-staff-clear {
+        color: var(--unics-success);
+        font-weight: 700;
+        &::before { content: "\2713"; font-size: 1.2em; }
+    }
+
+    // -------------------------------------------------------------------------
+    // Прогресс класса по теме - в штатном месте под заголовком секции
+    // ([data-region=sectionbadges], тот же флекс-ряд, где сидят штатные бейджи
+    // Moodle). ГРАБЛЯ (унаследована от _course-student.scss, .unics-sec-progress
+    // - та же механика, тот же живой баг): процентная ширина бара - инлайн
+    // style="width:X%" от JS - резолвится НАДЕЖНО только если ПРЯМОЙ родитель
+    // бара имеет ОПРЕДЕЛЕННУЮ (не auto/не %) ширину; внутри flex-ряда без
+    // явной ширины база неопределенная и бар схлопывается почти в 0. Решение -
+    // то же: колонка ФИКСИРОВАННОЙ ширины (флекс-колонка, не строка - бар
+    // обязан занимать ВСЮ ширину колонки, иначе процент визуально врет), только
+    // шире, чем у ребенка (4.5rem) - подпись длиннее ("прошли тему: N из M"
+    // против короткого "N из M" у ребенка), поэтому подпись читается слева
+    // направо и переносится на вторую строку при двузначных числах (перенос -
+    // не многоточие, текст не режется).
+    // -------------------------------------------------------------------------
+    .unics-staff-sec {
+        position: relative;
+        display: flex;
+        flex-direction: column-reverse;   // DOM [bar,label] -> визуально [label,bar]
+        align-items: flex-start;
+        gap: 4px;
+        width: 9.5rem;
+        flex: 0 0 auto;
+        margin-inline-start: var(--unics-space-3);
+
+        &::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 8px;
+            border-radius: var(--unics-radius-pill);
+            background: var(--unics-neutral-bg);
+        }
+    }
+    .unics-staff-sec-bar {
+        position: relative;   // красится поверх ::before колонки выше
+        height: 8px;
+        border-radius: var(--unics-radius-pill);
+        background: linear-gradient(90deg, var(--unics-primary-hover), var(--unics-primary));
+        transition: width var(--unics-duration-normal) var(--unics-ease-default);
+    }
+    .unics-staff-sec-label {
+        font-size: .875rem;
+        font-weight: 600;
+        color: var(--unics-text);
+        font-variant-numeric: tabular-nums;
+    }
+
+    // -------------------------------------------------------------------------
+    // Чипы с числами у активности. .unics-staff-chips вставлена JS последним
+    // ребенком .activity-grid БЕЗ grid-area (см. разбор конфликта в шапке
+    // файла) - явно растягиваем на все колонки, чипы образуют собственную
+    // полноширинную строку под именем/статусом активности.
+    // -------------------------------------------------------------------------
+    .unics-staff-chips {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;              // на узком экране чипы переносятся, а не выдавливают страницу
+        align-items: center;
+        gap: var(--unics-space-2);
+        margin-top: var(--unics-space-2);
+    }
+
+    .unics-staff-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px var(--unics-space-4);
+        border-radius: var(--unics-radius-pill);
+        border: 1px solid transparent;
+        font-weight: 700;
+        font-size: .9375rem;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;          // пилюля растет по содержимому, а не режет текст
+        text-decoration: none;
+    }
+    // Чип-ссылка (на проверке/застряли с известным url) - настоящая тач-цель.
+    a.unics-staff-chip {
+        min-height: var(--unics-touch-min);
+
+        &:hover, &:focus {
+            text-decoration: underline;
+        }
+        &:focus-visible {
+            outline: none;
+            box-shadow: var(--unics-focus-ring);
+        }
+    }
+
+    .unics-staff-chip-done {
+        background: var(--unics-success-bg);
+        color: var(--unics-success);
+        border-color: var(--unics-success);
+        &::before { content: "\2713"; }
+    }
+    // Тот же прием, что .unics-chip-todo у ребенка: --unics-warning на
+    // --unics-warning-bg дает лишь ~4.28:1 (провал AA для некрупного жирного
+    // текста) - используем --unics-cchip-todo-tx (4.97:1), уже заведенный под
+    // эту же пару фон/рамка.
+    .unics-staff-chip-grading {
+        background: var(--unics-warning-bg);
+        color: var(--unics-cchip-todo-tx);
+        border-color: var(--unics-warning);
+        &::before { content: "\2022"; }
+    }
+    .unics-staff-chip-stuck {
+        background: var(--unics-error-bg);
+        color: var(--unics-error);
+        border-color: var(--unics-error);
+        &::before { content: "\2717"; }
+    }
+
+    // -------------------------------------------------------------------------
+    // Узкий экран - защитный перенос шапки секции (тот же прием, что
+    // _course-student.scss делает для .unics-child-course на этом же
+    // брейкпоинте; гейты разные, поэтому правило не наследуется само собой).
+    // Полный аудит 360px - следующая задача; здесь только страховка от
+    // горизонтального скролла страницы.
+    // -------------------------------------------------------------------------
+    @media (max-width: 480px) {
+        .course-section-header {
+            flex-wrap: wrap;
+        }
+        [data-region="sectionbadges"] {
+            margin-top: var(--unics-space-2);
+        }
+    }
+}

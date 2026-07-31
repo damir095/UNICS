@@ -70,6 +70,7 @@ function theme_unics_get_pre_scss($theme): string {
  *   _unics-pages → plugin-specific (local_unics) components
  *   _tables     → единая система таблиц «Мягкие карточки» (.generaltable/.unics-table)
  *   _course-student → ученический вид страницы курса (.unics-child-course)
+ *   _course-staff   → педагогский вид страницы курса (.unics-staff-course)
  *
  * @param theme_config $theme
  * @return string SCSS
@@ -88,6 +89,7 @@ function theme_unics_get_extra_scss($theme): string {
         '_unics-pages',
         '_tables',        // единая система таблиц (после наших страниц, до core и темной темы)
         '_course-student', // ученический вид страницы курса (.unics-child-course, весь под гейтом)
+        '_course-staff',   // педагогский вид страницы курса (.unics-staff-course, весь под гейтом)
         // Оболочка под роль (G3): боковой рельс + центр уведомлений (toast - позже).
         // После _unics-pages (наши страницы — эталон), перед core/accessibility.
         '_shell-rail',
