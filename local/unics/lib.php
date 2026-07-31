@@ -57,6 +57,22 @@ function local_unics_before_http_headers(): void {
         debugging('local_unics course_child: ' . $e->getMessage(), DEBUG_DEVELOPER);
     }
 
+    // Педагогский вид страницы курса: сигнал по классу (что на проверке, кто застрял, прогресс
+    // класса по темам). Гейты course_child и course_staff взаимоисключающие - ребенок ИЛИ персонал.
+    try {
+        $staffpath = $PAGE->url ? $PAGE->url->get_path() : '';
+        if ($staffpath === '/course/view.php' && isset($COURSE) && $COURSE->id > 1
+                && $COURSE->format === 'topics'
+                && \local_unics\output\course_staff_view::is_staff_view($COURSE)) {
+            $payload = \local_unics\output\course_staff_view::build_payload($COURSE, $USER->id);
+            if ($payload['classSize'] > 0) {
+                $PAGE->requires->js_call_amd('local_unics/course_staff', 'init', [$payload]);
+            }
+        }
+    } catch (\Throwable $e) {
+        debugging('local_unics course_staff: ' . $e->getMessage(), DEBUG_DEVELOPER);
+    }
+
     // Стандартный Moodle-дашборд (`/my/index.php`) и страница «Мои курсы»
     // (`/my/courses.php`) оба имеют pagetype == 'my-index', поэтому различаем по URL.
     // Учащегося уводим ТОЛЬКО с дашборда, «Мои курсы» оставляем - это его курсы.
