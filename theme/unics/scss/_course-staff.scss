@@ -19,25 +19,31 @@
 //     правила _core-course.scss, все вложенные в .course-content, ее не видят)
 //     a.unics-staff-attention.unics-staff-attention-grading[href] ИЛИ p.*
 //     a.unics-staff-attention.unics-staff-attention-stuck[href] ИЛИ p.*
-//     p.unics-staff-clear (только если обе строки выше отсутствуют)
+//     a.unics-staff-attention.unics-staff-attention-orphans[href] (ссылка на
+//       course_levels.php, всегда с url - см. task-3-report.md)
+//     p.unics-staff-clear (только если ВСЕ строки выше отсутствуют)
 //   li#section-N [data-region=sectionbadges] (или сосед сразу после
 //     .course-section-header, если региона нет)
 //     div.unics-staff-sec[role=progressbar] > .unics-staff-sec-bar (инлайн
 //       width:N% от JS) + span.unics-staff-sec-label
-//   li#module-N .activity-item .activity-grid (ПОСЛЕДНИМ ребенком, БЕЗ
-//     grid-area - см. разбор конфликта с ядром ниже)
+//   li#module-N(.unics-staff-orphan) .activity-item .activity-grid
+//       (span.unics-staff-audience - ПОСЛЕДНИМ ребенком, БЕЗ grid-area - см.
+//       разбор конфликта с ядром ниже; li получает модификатор
+//       .unics-staff-orphan, если info.orphan)
 //     div.unics-staff-chips > .unics-staff-chip(.done|.grading|.stuck)
-//       (span или a[href])
+//       (span или a[href]) - вставляется ПЕРЕД .unics-staff-audience
 //
 // Конфликт с ядром (Boost, theme/boost/scss/moodle/course.scss): .activity-grid
 // - CSS Grid С ПОЛНОСТЬЮ занятыми именованными областями (icon/name/groupmode/
 // completion/actions на 5 колонок x 6 строк). JS вставляет .unics-staff-chips
-// БЕЗ grid-area (по дизайну контракта) - авто-размещение браузера кладет ее в
-// ПЕРВУЮ свободную ячейку НОВОЙ неявной строки, т.е. в узкую icon-колонку
-// (min-content) - проверено живьем ДО стилизации (task-4, скриншот
-// staff-course-view-structure.png): чипы налезали на текст "Отслеживание
-// выполнения". Чиним ниже явным grid-column: 1 / -1 на .unics-staff-chips -
-// не трогает JS/DOM, просто задает позицию уже вставленному элементу.
+// И .unics-staff-audience БЕЗ grid-area (по дизайну контракта) - авто-
+// размещение браузера кладет ИХ ОБЕ в ПЕРВУЮ свободную ячейку НОВОЙ неявной
+// строки, т.е. в узкую icon-колонку (min-content) - проверено живьем ДО
+// стилизации (task-4, скриншот staff-course-view-structure.png): чипы налезали
+// на текст "Отслеживание выполнения". Чиним ниже явным grid-column: 1 / -1 НА
+// ОБОИХ элементах (.unics-staff-chips и .unics-staff-audience - у пометки та
+// же грабля, тот же прием) - не трогает JS/DOM, просто задает позицию уже
+// вставленным элементам.
 // =============================================================================
 .unics-staff-course {
 
@@ -98,6 +104,17 @@
     .unics-staff-attention-stuck {
         color: var(--unics-error);
         &::before { content: "\2717"; }
+    }
+    // Тон "варианты без аудитории" - тот же янтарный, что "ждет проверки"
+    // (--unics-warning, 4.67:1) - предупреждение о настройке, не тревога:
+    // задание не потеряно и не сломано, просто в текущей раскладке групп его
+    // не видит ни один ученик - это НЕ тревожнее "застряли" (--unics-error,
+    // 7.42:1 - более насыщенный тон для более срочного сигнала). Символ
+    // "пустое множество" (∅) - смысловой маркер "никто" (не только цвет,
+    // WCAG 1.4.1), отличный от точки/крестика соседних строк.
+    .unics-staff-attention-orphans {
+        color: var(--unics-warning);
+        &::before { content: "\2205"; }
     }
     // Спокойное состояние - НЕ ошибка и не пустая заглушка: зеленый тон и
     // галочка, как у .unics-course-done в ученическом виде (тот же прием).
@@ -219,6 +236,76 @@
         color: var(--unics-error);
         border-color: var(--unics-error);
         &::before { content: "\2717"; }
+    }
+
+    // -------------------------------------------------------------------------
+    // Пометка аудитории уровневого варианта («Стандартный · 4 ученика»,
+    // «Базовый · не видит никто»). Вставлена JS ПОСЛЕДНИМ ребенком
+    // .activity-grid, БЕЗ grid-area - та же грабля, что у .unics-staff-chips
+    // выше (см. разбор в шапке файла): без явного grid-column авто-размещение
+    // Grid кладет ее в узкую 1-колоночную ячейку новой неявной строки. Текст -
+    // НЕ пилюля-чип (не статус, чисто описательная строка о составе аудитории),
+    // поэтому визуально легче чипов: без фона/рамки, только приглушенный текст.
+    // Обрезка многоточием ЗАПРЕЩЕНА контрактом (это данные, которые педагог
+    // должен прочитать целиком) - white-space: normal (в противовес nowrap у
+    // чипов) явно разрешает перенос на узком экране.
+    // -------------------------------------------------------------------------
+    .unics-staff-audience {
+        grid-column: 1 / -1;
+        display: block;
+        margin-top: var(--unics-space-2);
+        font-size: .9375rem;          // тот же размер, что у .unics-staff-chip
+        font-weight: 600;
+        color: var(--unics-neutral);  // приглушенный, но читаемый; НЕ --unics-text-muted -
+                                       // строка внутри .activity-item, чей фон на hover
+                                       // становится --unics-activity-hover (=neutral-bg) -
+                                       // text-muted там дает ~4.24:1 (провал AA), тот же
+                                       // прием, что .unics-act-sub в _course-student.scss.
+        font-variant-numeric: tabular-nums;
+        white-space: normal;
+        overflow-wrap: break-word;    // длинная пометка ("для группы 7А класс · 1 ученик")
+                                       // переносится, а не выдавливает карточку активности.
+    }
+
+    // -------------------------------------------------------------------------
+    // Активность-сирота (модификатор на li#module-N, JS ставит его вместе с
+    // .unics-staff-audience при info.orphan - см. renderVariant() в
+    // course_staff.js). Приглушаем ИДЕНТИЧНОСТЬ строки - иконку (opacity, тот
+    // же прием и то же значение, что у .unics-locked в ученическом виде,
+    // _course-student.scss) и название (ослабленный цвет вместо --unics-text -
+    // --unics-neutral, тот же токен, что у .unics-staff-audience выше, уже
+    // проверен на AA и на белом, и на hover-фоне). ЧИПЫ (.unics-staff-chips) и
+    // виджет выполнения СОЗНАТЕЛЬНО НЕ трогаем: их собственные цвета уже
+    // впритык к AA (--unics-cchip-todo-tx = 4.97:1 на --unics-warning-bg) -
+    // расчет показал, что даже мягкое приглушение (прозрачностью ИЛИ цветом)
+    // этой конкретной пары топит контраст ниже 4.5:1 (см. таблицу замеров в
+    // отчете) - блэнкет-opacity на всю строку (как у .unics-locked) здесь бы
+    // тихо сломала уже проверенный токен из соседней фичи. Точечная дим-цель
+    // вместо родительского opacity - осознанный выбор, а не недосмотр.
+    //
+    // Маркер того, что строка нерабочая, не только цветом (WCAG 1.4.1) -
+    // пунктирная рамка вместо ядровой сплошной прозрачной. Специфичность
+    // (0,3,0) у базового правила и явный :hover-дубль (0,4,0) перебивают
+    // ядровые .course-content .activity-item / :hover ((0,2,0) / (0,3,0),
+    // _core-course.scss) без !important - тот же прием specificity-bump, что
+    // «next-step» в _course-student.scss. :focus-within НЕ трогаем - фокус-
+    // кольцо ядра остается как обычно (border-style: dashed никуда не девается,
+    // ядро его не сбрасывает, только перекрашивает border-color на время фокуса).
+    // -------------------------------------------------------------------------
+    .unics-staff-orphan {
+        .activity-icon {
+            opacity: .85;
+        }
+        .activityname .aalink,
+        .instancename {
+            color: var(--unics-neutral);
+        }
+
+        .activity-item,
+        .activity-item:hover {
+            border-style: dashed;
+            border-color: var(--unics-neutral);
+        }
     }
 
     // -------------------------------------------------------------------------

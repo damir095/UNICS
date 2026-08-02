@@ -770,15 +770,19 @@ html[class*="unics-a11y"] .unics-shell-rail .unics-shell-rail__groups .unics-she
 // ловушка `a:not(.btn)`, что чинилась выше для рельса. Карточка «Требует
 // внимания» и чипы «на проверке»/«застряли» рендерятся ссылкой `<a>`, когда у
 // сигнала есть url (обычный случай - именно тогда, когда сигнал реально
-// нагружен): `.unics-staff-attention-grading`/`-stuck`,
+// нагружен): `.unics-staff-attention-grading`/`-stuck`/`-orphans` (у сводки
+// сирот url ЕСТЬ ВСЕГДА - ссылка на `course_levels.php`, см. task-3-report.md -
+// поэтому она под ударом каждый раз, когда вообще отрисована),
 // `.unics-staff-chip-grading`/`-stuck`. Их собственные правила в
 // `_course-staff.scss` (2 класса, специфичность (0,2,0)) проигрывают ЛЮБОМУ из
 // семи `a:not(.btn)`-правил этого файла (дефолтная темная строка 265, светлый
 // контраст 594, темная+контраст 646, три акцента 707/731/737/743) - без учета
-// цвета все они красят ссылку в один и тот же `--unics-primary-text`, и оба
-// сигнала (янтарный "на проверке" и красный "застряли") становятся визуально
-// неразличимы. Контраст (число) при этом не падает ниже AA - это ошибка
-// ВЫБОРА цвета, а не недостатка контраста, поэтому axe-core ее не ловит.
+// цвета все они красят ссылку в один и тот же `--unics-primary-text`, и все
+// три сигнала (янтарный "на проверке", красный "застряли", янтарный "сироты")
+// становятся визуально неразличимы (а "сироты" от "на проверке" - и подавно,
+// у них и так один цвет по дизайну, см. _course-staff.scss). Контраст (число)
+// при этом не падает ниже AA - это ошибка ВЫБОРА цвета, а не недостатка
+// контраста, поэтому axe-core ее не ловит.
 //
 // Чиним ТЕМ ЖЕ приемом, что и рельс выше: `html[class*="unics-a11y"]` +
 // цепочка из ЕЩЕ ТРЕХ настоящих классов родительской разметки
@@ -810,6 +814,9 @@ html[class*="unics-a11y"] .unics-staff-course .unics-staff-head .unics-staff-att
 }
 html[class*="unics-a11y"] .unics-staff-course .unics-staff-head .unics-staff-attention-stuck {
     color: var(--unics-error);
+}
+html[class*="unics-a11y"] .unics-staff-course .unics-staff-head .unics-staff-attention-orphans {
+    color: var(--unics-warning);
 }
 html[class*="unics-a11y"] .unics-staff-course .unics-staff-chips .unics-staff-chip-grading {
     color: var(--unics-cchip-todo-tx);
