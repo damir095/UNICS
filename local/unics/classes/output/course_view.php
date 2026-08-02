@@ -147,9 +147,8 @@ class course_view {
         if ($cm->available) {
             return null;
         }
-        $tree = !empty($cm->availability) ? json_decode($cm->availability, true) : null;
         // Разбираем ОДНО простое условие частых типов; иначе - общий фолбэк.
-        $conds = self::flatten_conditions($tree);
+        $conds = availability_tree::leaves($cm->availability);
         if (count($conds) === 1) {
             $c = $conds[0];
             if (($c['type'] ?? '') === 'completion' && !empty($c['cm'])) {
@@ -187,22 +186,6 @@ class course_view {
      */
     private static function plain_name(\cm_info $cm): string {
         return $cm->get_formatted_name(['escape' => false]);
-    }
-
-    /** Собрать листовые условия из дерева availability (op &/|, c[]). */
-    private static function flatten_conditions(?array $tree): array {
-        if (!$tree || empty($tree['c'])) {
-            return [];
-        }
-        $out = [];
-        foreach ($tree['c'] as $child) {
-            if (isset($child['c'])) {
-                $out = array_merge($out, self::flatten_conditions($child));
-            } else {
-                $out[] = $child;
-            }
-        }
-        return $out;
     }
 
     /**
