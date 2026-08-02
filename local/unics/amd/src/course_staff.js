@@ -83,7 +83,10 @@ define([], function() {
         if (attention.stuck) {
             head.appendChild(attentionRow(attention.stuck, 'unics-staff-attention-stuck'));
         }
-        if (!attention.grading && !attention.stuck) {
+        if (attention.orphans) {
+            head.appendChild(attentionRow(attention.orphans, 'unics-staff-attention-orphans'));
+        }
+        if (!attention.grading && !attention.stuck && !attention.orphans) {
             if (!data.strings || !data.strings.allClear) {
                 return;
             }
@@ -179,6 +182,28 @@ define([], function() {
         grid.appendChild(box);
     }
 
+    /**
+     * Пометка аудитории варианта у одной активности: «Стандартный · 5 учеников»,
+     * «Базовый · не видит никто», «для группы 7А класс · 1 ученик». Текст приходит готовым из PHP.
+     * Набор активностей здесь ШИРЕ, чем у чипов: пометка есть и на скрытых от учеников строках -
+     * именно там она нужнее всего. Идемпотентно.
+     * @param {HTMLElement} li li#module-<cmid>
+     * @param {Object} info элемент data.variants: {label, orphan}
+     */
+    function renderVariant(li, info) {
+        if (!li || !info || !info.label || li.querySelector('.unics-staff-audience')) {
+            return;
+        }
+        var grid = li.querySelector('.activity-grid');
+        if (!grid) {
+            return;
+        }
+        if (info.orphan) {
+            li.classList.add('unics-staff-orphan');
+        }
+        grid.appendChild(el('span', 'unics-staff-audience', info.label));
+    }
+
     return {
         /**
          * @param {Object} data payload из local_unics\output\course_staff_view::build_payload().
@@ -207,6 +232,14 @@ define([], function() {
                     var sec = document.getElementById('section-' + num);
                     if (sec) {
                         renderSectionProgress(sec, sections[num], data.strings || {});
+                    }
+                });
+
+                var variants = data.variants || {};
+                Object.keys(variants).forEach(function(cmid) {
+                    var vli = document.getElementById('module-' + cmid);
+                    if (vli) {
+                        renderVariant(vli, variants[cmid]);
                     }
                 });
             } catch (e) {

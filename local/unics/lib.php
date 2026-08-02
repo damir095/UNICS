@@ -66,6 +66,12 @@ function local_unics_before_http_headers(): void {
                 && \local_unics\output\course_staff_view::is_staff_view($COURSE)) {
             $payload = \local_unics\output\course_staff_view::build_payload($COURSE, $USER->id);
             if ($payload['classSize'] > 0) {
+                // Пометка уровневых вариантов - отдельный расчет (свой набор строк и свой источник
+                // чисел), но едет в том же payload. Показываем ее только вместе с сигналом по классу:
+                // условие classSize > 0 остается единственным гейтом отрисовки.
+                $variants = \local_unics\output\course_variants::build($COURSE, $USER->id);
+                $payload['variants'] = $variants['variants'];
+                $payload['attention']['orphans'] = $variants['orphans'];
                 $PAGE->requires->js_call_amd('local_unics/course_staff', 'init', [$payload]);
             }
         }
