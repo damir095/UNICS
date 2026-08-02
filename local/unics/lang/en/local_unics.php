@@ -270,3 +270,19 @@ $string['staff_attention_grading_many'] = '{$a} работ ждут провер
 $string['staff_attention_stuck_one'] = '{$a} ученик застрял';
 $string['staff_attention_stuck_few'] = '{$a} ученика застряли';
 $string['staff_attention_stuck_many'] = '{$a} учеников застряли';
+
+// Уровневые варианты активностей (педагогский вид страницы курса).
+$string['level_name_1'] = 'Базовый';
+$string['level_name_2'] = 'Стандартный';
+$string['level_name_3'] = 'Продвинутый';
+$string['level_name_other'] = 'Уровень {$a}';
+$string['variant_group'] = 'для группы {$a}';
+$string['variant_audience_one'] = '{$a} ученик';
+$string['variant_audience_few'] = '{$a} ученика';
+$string['variant_audience_many'] = '{$a} учеников';
+$string['variant_nobody'] = 'не видит никто';
+$string['variant_hidden'] = 'скрыта от учеников';
+$string['variant_label'] = '{$a->who} · {$a->state}';
+$string['variant_orphans_one'] = '{$a} вариант тем не видит ни один ученик';
+$string['variant_orphans_few'] = '{$a} варианта тем не видит ни один ученик';
+$string['variant_orphans_many'] = '{$a} вариантов тем не видит ни один ученик';
