@@ -260,6 +260,7 @@ $string['lock_generic'] = 'Откроется позже - сначала вып
 $string['staff_done_label'] = 'сделали {$a->done} из {$a->total}';
 $string['staff_grading_label'] = 'на проверке: {$a}';
 $string['staff_stuck_label'] = 'застряли: {$a}';
+$string['staff_section_progress_name'] = 'Прогресс класса по теме';
 $string['staff_section_progress'] = 'прошли тему: {$a->done} из {$a->total}';
 $string['staff_section_progress_aria'] = 'Прошли тему {$a->done} из {$a->total} учеников';
 $string['staff_all_clear'] = 'Все работы проверены, класс движется';

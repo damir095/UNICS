@@ -109,10 +109,19 @@ class course_staff_view {
     }
 
     /**
-     * Сколько учеников класса выполнило каждую активность - ОДНИМ запросом на курс.
+     * Кто из учеников класса выполнил каждую активность - ОДНИМ запросом на курс. Возвращает
+     * ПАРЫ (cmid -> userid[]), а не готовые счетчики - ЛОВУШКА, найдена ревью: «прошли тему»
+     * нужно точное ПЕРЕСЕЧЕНИЕ выполнивших по всем отслеживаемым активностям секции, а не min()
+     * по счетчикам (см. build_payload) - min() завышает: секция из A и B, 6 учеников, 3 сделали
+     * только A, 3 - только B; min = 3, реально тему прошло 0. Пары стоят НОЛЬ дополнительных
+     * запросов (тот же единственный SELECT, просто без GROUP BY) - ровно так же, как уже устроен
+     * stuck_counts() в этом файле. Число выполнивших по cm - count() массива на вызывающей
+     * стороне (нужно и там, для doneLabel).
+     * course_modules_completion несет уникальный ключ (coursemoduleid, userid), поэтому дублей
+     * пары в выборке не бывает - DISTINCT не нужен.
      * @param int[] $cmids
      * @param int[] $userids
-     * @return array<int,int> cmid -> число выполнивших
+     * @return array<int,int[]> cmid -> userid[] выполнивших (без дублей)
      */
     private static function done_counts(array $cmids, array $userids): array {
         global $DB;
@@ -122,17 +131,19 @@ class course_staff_view {
         [$incm, $pcm] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'cm');
         [$inu, $pu] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'u');
         [$incs, $pcs] = $DB->get_in_or_equal(self::DONE_STATES, SQL_PARAMS_NAMED, 'cs');
-        $rows = $DB->get_records_sql(
-            "SELECT cmc.coursemoduleid AS cmid, COUNT(DISTINCT cmc.userid) AS cnt
+        // get_recordset_sql, а не get_records_sql: первый столбец (cmid) НЕ уникален, записи
+        // с одинаковым cmid затерли бы друг друга (тот же прием, что в stuck_counts()).
+        $rs = $DB->get_recordset_sql(
+            "SELECT cmc.coursemoduleid AS cmid, cmc.userid AS userid
                FROM {course_modules_completion} cmc
-              WHERE cmc.coursemoduleid {$incm} AND cmc.userid {$inu} AND cmc.completionstate {$incs}
-           GROUP BY cmc.coursemoduleid",
+              WHERE cmc.coursemoduleid {$incm} AND cmc.userid {$inu} AND cmc.completionstate {$incs}",
             $pcm + $pu + $pcs
         );
         $out = [];
-        foreach ($rows as $r) {
-            $out[(int)$r->cmid] = (int)$r->cnt;
+        foreach ($rs as $row) {
+            $out[(int)$row->cmid][] = (int)$row->userid;
         }
+        $rs->close();
         return $out;
     }
 
@@ -245,12 +256,18 @@ class course_staff_view {
     }
 
     /**
-     * Активность попадает в сигнал, если она вообще показана на странице курса и ведет на свою
-     * страницу - тот же фильтр, что в ученическом виде (course_view::visible_to_child), иначе
-     * числа разойдутся с числом видимых строк.
+     * Активность попадает в сигнал, если она видна КЛАССУ, а не только смотрящему - ЛОВУШКА,
+     * найдена ревью: у педагога есть moodle/course:viewhiddenactivities, поэтому
+     * cm_info::is_visible_on_course_page() остается true и для активности со $cm->visible = 0
+     * (ядро отвечает на вопрос «видно ли СМОТРЯЩЕМУ», а не «видно ли ученикам класса»). Без явной
+     * проверки $cm->visible (сырое поле course_modules, не зависит от роли смотрящего) чипы и бары
+     * рисовались бы на активностях, скрытых от учеников, - шум ровно там, где сигнал должен его
+     * убирать (спека, «Граничные случаи»: «Активность недоступна ученикам класса - чипы не
+     * рисуем»). has_view()/is_visible_on_course_page() - тот же фильтр, что в ученическом виде
+     * (course_view::visible_to_child), иначе числа разойдутся с числом видимых строк.
      */
     private static function visible_on_page(\cm_info $cm): bool {
-        return $cm->has_view() && $cm->is_visible_on_course_page();
+        return (bool)$cm->visible && $cm->has_view() && $cm->is_visible_on_course_page();
     }
 
     /**
@@ -266,6 +283,9 @@ class course_staff_view {
      * для того же фильтра «показывается ли активность на странице» - не своя N+1, а
      * унаследованная от Moodle core/сестринского класса стоимость первого обращения к cm_info.
      * Никаких запросов в цикле по ученикам или по активностям в самом course_staff_view.
+     * done_counts() отдает пары (cmid -> userid[]), а не готовые счетчики (см. ее докблок) - это
+     * тот же ОДИН запрос, что и раньше (без GROUP BY вместо с ним), просто больше строк в
+     * результате; count() по cmid и array_intersect() по секции - чистый PHP, без похода в БД.
      *
      * ИНВАРИАНТ payload: если attention.grading не null, то attention.grading.url тоже не null.
      * Держится структурно, а не проверкой: grading_counts() возвращает записи ТОЛЬКО по cmid из
@@ -277,7 +297,9 @@ class course_staff_view {
         $members = self::class_members($course, $viewerid);
         $classsize = count($members);
         $strings = [
-            'sectionName' => get_string('progress_section_name', 'local_unics'),
+            // Отдельный ключ от ученического progress_section_name - ЛОВУШКА, найдена ревью:
+            // тот ключ («Прогресс по теме») детский и не говорит, что прогресс КЛАССОВЫЙ.
+            'sectionName' => get_string('staff_section_progress_name', 'local_unics'),
             'allClear' => get_string('staff_all_clear', 'local_unics'),
         ];
         $empty = [
@@ -288,7 +310,13 @@ class course_staff_view {
             return $empty;
         }
 
-        $modinfo = get_fast_modinfo($course);
+        // $viewerid ОБЯЗАН передаваться вторым аргументом - ЛОВУШКА, найдена ревью: без него
+        // modinfo считает видимость (uservisible/uservisibleoncoursepage) для глобального $USER,
+        // а не для смотрящего, чей id принят параметром. В проде загрузчик (lib.php) всегда зовет
+        // build_payload($COURSE, $USER->id), поэтому совпадение маскировало баг - но метод,
+        // который принимает $viewerid и не соблюдает его, это мина для любого будущего вызова из
+        // CLI/отчета/теста под другим пользователем. Зеркалит course_view::build_payload().
+        $modinfo = get_fast_modinfo($course, $viewerid);
         $ci = new \completion_info($course);
 
         $visible = [];
@@ -325,7 +353,7 @@ class course_staff_view {
             $cms[(string)$cmid] = [
                 'doneLabel' => $tracked
                     ? get_string('staff_done_label', 'local_unics',
-                        (object)['done' => $done[$cmid] ?? 0, 'total' => $classsize])
+                        (object)['done' => count($done[$cmid] ?? []), 'total' => $classsize])
                     : null,
                 'gradingLabel' => $gradingcount > 0
                     ? get_string('staff_grading_label', 'local_unics', $gradingcount) : null,
@@ -336,11 +364,10 @@ class course_staff_view {
             ];
         }
 
-        // «Прошли тему»: точное число требовало бы пофамильного пересечения выполнивших по ВСЕМ
-        // активностям секции. Минимум по активностям - верхняя оценка: совпадает с точным числом
-        // в типичном случае (ученики идут по теме по порядку) и никогда не завышает результат
-        // больше, чем на число «перепрыгнувших» учеников. Точнее - отдельная задача, если
-        // педагоги попросят.
+        // «Прошли тему» = ученик выполнил ВСЕ отслеживаемые активности секции - точное
+        // ПЕРЕСЕЧЕНИЕ множеств userid по $done, а не min() по счетчикам - ЛОВУШКА, найдена
+        // ревью: min() завышает (см. докблок done_counts()). Пересечение считается на PHP из
+        // ОДНОГО уже полученного $done, никаких дополнительных запросов.
         $sections = [];
         foreach ($modinfo->get_section_info_all() as $section) {
             $tracked = [];
@@ -352,12 +379,12 @@ class course_staff_view {
             if (!$tracked) {
                 continue;
             }
-            // Тему прошел тот, кто выполнил ВСЕ отслеживаемые активности секции. Считаем по
-            // минимуму выполнивших: у кого не хватает хотя бы одной - тема не пройдена.
-            $passed = $classsize;
+            $passedusers = null;
             foreach ($tracked as $cmid) {
-                $passed = min($passed, $done[$cmid] ?? 0);
+                $doneusers = $done[$cmid] ?? [];
+                $passedusers = $passedusers === null ? $doneusers : array_intersect($passedusers, $doneusers);
             }
+            $passed = count($passedusers ?? []);
             $a = (object)['done' => $passed, 'total' => $classsize];
             $sections[(string)$section->section] = [
                 'done' => $passed, 'total' => $classsize,

@@ -133,6 +133,25 @@ final class course_staff_view_test extends \advanced_testcase {
     }
 
     /**
+     * Из четырех условий is_staff_view() тестами покрыты «ребенок -> false» и «педагог -> true» -
+     * добавляем «родитель -> false» (M6, найдено ревью). unics_parent_student.parent_mdl_user_id -
+     * id родителя (см. \local_unics\access::is_parent()); student_id ссылается на
+     * unics_students.id, а не на user.id.
+     */
+    public function test_gate_is_false_for_parent(): void {
+        $this->resetAfterTest();
+        global $DB;
+        [$course, $s1, , ] = $this->make_course_with_class();
+        $parent = $this->getDataGenerator()->create_user();
+        $sid1 = $DB->get_field('unics_students', 'id', ['mdl_user_id' => $s1->id]);
+        $DB->insert_record('unics_parent_student',
+            (object)['parent_mdl_user_id' => $parent->id, 'student_id' => $sid1]);
+        $this->setUser($parent);
+
+        $this->assertFalse(course_staff_view::is_staff_view($course));
+    }
+
+    /**
      * Регресс: методист организации ошибочно уходил в ветку привязок педагога, потому что
      * unics_user_manager::create_user() пишет строку в unics_teachers и для методиста (роль 4) -
      * см. докблок class_members(). Заводим методисту строку в unics_teachers НАРОЧНО (как в
@@ -405,6 +424,10 @@ final class course_staff_view_test extends \advanced_testcase {
     public function test_grading_counts_excludes_hidden_activity(): void {
         $this->resetAfterTest();
         [$course, $s1, , $t, $visibleassign] = $this->make_course_with_assign();
+        // setUser($t) - ЛОВУШКА, найдена ревью: без этого видимость активности считается для
+        // анонимного PHPUnit-пользователя, а не для педагога, чей id передается в build_payload -
+        // тест зеленел бы даже без фильтра по $cm->visible в visible_on_page().
+        $this->setUser($t);
         $hiddenassign = $this->getDataGenerator()->create_module('assign',
             ['course' => $course->id, 'section' => 1, 'visible' => 0]);
         // Непроверенная работа ТОЛЬКО на скрытом задании.
@@ -473,6 +496,9 @@ final class course_staff_view_test extends \advanced_testcase {
         $this->resetAfterTest();
         global $DB;
         [$course, , $s2, $t, $cm] = $this->make_course_with_signals();
+        // setUser($t) - та же ЛОВУШКА, что в test_grading_counts_excludes_hidden_activity: без
+        // нее видимость считается для анонимного PHPUnit-пользователя, а не для педагога.
+        $this->setUser($t);
         $hidden = $this->getDataGenerator()->create_module('page',
             ['course' => $course->id, 'section' => 1, 'visible' => 0]);
         $DB->insert_record('unics_retakes', (object)[
@@ -546,5 +572,49 @@ final class course_staff_view_test extends \advanced_testcase {
         $this->assertNull($p['cms'][(string)$untracked->cmid]['doneLabel']);
         $this->assertSame(1, $p['sections']['1']['done'], 'непроверяемая активность не должна блокировать "прошли тему"');
         $this->assertSame(1, $p['sections']['1']['total']);
+    }
+
+    /**
+     * Регресс по ревью (I4): "прошли тему" считался как min() по активностям секции - верхняя
+     * оценка, а не точное пересечение. Секция из ДВУХ отслеживаемых активностей: s1 выполнил
+     * ТОЛЬКО первую, s2 - ТОЛЬКО вторую. По каждой активности выполнил ровно один ученик - min()
+     * дал бы 1, хотя ни один ученик не выполнил ОБЕ активности сразу - точный ответ 0. doneLabel
+     * при этом обязан по-прежнему показывать РЕАЛЬНЫЕ числа по каждой активности (1 из 2), а не
+     * обнулиться вместе с "прошли тему" - это разные величины.
+     */
+    public function test_section_progress_is_exact_intersection_not_minimum(): void {
+        $this->resetAfterTest();
+        global $DB;
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics', 'enablecompletion' => 1, 'numsections' => 1]);
+        $s1 = $gen->create_user();
+        $s2 = $gen->create_user();
+        $t = $gen->create_user();
+        $gen->enrol_user($s1->id, $course->id, 'student');
+        $gen->enrol_user($s2->id, $course->id, 'student');
+        $gen->enrol_user($t->id, $course->id, 'editingteacher');
+        $sid1 = $DB->insert_record('unics_students', (object)['mdl_user_id' => $s1->id]);
+        $sid2 = $DB->insert_record('unics_students', (object)['mdl_user_id' => $s2->id]);
+        $tid = $DB->insert_record('unics_teachers', (object)['mdl_user_id' => $t->id]);
+        $DB->insert_record('unics_teacher_student', (object)['teacher_id' => $tid, 'student_id' => $sid1]);
+        $DB->insert_record('unics_teacher_student', (object)['teacher_id' => $tid, 'student_id' => $sid2]);
+
+        $a = $gen->create_module('page', ['course' => $course->id, 'section' => 1,
+            'completion' => COMPLETION_TRACKING_AUTOMATIC, 'completionview' => 1]);
+        $b = $gen->create_module('page', ['course' => $course->id, 'section' => 1,
+            'completion' => COMPLETION_TRACKING_AUTOMATIC, 'completionview' => 1]);
+
+        $ci = new \completion_info($course);
+        $cma = get_coursemodule_from_id('page', $a->cmid, 0, false, MUST_EXIST);
+        $cmb = get_coursemodule_from_id('page', $b->cmid, 0, false, MUST_EXIST);
+        $ci->set_module_viewed($cma, $s1->id); // s1 сделал только A.
+        $ci->set_module_viewed($cmb, $s2->id); // s2 сделал только B.
+
+        $p = \local_unics\output\course_staff_view::build_payload($course, $t->id);
+
+        $this->assertSame(0, $p['sections']['1']['done'],
+            'ни один ученик не выполнил ОБЕ активности сразу - min() по счетчикам дал бы 1');
+        $this->assertSame('сделали 1 из 2', $p['cms'][(string)$a->cmid]['doneLabel']);
+        $this->assertSame('сделали 1 из 2', $p['cms'][(string)$b->cmid]['doneLabel']);
     }
 }
