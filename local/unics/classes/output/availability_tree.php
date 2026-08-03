@@ -25,6 +25,25 @@ class availability_tree {
         return is_array($tree) ? self::walk($tree) : [];
     }
 
+    /**
+     * Оператор КОРНЕВОГО узла дерева - '&' (И), '|' (ИЛИ), '!&' (НЕ-И) или '!|' (НЕ-ИЛИ).
+     * leaves() сознательно его отбрасывает (там задача - плоский список условий), но потребителям,
+     * которым важна логика сочетания условий (например, «сирота ли активность» в course_variants),
+     * одного списка листьев недостаточно: '&' с несколькими условиями - это пересечение аудиторий,
+     * а не объединение, а отрицание ('!&'/'!|') переворачивает смысл на «все, КРОМЕ».
+     * @return ?string null, если JSON пуст/битый или без валидного 'op'
+     */
+    public static function root_op(?string $json): ?string {
+        if ($json === null || $json === '') {
+            return null;
+        }
+        $tree = json_decode($json, true);
+        if (!is_array($tree) || !isset($tree['op']) || !is_string($tree['op'])) {
+            return null;
+        }
+        return $tree['op'];
+    }
+
     /** Рекурсивный обход: узел с ключом 'c' - ветка, все остальное - лист. */
     private static function walk(array $node): array {
         if (empty($node['c']) || !is_array($node['c'])) {

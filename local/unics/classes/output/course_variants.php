@@ -45,9 +45,22 @@ class course_variants {
             if (!$gids) {
                 continue;
             }
-            // Аудитория активности - сумма аудиторий ВСЕХ групп-условий (условия группы внутри
-            // одного узла availability - это OR, любой ученик любой из групп открывает активность).
-            // Сумма используется ТОЛЬКО для сироты/скрытия варианта целиком.
+            // Вердикт "сирота" по сумме аудиторий групп-условий корректен ТОЛЬКО для однозначной
+            // формы: корневой оператор дерева НЕ отрицательный ('&' или '|', не '!&'/'!|') И
+            // групповое условие ровно одно - тогда AND/OR с одним операндом совпадают, и "сумма"
+            // это просто аудитория этого единственного условия. При двух и более группах под '&'
+            // реальная аудитория - ПЕРЕСЕЧЕНИЕ (нужен только тот, кто в обеих группах сразу), а
+            // не сумма, и мы легко получим ложный "не сирота" там, где на самом деле никто не
+            // удовлетворяет обоим условиям. При отрицании '!&'/'!|' условие означает «все, КРОМЕ
+            // этой группы» - аудитория группы-условия тут вообще не то число, которое нужно
+            // (нужна была бы аудитория курса МИНУС группа), и "не видит никто" превратилось бы в
+            // свою противоположность. course_builder такой формы не порождает (везде одна группа
+            // и "op":"&"), но педагог может собрать ограничения руками - тогда пометка ниже
+            // перечисляет группы как обычно (это информативно при любом операторе), а вот вердикт
+            // "сирота" и вклад в сводку «Требует внимания» для неоднозначной формы НЕ выставляем.
+            $rootop = availability_tree::root_op($cm->availability);
+            $unambiguous = ($rootop === '&' || $rootop === '|') && count($gids) === 1;
+
             $audience = 0;
             // Состояние строим ПО КАЖДОЙ группе своим "who · state" - ЛОВУШКА, найдена при
             // самопроверке: если считать одно усредненное состояние на объединенную аудиторию
@@ -65,7 +78,7 @@ class course_variants {
                     'state' => self::state_label($groupaudience === 0, (bool)$cm->visible, $groupaudience),
                 ]);
             }
-            $nobody = ($audience === 0);
+            $nobody = $unambiguous && ($audience === 0);
             if ($nobody) {
                 foreach ($gids as $gid) {
                     $orphangroups[$gid] = true;
@@ -84,6 +97,10 @@ class course_variants {
      * Группы курса с аудиторией - ОДИН запрос. Аудитория считается коррелированным подзапросом:
      * активные незаархивированные ученики, записанные на курс И состоящие в группе. Группы без
      * учеников тоже возвращаются (с нулем) - именно они и есть кандидаты в сироты.
+     *
+     * u.deleted намеренно НЕ фильтруем: ядро физически удаляет членство пользователя из
+     * groups_members при удалении самого пользователя, поэтому удаленный пользователь и без
+     * явного фильтра не может попасть в этот подсчет.
      * @return array<int,\stdClass> id -> {id, name, idnumber, audience}
      */
     private static function group_audience(int $courseid): array {
@@ -105,29 +122,51 @@ class course_variants {
 
     /**
      * Id групп из ограничений доступа активности, в порядке условий. Ограничение на удаленную
-     * группу пропускаем: показывать «для группы <нет такой>» бессмысленно.
+     * группу пропускаем: показывать «для группы <нет такой>» бессмысленно. Персональную УМК-группу
+     * выдачи (idnumber umk_s{uid}_c{courseid}, имя = ФИО ученика) пропускаем по той же причине, что
+     * и удаленную - {@see self::is_personal_umk_group()}.
      * @param array<int,\stdClass> $groups известные группы курса
      * @return int[]
      */
     private static function restriction_group_ids(\cm_info $cm, array $groups): array {
         $out = [];
         foreach (availability_tree::leaves($cm->availability) as $cond) {
+            // type:'grouping' («Любая группа из…») сознательно вне scope этой задачи - у него нет
+            // одной аудитории для подсчета, это отдельная тема; помечаем только type:'group'.
             if (($cond['type'] ?? '') !== 'group' || empty($cond['id'])) {
                 continue;
             }
             $gid = (int)$cond['id'];
-            if (isset($groups[$gid]) && !in_array($gid, $out, true)) {
+            if (!isset($groups[$gid]) || self::is_personal_umk_group($groups[$gid])) {
+                continue;
+            }
+            if (!in_array($gid, $out, true)) {
                 $out[] = $gid;
             }
         }
         return $out;
     }
 
+    /**
+     * Персональная УМК-группа адресной выдачи ученику
+     * {@see \local_unics\ai\course_builder::restrict_activity_to_student_group()}: idnumber вида
+     * umk_s{uid}_c{courseid}, а ИМЯ группы - «УМК: <ФИО ученика>». В отличие от уровневой группы,
+     * эта не про уровень, а про одного конкретного ребенка - показ ее на странице курса раскрыл бы
+     * его ФИО педагогам без права на это. Спека прямо запрещает раскрытие имени ученика здесь.
+     */
+    private static function is_personal_umk_group(\stdClass $group): bool {
+        return (bool)preg_match('/^umk_s\d+_c\d+$/', (string)$group->idnumber);
+    }
+
     /** «Стандартный» для уровневой группы, «для группы 7А класс» - для обычной. */
     private static function who_label(\stdClass $group): string {
         $level = self::level_from_idnumber((string)$group->idnumber);
         if ($level === null) {
-            return get_string('variant_group', 'local_unics', $group->name);
+            // escape=>false: значение уходит в payload и вставляется AMD через textContent, а не
+            // innerHTML - обычный format_string() экранировал бы «&» в «&amp;» и ребенок увидел бы
+            // escape-код буквально. Образец - course_view::plain_name().
+            $name = format_string($group->name, true, ['escape' => false]);
+            return get_string('variant_group', 'local_unics', $name);
         }
         return in_array($level, self::KNOWN_LEVELS, true)
             ? get_string('level_name_' . $level, 'local_unics')
