@@ -131,6 +131,37 @@ final class course_hub_test extends \advanced_testcase {
         $this->assertSame([], $groups);
     }
 
+    /**
+     * Регресс раунда 2 ревью: формула-оговорка «$manage || $methodist || $activities» НЕ покрывает
+     * non-editing педагога - его доступ держится ровно на moodle/grade:viewall, ни одного из трех
+     * флагов у него нет. Если такой педагог ОДНОВРЕМЕННО родитель любого ребенка системы (строка
+     * в unics_parent_student - в школьной системе «педагог и родитель в одном лице» частый случай),
+     * первая версия проверки родителя ошибочно возвращала ему пустой массив и он терял свои законные
+     * 4 плитки. Признак штатного сотрудника - строка в unics_teachers (заводит ее
+     * user_manager::create_user() для каждой учительской роли, включая методистов); тест заводит ее
+     * вручную, как на проде.
+     */
+    public function test_teacher_who_is_also_parent_keeps_four_tiles(): void {
+        $this->resetAfterTest();
+        global $DB;
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $student = $gen->create_user();
+        $teacher = $gen->create_user();
+
+        $sid = $DB->insert_record('unics_students', (object)['mdl_user_id' => $student->id]);
+        $DB->insert_record('unics_parent_student',
+            (object)['parent_mdl_user_id' => $teacher->id, 'student_id' => $sid]);
+        $DB->insert_record('unics_teachers', (object)['mdl_user_id' => $teacher->id]);
+        $gen->enrol_user($teacher->id, $course->id, 'teacher');
+
+        $groups = course_hub::tiles($course, \context_course::instance($course->id), (int)$teacher->id);
+
+        $this->assertCount(1, $groups);
+        $this->assertSame('progress', $groups[0]['key']);
+        $this->assertCount(4, $groups[0]['tiles']);
+    }
+
     public function test_userid_is_honoured_in_both_directions(): void {
         $this->resetAfterTest();
         $gen = $this->getDataGenerator();
