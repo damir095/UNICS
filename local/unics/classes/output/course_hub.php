@@ -50,6 +50,16 @@ class course_hub {
         // такого условия не ставит, а без manageactivities non-editing педагог сюда и не попадет).
         $tag = $manage || $methodist || $activities;
 
+        // Родитель - не персонал курса. Moodle-роль parent на этом стенде несет
+        // moodle/grade:viewall, поэтому без явной проверки родитель прошел бы гейт STAFF и
+        // увидел журнал, отчет и состав класса, то есть чужие персональные данные. Зеркалит
+        // {@see course_staff_view::is_staff_view()}, где родитель исключен той же строкой.
+        // Оговорки $manage/$methodist/$activities - на случай сотрудника, который ОДНОВРЕМЕННО
+        // родитель ученика системы: у него доступ остается по собственной роли, а не по родительской.
+        if (access::is_parent($userid) && !$manage && !$methodist && !$activities) {
+            return [];
+        }
+
         // Определения в порядке отрисовки: [ключ строки, иконка, путь, параметры, гейт].
         $progressdefs = [
             ['hub_gradebook', 'i/grades', '/local/unics/pages/gradebook.php',       ['course_id' => $courseid], $staff],
