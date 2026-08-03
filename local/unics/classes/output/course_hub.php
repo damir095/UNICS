@@ -8,7 +8,7 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Хаб-страница курса: сводка «Требует внимания» + плитки инструментов УНИКС.
  *
- * Меню «Ещe» в Boost плоское (вложенный flyout тема не делает), поэтому девять пунктов
+ * Меню «Еще» в Boost плоское (вложенный flyout тема не делает), поэтому девять пунктов
  * «УНИКС: ...» схлопнуты в один пункт-ссылку на эту страницу - тот же прием, которым ядро
  * показывает «Отчеты» и «Банки вопросов». Группировка живет здесь, а не в меню.
  *
@@ -85,5 +85,86 @@ class course_hub {
             }
         }
         return $groups;
+    }
+
+    /**
+     * Контекст шаблона local_unics/course_hub.
+     *
+     * Контекст курса выводим ЗДЕСЬ, а не принимаем параметром: так ни страница, ни навигация
+     * не могут передать сюда чужой контекст. Прием «метод output-класса принимает
+     * \renderer_base» уже есть в {@see shell::render_navbar()} - pix_icon с доп. классом
+     * хелпером {{#pix}} не собрать.
+     */
+    public static function build_context(\renderer_base $output, \stdClass $course, int $userid): array {
+        $context = \context_course::instance((int)$course->id);
+
+        $groups = [];
+        foreach (self::tiles($course, $context, $userid) as $g) {
+            $tiles = [];
+            foreach ($g['tiles'] as $t) {
+                $tiles[] = [
+                    'url'       => $t['url'],
+                    'label'     => $t['label'],
+                    'desc'      => $t['desc'],
+                    'icon_html' => $output->pix_icon($t['icon'], '', 'moodle',
+                        ['class' => 'icon unics-action-card__icon']),
+                ];
+            }
+            $groups[] = ['title' => $g['title'], 'tiles' => $tiles];
+        }
+
+        return [
+            'back_url'   => (new \moodle_url('/course/view.php', ['id' => (int)$course->id]))->out(false),
+            'back_label' => get_string('hub_back_to_course', 'local_unics'),
+            'heading'    => get_string('hub_title', 'local_unics'),
+            'attention'  => self::attention($output, $course, $context, $userid),
+            'groups'     => $groups,
+        ];
+    }
+
+    /**
+     * Сводка «Требует внимания» - те же три сигнала, что педагог видел на странице курса.
+     * Ничего не считаем заново: числа обязаны совпадать, а отдельный расчет разъедется.
+     *
+     * Гейт - moodle/course:viewparticipants, тот же предикат, что у course_staff_view::is_staff_view();
+     * саму is_staff_view() звать НЕЛЬЗЯ - в ней есть проверка $PAGE->user_is_editing(), относящаяся
+     * к странице курса, а не к нашей.
+     *
+     * orphans показываем НЕЗАВИСИМО от размера класса - в отличие от lib.php, где вся отрисовка
+     * педагогского вида гейтится через classSize > 0. Там это было упрощение вызова AMD, а не
+     * смысловое утверждение: «мертвый вариант» - свойство КОНФИГУРАЦИИ КУРСА, а не класса
+     * смотрящего (см. докблок course_variants: «аудитория - это ученики КУРСА в группе»).
+     *
+     * @return ?array null, если показывать нечего - тогда шаблон блок не рисует
+     */
+    private static function attention(\renderer_base $output, \stdClass $course,
+                                      \context_course $context, int $userid): ?array {
+        if (!has_capability('moodle/course:viewparticipants', $context, $userid)) {
+            return null;
+        }
+
+        $payload = course_staff_view::build_payload($course, $userid);
+        $signals = [
+            [$payload['attention']['grading'] ?? null, 'i/marker',   'info'],
+            [$payload['attention']['stuck'] ?? null,   'i/duration', 'warning'],
+            [course_variants::build($course, $userid)['orphans'], 'i/group', 'warning'],
+        ];
+
+        $cards = [];
+        foreach ($signals as [$signal, $icon, $tone]) {
+            if (!$signal) {
+                continue;
+            }
+            $cards[] = [
+                'url'        => $signal['url'],
+                'label'      => $signal['label'],
+                'badge'      => $signal['count'],
+                'tone_class' => 'unics-attention-card--' . $tone,
+                'icon_html'  => $output->pix_icon($icon, '', 'moodle',
+                    ['class' => 'icon unics-attention-card__icon']),
+            ];
+        }
+        // Пустого состояния нет: нечего показать - блока нет (как attention_ctx() на дашборде).
+        return $cards ? ['title' => get_string('hub_attention', 'local_unics'), 'cards' => $cards] : null;
     }
 }

@@ -1,0 +1,40 @@
+{{!
+    Хаб-страница курса УНИКС ([[course-hub-design]]).
+
+    Сводка «Требует внимания» (опциональна: null - блока нет) + группы плиток инструментов.
+    Контекст собирает \local_unics\output\course_hub::build_context(). icon_html - доверенный
+    пре-рендер $OUTPUT->pix_icon (хелпер pix не умеет доп. класс карточки); пользовательские
+    данные тройными скобками не передаются.
+
+    Пример контекста:
+    {
+        "back_url": "#", "back_label": "← В курс", "heading": "Инструменты курса",
+        "attention": { "title": "Требует внимания", "cards": [
+            { "url": "#", "label": "4 работы ждут проверки", "badge": 4,
+              "tone_class": "unics-attention-card--info",
+              "icon_html": "<i class=\"icon\"></i>" } ] },
+        "groups": [ { "title": "Как идут дела", "tiles": [
+            { "url": "#", "label": "Журнал курса", "desc": "оценки за тесты курса",
+              "icon_html": "<i class=\"icon\"></i>" } ] } ]
+    }
+}}
+<div class="mb-3">
+    <a href="{{back_url}}" class="btn btn-outline-secondary btn-sm">{{back_label}}</a>
+</div>
+<h2>{{heading}}</h2>
+{{#attention}}
+<h3 class="unics-section-title">{{title}}</h3>
+<div class="unics-attention mb-4">
+    {{#cards}}
+    <a href="{{url}}" class="unics-attention-card{{#tone_class}} {{tone_class}}{{/tone_class}}">{{{icon_html}}}<span class="unics-attention-card__label">{{label}}</span>{{#badge}} <span class="badge badge-danger">{{badge}}</span>{{/badge}}</a>
+    {{/cards}}
+</div>
+{{/attention}}
+{{#groups}}
+<h3 class="unics-section-title">{{title}}</h3>
+<div class="unics-action-cards unics-action-cards--hub mb-4">
+    {{#tiles}}
+    <a href="{{url}}" class="unics-action-card unics-action-card--stacked">{{{icon_html}}}<span class="unics-action-card__body"><span class="unics-action-card__label">{{label}}</span><span class="unics-action-card__desc">{{desc}}</span></span></a>
+    {{/tiles}}
+</div>
+{{/groups}}
