@@ -914,3 +914,34 @@
         img { opacity: .7; }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Плитка хаба курса ([[course-hub-design]]): к иконке и метке добавляется пояснение
+// второй строкой. Метка и пояснение живут в общей колонке __body - без нее пояснение
+// уезжает под иконку, потому что родитель .unics-action-card это flex-строка.
+// Сетка шире базовой: двухстрочной плитке 190px мало.
+// -----------------------------------------------------------------------------
+.unics-action-cards--hub {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.unics-action-card--stacked {
+    align-items: flex-start;
+    padding-top: var(--unics-space-3);
+    padding-bottom: var(--unics-space-3);
+
+    .unics-action-card__body {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: var(--unics-space-1);
+        min-width: 0;   // без этого длинное пояснение распирает колонку грида
+    }
+
+    .unics-action-card__desc {
+        font-size: 0.9375rem;
+        font-weight: 400;   // карточка задает 600 - пояснение должно быть тише метки
+        line-height: 1.4;
+        color: var(--unics-text-muted);
+    }
+}
