@@ -130,21 +130,18 @@ class navigation {
     }
 
     /**
-     * Пункты УНИКС во вкладке «Ещё» курса (вторичная навигация Moodle).
-     * Инструменты курса педагога - работает не уходя из курса.
+     * Пункт УНИКС во вкладке «Еще» курса (вторичная навигация Moodle) - ОДИН, на хаб курса.
      *
-     * Учащемуся не показываем (проверка по unics_students в БД, не по Moodle-роли -
-     * как и во всём плагине: ошибочно назначенная роль не должна открыть меню).
-     * Каждый пункт гейтится в КОНТЕКСТЕ КУРСА, поэтому педагог видит инструменты
-     * только в своих курсах (как gradebook.php через course-context capability).
+     * Учащемуся не показываем (проверка по unics_students в БД, не по Moodle-роли - как и во всем
+     * плагине: ошибочно назначенная роль не должна открыть меню).
      *
-     * Меню «Ещё» в Boost плоское (один уровень - ядро так же показывает «Отчёты»,
-     * «Банки вопросов» одиночными пунктами-ссылками на landing). Вложенный flyout
-     * тема не делает, поэтому добавляем пункты плоско с префиксом «УНИКС:» - так они
-     * визуально сгруппированы и оба достижимы. Когда в фазе 2-3 появится hub-страница
-     * курса, можно будет схлопнуть в один пункт «УНИКС» -> hub.
+     * Прежде здесь плоско добавлялись девять пунктов с префиксом «УНИКС:» - меню «Еще» в Boost
+     * одноуровневое, вложенный flyout тема не делает. Теперь группировка живет на хаб-странице, а
+     * в меню остается одна ссылка: тот же прием, которым ядро показывает «Отчеты» и «Банки
+     * вопросов» ([[course-hub-design]]).
      *
-     * Фаза 1: только ссылки на уже готовые страницы.
+     * Гейт - непустой {@see course_hub::tiles()}, ТОТ ЖЕ вызов, что делает сама страница.
+     * Дублировать предикаты здесь нельзя: меню и хаб разъедутся, и пункт поведет в отказ.
      *
      * @param \navigation_node $navigation вторичная навигация курса
      * @param \stdClass $course текущий курс
@@ -152,93 +149,24 @@ class navigation {
      */
     public static function extend_navigation_course(\navigation_node $navigation, \stdClass $course,
                                                     \context_course $context): void {
-        global $DB, $USER;
-
         // Учащийся - меню курса не показываем.
         if (access::student_record() !== null) {
             return;
         }
 
-        $items = [];
-
-        // Журнал курса, Отчёт по курсу, Учащиеся курса, Адаптивные уровни - персонал
-        // курса (moodle/grade:viewall в контексте курса: педагог видит только свои
-        // курсы), либо методист/системный админ. Те же гейты, что и на самих страницах.
-        $is_course_staff = has_capability('moodle/grade:viewall', $context)
-            || has_capability('local/unics:manage', \context_system::instance())
-            || access::is_methodist();
-        if ($is_course_staff) {
-            $items[] = [
-                'УНИКС: Журнал курса',
-                new \moodle_url('/local/unics/pages/gradebook.php', ['course_id' => $course->id]),
-                'local_unics_course_gradebook',
-            ];
-            $items[] = [
-                'УНИКС: Отчёт по курсу',
-                new \moodle_url('/local/unics/pages/course_report.php', ['course_id' => $course->id]),
-                'local_unics_course_report',
-            ];
-            $items[] = [
-                'УНИКС: Учащиеся курса',
-                new \moodle_url('/local/unics/pages/course_students.php', ['course_id' => $course->id]),
-                'local_unics_course_students',
-            ];
-            $items[] = [
-                'УНИКС: Адаптивные уровни',
-                new \moodle_url('/local/unics/pages/course_levels.php', ['course_id' => $course->id]),
-                'local_unics_course_levels',
-            ];
-            $items[] = [
-                'УНИКС: Кодификатор',
-                new \moodle_url('/local/unics/pages/codifier_tag.php', ['courseid' => $course->id]),
-                'local_unics_course_codifier',
-            ];
+        // Ни одной доступной плитки - пункта нет (прежде так же не добавлялся ни один из девяти).
+        if (!course_hub::tiles($course, $context)) {
+            return;
         }
 
-        // Сгенерировать УМК - педагог, создающий контент (course:manageactivities),
-        // методист или системный админ. Non-editing teacher (роль 6) контент не
-        // создаёт - пункт ему скрыт. Орг-скоуп дособлюдает сама generate_umk.php.
-        $can_umk = !access::is_nonediting_teacher() && (
-            has_capability('local/unics:manage', \context_system::instance())
-            || has_capability('moodle/course:manageactivities', $context)
-            || access::is_methodist()
+        $navigation->add(
+            get_string('hub_nav', 'local_unics'),
+            new \moodle_url('/local/unics/pages/course_hub.php', ['course_id' => $course->id]),
+            \navigation_node::TYPE_CUSTOM,
+            null,
+            'local_unics_course_hub',
+            new \pix_icon('i/dashboard', '')
         );
-        if ($can_umk) {
-            $items[] = [
-                'УНИКС: Сгенерировать УМК',
-                new \moodle_url('/local/unics/pages/generate_umk.php', ['course_id' => $course->id]),
-                'local_unics_course_umk',
-            ];
-            // Стартовая диагностика: пометить входной тест (определяет стартовый уровень).
-            $items[] = [
-                'УНИКС: Входная диагностика',
-                new \moodle_url('/local/unics/pages/course_diagnostic.php', ['course_id' => $course->id]),
-                'local_unics_course_diagnostic',
-            ];
-            // B5: пометить итоговый экзамен курса (+ открытые пересдачи B7).
-            $items[] = [
-                'УНИКС: Итоговый экзамен',
-                new \moodle_url('/local/unics/pages/course_final_exam.php', ['course_id' => $course->id]),
-                'local_unics_course_final',
-            ];
-            // B4: контрольные точки курса (промежуточная аттестация) + сводка по учащимся.
-            $items[] = [
-                'УНИКС: Контрольные точки',
-                new \moodle_url('/local/unics/pages/course_milestones.php', ['course_id' => $course->id]),
-                'local_unics_course_milestones',
-            ];
-        }
-
-        foreach ($items as [$text, $url, $key]) {
-            $navigation->add(
-                $text,
-                $url,
-                \navigation_node::TYPE_CUSTOM,
-                null,
-                $key,
-                new \pix_icon('i/cohort', '')
-            );
-        }
     }
 
     /**
