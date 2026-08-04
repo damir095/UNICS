@@ -200,13 +200,14 @@ if ($do_subid && confirm_sesskey()) {
 echo '<h2 class="unics-section-title">'
    . ($mode === 'assign' ? 'Ответы учащихся по заданию' : 'Текстовые ответы учащегося')
    . '</h2>';
-echo '<table class="table table-sm table-bordered table-hover">';
+echo '<div class="table-responsive">';
+echo '<table class="' . local_unics_table_class() . '">';
 if ($mode === 'assign') {
-    echo '<thead class="table-light"><tr>
+    echo '<thead><tr>
         <th>Учащийся</th><th>Отправлено</th><th>Оценка в журнале</th><th></th>
     </tr></thead><tbody>';
 } else {
-    echo '<thead class="table-light"><tr>
+    echo '<thead><tr>
         <th>Задание</th><th>Курс</th><th>Отправлено</th><th>Оценка в журнале</th><th></th>
     </tr></thead><tbody>';
 }
@@ -244,6 +245,6 @@ foreach ($submissions as $sub) {
     }
     echo '</tr>';
 }
-echo '</tbody></table>';
+echo '</tbody></table></div>';
 
 echo $OUTPUT->footer();

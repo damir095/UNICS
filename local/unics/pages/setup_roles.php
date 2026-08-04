@@ -75,9 +75,12 @@ echo '</div>';
 // --- Описание матрицы ---
 echo '<div class="card mb-4">';
 echo '<div class="card-header"><strong>Матрица прав ролей</strong></div>';
-echo '<div class="card-body p-0">';
-echo '<table class="table table-sm table-bordered mb-0">';
-echo '<thead class="table-light"><tr>
+// Таблица внутри карточки: штатная обертка системы таблиц сама рисует карточку
+// (рамка, радиус, тень), внутри card-body вышла бы карточка в карточке. Поэтому
+// обертки тут нет, а горизонтальный скролл берем утилитой на самом card-body.
+echo '<div class="card-body p-0 overflow-x-auto">';
+echo '<table class="' . local_unics_table_class(true) . '">';
+echo '<thead><tr>
     <th>Группа прав</th>
     <th>Админ¹</th>
     <th>Методист²</th>

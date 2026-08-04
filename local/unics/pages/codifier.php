@@ -215,7 +215,8 @@ $add_form = function (?int $parent_id) use ($baseurl) {
     return $out;
 };
 
-echo html_writer::start_tag('table', ['class' => 'table table-sm table-hover']);
+echo html_writer::start_div('table-responsive');
+echo html_writer::start_tag('table', ['class' => local_unics_table_class()]);
 echo html_writer::tag('thead', html_writer::tag('tr',
     html_writer::tag('th', 'Код') . html_writer::tag('th', 'Элемент содержания') .
     html_writer::tag('th', 'Готовность к CAT') .
@@ -296,6 +297,7 @@ foreach ($tree as $e) {
 
 echo html_writer::end_tag('tbody');
 echo html_writer::end_tag('table');
+echo html_writer::end_div();
 
 // Добавить корневой раздел.
 if ($addto === 0) {

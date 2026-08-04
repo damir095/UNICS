@@ -230,8 +230,9 @@ if (!empty($purchases)) {
 // История баллов
 if (!empty($history)) {
     echo '<h5 class="mt-4 mb-3">История баллов</h5>';
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="table-light"><tr><th>Дата</th><th>Событие</th><th class="text-right">Баллы</th></tr></thead>';
+    echo '<div class="table-responsive">';
+    echo '<table class="' . local_unics_table_class() . '">';
+    echo '<thead><tr><th>Дата</th><th>Событие</th><th class="text-right">Баллы</th></tr></thead>';
     echo '<tbody>';
     foreach ($history as $h) {
         $sign  = (int)$h->points > 0 ? '+' : '';
@@ -244,7 +245,7 @@ if (!empty($history)) {
            . $sign . (int)$h->points . '</span></td>';
         echo '</tr>';
     }
-    echo '</tbody></table>';
+    echo '</tbody></table></div>';
 }
 
 echo $OUTPUT->footer();

@@ -304,8 +304,9 @@ if (empty($tree)) {
 
             // Организации района
             if (!empty($dist->organizations)) {
-                echo '<table class="table table-sm table-bordered mb-2">';
-                echo '<thead class="table-light"><tr>
+                echo '<div class="table-responsive mb-2">';
+                echo '<table class="' . local_unics_table_class() . '">';
+                echo '<thead><tr>
                     <th>Организация</th><th>Краткое</th><th>Тип</th>
                     <th>Email</th><th>Действия</th>
                 </tr></thead><tbody>';
@@ -339,7 +340,7 @@ if (empty($tree)) {
                     echo '</td>';
                     echo '</tr>';
                 }
-                echo '</tbody></table>';
+                echo '</tbody></table></div>';
             } else {
                 echo '<p class="text-muted small">В этом муниципалитете пока нет организаций.</p>';
             }

@@ -229,9 +229,12 @@ echo html_writer::end_tag('form');
 if ($existing_courses) {
     echo '<div class="card">';
     echo '<div class="card-header"><strong>Недавно созданные курсы</strong></div>';
-    echo '<div class="card-body p-0">';
-    echo '<table class="table table-sm table-bordered mb-0">';
-    echo '<thead class="table-light"><tr><th>Курс</th><th>Краткое имя</th><th>Категория</th><th>Создан</th><th></th></tr></thead>';
+    // Таблица внутри карточки: штатная обертка системы таблиц сама рисует карточку
+    // (рамка, радиус, тень), внутри card-body вышла бы карточка в карточке. Поэтому
+    // обертки тут нет, а горизонтальный скролл берем утилитой на самом card-body.
+    echo '<div class="card-body p-0 overflow-x-auto">';
+    echo '<table class="' . local_unics_table_class() . '">';
+    echo '<thead><tr><th>Курс</th><th>Краткое имя</th><th>Категория</th><th>Создан</th><th></th></tr></thead>';
     echo '<tbody>';
     foreach ($existing_courses as $c) {
         $course_url = new moodle_url('/course/view.php', ['id' => $c->id]);
