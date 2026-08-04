@@ -29,7 +29,7 @@ final class umk_status_template_test extends \advanced_testcase {
                 'cancel_all'  => ['url' => '#', 'count' => 3],
                 'run_now_url' => '#',
             ],
-            'table_html'  => '<table class="table table-striped table-sm">TABLEMARK</table>',
+            'table_html'  => '<table class="table table-striped table-hover unics-table unics-compact">TABLEMARK</table>',
             'paging_html' => '<nav class="unics-paging">PAGEMARK</nav>',
         ]);
 

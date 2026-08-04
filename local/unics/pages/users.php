@@ -259,7 +259,7 @@ if (empty($users)) {
 } else {
     $table = new html_table();
     $table->head = ['ФИО', 'Логин', 'Роль', 'Тип', 'Организация / территория', 'Класс', get_string('actions', 'local_unics')];
-    $table->attributes['class'] = 'table table-striped';
+    $table->attributes['class'] = local_unics_table_class(true);
 
     // POST-кнопка действия над учащимся (архив/восстановление/удаление).
     $student_action = function (int $student_id, string $act, string $label,

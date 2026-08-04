@@ -259,7 +259,7 @@ $table->head = [
     html_writer::span('Переход', 'accesshide'),
     'Станет',
 ];
-$table->attributes['class'] = 'table table-sm table-striped';
+$table->attributes['class'] = local_unics_table_class();
 $table->align = ['center', 'left', 'center', 'center', 'center'];
 
 foreach ($students as $s) {

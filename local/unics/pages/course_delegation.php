@@ -119,7 +119,7 @@ if (!$rows) {
         $by_course[(int)$r->courseid][] = $r;
     }
     $t = new html_table();
-    $t->attributes['class'] = 'table table-hover';
+    $t->attributes['class'] = local_unics_table_class();
     $t->head = ['Курс', 'Делегирован'];
     foreach ($by_course as $cid => $dels) {
         $chips = '';

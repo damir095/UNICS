@@ -246,7 +246,7 @@ if (empty($records)) {
 
     $table = new html_table();
     $table->head = ['Тема', 'Уровень', 'Учащихся', 'Курс', 'Статус', 'Дата', ''];
-    $table->attributes['class'] = 'table table-striped table-sm';
+    $table->attributes['class'] = local_unics_table_class(true);
 
     foreach ($records as $r) {
         // Статус «Готов» (3) расщепляется review-гейтом: пока published_at пуст —

@@ -213,7 +213,7 @@ if (empty($students)) {
 
 $table = new html_table();
 $table->head = ['Учащийся', 'Класс', 'Категория', 'Уровень', 'Организация', 'Действия', 'Отчёт'];
-$table->attributes['class'] = 'table table-sm table-bordered table-hover';
+$table->attributes['class'] = local_unics_table_class(true);
 
 foreach ($students as $s) {
     $fio = trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? ''));

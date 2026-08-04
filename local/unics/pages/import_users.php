@@ -252,7 +252,7 @@ echo html_writer::start_tag('div', ['class' => 'card-body p-2']);
 
 $col_table = new html_table();
 $col_table->head = ['Колонка', 'Обязательная', 'Описание'];
-$col_table->attributes['class'] = 'table table-sm table-bordered mb-0';
+$col_table->attributes['class'] = local_unics_table_class();
 $col_table->data = [
     ['lastname',         'Да', 'Фамилия'],
     ['firstname',        'Да', 'Имя'],
@@ -325,7 +325,7 @@ if (empty($results)) {
     // Таблица строк
     $table = new html_table();
     $table->head = ['Стр.', 'ФИО', 'Логин', 'Email', 'Роль', 'Статус'];
-    $table->attributes['class'] = 'table table-sm table-bordered';
+    $table->attributes['class'] = local_unics_table_class(true);
 
     foreach ($results as $r) {
         $badge_class = match($r['status']) {

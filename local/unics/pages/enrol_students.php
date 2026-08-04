@@ -410,7 +410,7 @@ $table->head = [
     ),
     'Учащийся', 'Класс', 'Категория', 'Организация', 'Статус', 'Группы в курсе'
 ];
-$table->attributes['class'] = 'table table-sm table-bordered table-hover';
+$table->attributes['class'] = local_unics_table_class(true);
 
 foreach ($students as $s) {
     $fio = htmlspecialchars(trim("{$s->lastname} {$s->firstname} " . ($s->middlename ?? '')));

@@ -417,7 +417,7 @@ echo html_writer::end_tag('form');
 if (!empty($ts_pairs)) {
     $table = new html_table();
     $table->head = ['Педагог', 'Учащийся', 'Класс', ''];
-    $table->attributes['class'] = 'table table-sm table-bordered mb-4';
+    $table->attributes['class'] = local_unics_table_class();
     foreach ($ts_pairs as $pair) {
         $remove_url = new moodle_url('/local/unics/pages/assign.php', [
             'action' => 'remove_ts', 'id' => $pair->id, 'sesskey' => sesskey(),
@@ -432,7 +432,7 @@ if (!empty($ts_pairs)) {
             html_writer::link($remove_url, 'Убрать', ['class' => 'btn btn-sm btn-outline-danger']),
         ];
     }
-    echo html_writer::table($table);
+    echo html_writer::div(html_writer::table($table), 'mb-4');
     echo local_unics_render_paging_bar($ts_total, $ts_page, $perpage,
         new moodle_url('/local/unics/pages/assign.php', [
             'filter_org'    => $filter_org,
@@ -461,7 +461,7 @@ echo html_writer::end_tag('form');
 if (!empty($ps_pairs)) {
     $table = new html_table();
     $table->head = ['Родитель', 'Учащийся', ''];
-    $table->attributes['class'] = 'table table-sm table-bordered';
+    $table->attributes['class'] = local_unics_table_class();
     foreach ($ps_pairs as $pair) {
         $remove_url = new moodle_url('/local/unics/pages/assign.php', [
             'action' => 'remove_ps', 'id' => $pair->id, 'sesskey' => sesskey(),
