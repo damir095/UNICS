@@ -344,3 +344,21 @@ function local_unics_gradebook_matrix(int $course_id, int $filter_class, string 
 function local_unics_export_gradebook(int $course_id, int $filter_class, string $filter_letter): void {
     \local_unics\export::gradebook($course_id, $filter_class, $filter_letter);
 }
+
+/**
+ * Строка классов таблицы для единой системы «Мягкие карточки» ([[tables-staff-design]]).
+ *
+ * Единственный источник правды: ядровый html_table по умолчанию несет generaltable, по
+ * которому бьет theme/unics/scss/_tables.scss, но страницы плагина этот класс
+ * перезатирали - отсюда и разъезд вида. Значение совпадает с тем, что задача 1
+ * ([[tables-redesign-design]]) поставила в mustache-шаблоны группы C.
+ *
+ * Обертку .table-responsive (карточка + горизонтальный скролл) НЕ добавляет: у
+ * html_writer::table() ее ставит ядро само, у ручных <table> ее пишут на странице.
+ *
+ * @param bool $compact плотная плотность - для матриц и крупных операционных списков
+ * @return string значение атрибута class
+ */
+function local_unics_table_class(bool $compact = false): string {
+    return 'table table-striped table-hover unics-table' . ($compact ? ' unics-compact' : '');
+}
