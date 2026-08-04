@@ -104,6 +104,22 @@
     color: #fff !important;
 }
 
+// Ниже md (768px) ряд шапки переносится, и блок действий уходит на свою строку.
+// Ядровая кнопка «Массовое редактирование» несет text-nowrap и занимает 314px, а ряд идет
+// flex-wrap: nowrap - на 360px заголовку оставалось 15px и <h1> разваливался на 16 строк
+// по одной букве (замер 2026-08-05). Порог взят по сетке замеров: до 700px заголовок цел,
+// на 576 уже жмется в две строки [[editmode-header-fix-design]].
+// text-nowrap у ядра НЕ снимаем: перенос внутри подписи кнопки выглядел бы хуже, чем перенос
+// всего блока.
+@media (max-width: 767.98px) {
+    #page-header .d-flex.align-items-center {
+        flex-wrap: wrap;
+    }
+    #page-header .header-actions-container {
+        margin-left: 0 !important;  // ms-auto прижимал блок вправо; после переноса не нужен
+    }
+}
+
 // Внутри тёмного navbar (если breadcrumb там) — белый.
 .navbar {
     .breadcrumb-item,
