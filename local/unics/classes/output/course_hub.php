@@ -18,12 +18,13 @@ defined('MOODLE_INTERNAL') || die();
  *
  * Гейт каждой плитки повторяет гейт ее страницы. Расхождений между ними найдено три:
  *
- * (а) «Кодификатор» - жесткий тупик, ПОЧИНЕН здесь: пункт показывался по grade:viewall, а
+ * (а) «Кодификатор» - жесткий тупик, ПОЧИНЕН здесь: пункт показывался по гейту STAFF, а
  *     codifier_tag.php требует moodle/course:manageactivities - non-editing педагог видел
  *     пункт и получал «Недостаточно прав».
  * (б) «Журнал курса» - мягкий тупик, ПРИПАРКОВАН: у gradebook.php нет жесткого гейта, он
- *     сам фильтрует курсы по grade:viewall, поэтому методист без этого права на курсе просто
- *     не находит курс в списке. Отказа нет, чинить надо страницу, а не гейт плитки.
+ *     сам фильтрует курсы по moodle/course:viewparticipants, поэтому смотрящий без этого
+ *     права на курсе просто не находит курс в списке. Отказа нет, чинить надо страницу,
+ *     а не гейт плитки.
  * (в) «Сгенерировать УМК» - припарковано: generate_umk.php гейтится на системном
  *     local/unics:manage || local/unics:viewstudents, а предикат EDIT здесь - на курсовом
  *     moodle/course:manageactivities. При штатном назначении роли editingteacher только в
@@ -56,7 +57,8 @@ class course_hub {
         $activities = has_capability('moodle/course:manageactivities', $context, $userid);
 
         // Наблюдение за классом: те же права, что у course_report/course_students/course_levels.
-        $staff = $manage || $methodist || has_capability('moodle/grade:viewall', $context, $userid);
+        $staff = $manage || $methodist
+            || has_capability('moodle/course:viewparticipants', $context, $userid);
         // Создание контента: non-editing педагог (роль 6) контент не создает.
         $edit = !access::is_nonediting_teacher($userid) && ($manage || $activities || $methodist);
         // Тегирование: гейт codifier_tag.php дословно - БЕЗ !is_nonediting_teacher (страница

@@ -21,11 +21,9 @@ local_unics_require_not_student();
 
 $context = context_course::instance($course_id);
 
-// Просмотр — персонал курса (grade:viewall в контексте курса), методист или админ.
-$can_view = has_capability('local/unics:manage', context_system::instance())
-    || local_unics_is_methodist()
-    || has_capability('moodle/grade:viewall', $context);
-if (!$can_view) {
+// Просмотр - персонал курса, методист или админ. Родитель отсечен: разбор capability
+// и второй рубеж - в {@see \local_unics\access::can_view_course_staff()}.
+if (!local_unics_can_view_course_staff($context)) {
     redirect(new moodle_url('/course/view.php', ['id' => $course_id]),
         'Недостаточно прав для просмотра учащихся курса.',
         null, \core\output\notification::NOTIFY_WARNING);

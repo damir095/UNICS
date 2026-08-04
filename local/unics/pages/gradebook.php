@@ -7,8 +7,9 @@
  *               задание/дата/средний по классу — в подсказке к ячейке;
  *  - «item»   — столбцы = конкретные задания/тесты курса, + средний по заданию.
  *
- * Доступ — нативная capability moodle/grade:viewall в контексте курса (админ —
- * везде, педагог — в своих курсах). При раздельных группах без accessallgroups
+ * Доступ — нативная capability moodle/course:viewparticipants в контексте курса (админ —
+ * везде, педагог — в своих курсах); роль parent ее не имеет, поэтому родителю список
+ * курсов пуст [[parent-leak-fix-design]]. При раздельных группах без accessallgroups
  * строки сужаются до групп смотрящего. Предметная (категорийная) изоляция
  * придёт с кластером «Предметы» без переделки страницы.
  *
@@ -47,9 +48,12 @@ $PAGE->set_heading('Электронный журнал');
 $PAGE->set_pagelayout('admin');
 
 // ----------------------------------------------------------------
-// Доступные курсы: те, где у смотрящего есть moodle/grade:viewall.
+// Доступные курсы: те, где у смотрящего есть право видеть участников. Раньше стояло
+// moodle/grade:viewall - его несет и роль parent, из-за чего родителю в селекторе
+// показывались чужие курсы ([[parent-leak-fix-design]]). Методист имеет оба права
+// (role_manager.php:400,415), поэтому его выдача не сужается.
 // ----------------------------------------------------------------
-$cap_courses = get_user_capability_course('moodle/grade:viewall', $USER->id, true,
+$cap_courses = get_user_capability_course('moodle/course:viewparticipants', $USER->id, true,
     'fullname,shortname,visible,category');
 $allowed = [];
 if ($cap_courses) {
@@ -152,7 +156,7 @@ if (!$course_id) {
 
 $course = get_course($course_id);
 
-// Право правки оценок в контексте ЭТОГО курса (grade:viewall уже гарантирован $allowed).
+// Право правки оценок в контексте ЭТОГО курса ($allowed гарантирует лишь просмотр участников).
 // Ядровый single-view требует все три cap (index.php стр. 63-65). [[grade-editing-design]]
 $course_ctx = context_course::instance($course_id);
 $can_edit = has_capability('moodle/grade:edit', $course_ctx)

@@ -492,7 +492,7 @@ class navigation {
             'local_unics_my_students'
         );
 
-        // Журнал - для педагогов и админа (видит курсы, где есть grade:viewall).
+        // Журнал - для педагогов и админа (видит курсы, где есть course:viewparticipants).
         $branch->add(
             'Журнал',
             new \moodle_url('/local/unics/pages/gradebook.php'),
