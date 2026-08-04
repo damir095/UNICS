@@ -83,8 +83,9 @@ if (empty($students)) {
 echo '<p class="text-muted">Записанные на курс учащиеся. По каждому — переход к отчёту, '
    . 'заметкам педагога этого курса' . ($can_umk ? ' и генерации УМК' : '') . '.</p>';
 
-echo '<table class="table table-sm table-bordered table-hover">';
-echo '<thead class="table-light"><tr>
+echo '<div class="table-responsive">';
+echo '<table class="' . local_unics_table_class() . '">';
+echo '<thead><tr>
     <th>Учащийся</th><th>Класс</th><th>Категория</th><th>Уровень</th><th>Действия</th>
 </tr></thead><tbody>';
 
@@ -121,6 +122,6 @@ foreach ($students as $s) {
     echo '<td><div class="d-flex flex-wrap gap-1">' . implode(' ', $actions) . '</div></td>';
     echo '</tr>';
 }
-echo '</tbody></table>';
+echo '</tbody></table></div>';
 
 echo $OUTPUT->footer();

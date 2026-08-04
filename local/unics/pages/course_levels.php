@@ -125,8 +125,9 @@ if (empty($students)) {
 // ----------------------------------------------------------------
 // Таблица: текущий → предложенный.
 // ----------------------------------------------------------------
-echo '<table class="table table-sm table-bordered table-hover">';
-echo '<thead class="table-light"><tr>
+echo '<div class="table-responsive">';
+echo '<table class="' . local_unics_table_class() . '">';
+echo '<thead><tr>
     <th>Учащийся</th><th>Класс</th><th>Текущий уровень</th><th>Средний балл</th>
     <th>Предложение</th>
 </tr></thead><tbody>';
@@ -163,7 +164,7 @@ foreach ($students as $s) {
     echo '<td>' . $prop_cell . '</td>';
     echo '</tr>';
 }
-echo '</tbody></table>';
+echo '</tbody></table></div>';
 
 if ($can_recalc) {
     $form_url = new moodle_url('/local/unics/pages/course_levels.php',

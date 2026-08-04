@@ -126,8 +126,9 @@ echo $OUTPUT->heading('Открытые пересдачи', 4);
 if (!$retakes) {
     echo '<p class="text-muted">Открытых пересдач нет.</p>';
 } else {
-    echo '<table class="table table-sm table-bordered">';
-    echo '<thead class="table-light"><tr><th>Учащийся</th><th>Результат</th><th>Порог</th><th>Дата</th></tr></thead><tbody>';
+    echo '<div class="table-responsive">';
+    echo '<table class="' . local_unics_table_class() . '">';
+    echo '<thead><tr><th>Учащийся</th><th>Результат</th><th>Порог</th><th>Дата</th></tr></thead><tbody>';
     foreach ($retakes as $r) {
         $name = trim($r->lastname . ' ' . $r->firstname);
         $pct  = $r->grademax > 0 ? round($r->grade / $r->grademax * 100, 1) . '%' : '-';
@@ -138,7 +139,7 @@ if (!$retakes) {
         echo '<td>' . userdate($r->timecreated, '%d.%m.%Y %H:%M') . '</td>';
         echo '</tr>';
     }
-    echo '</tbody></table>';
+    echo '</tbody></table></div>';
 }
 
 echo $OUTPUT->footer();

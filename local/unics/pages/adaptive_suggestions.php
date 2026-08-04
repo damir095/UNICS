@@ -67,8 +67,9 @@ if (empty($list)) {
     exit;
 }
 
-echo '<table class="table table-sm table-bordered table-hover">';
-echo '<thead class="table-light"><tr>'
+echo '<div class="table-responsive">';
+echo '<table class="' . local_unics_table_class() . '">';
+echo '<thead><tr>'
    . '<th>Учащийся</th><th>Тип</th><th>Детали</th><th>Авто-применение</th><th>Действия</th>'
    . '</tr></thead><tbody>';
 
@@ -109,6 +110,6 @@ foreach ($list as $s) {
     echo '</td>';
     echo '</tr>';
 }
-echo '</tbody></table>';
+echo '</tbody></table></div>';
 
 echo $OUTPUT->footer();

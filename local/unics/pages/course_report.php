@@ -215,8 +215,9 @@ if ($cnt_risk > 0) {
 }
 
 // ---- Таблица ----
-echo '<table class="table table-sm table-bordered table-hover">';
-echo '<thead class="table-light"><tr>
+echo '<div class="table-responsive">';
+echo '<table class="' . local_unics_table_class() . '">';
+echo '<thead><tr>
     <th>Учащийся</th><th>Класс</th><th>Категория</th><th>Уровень</th>
     <th>Средний балл</th><th>Риск</th><th>Отчёт</th>
 </tr></thead><tbody>';
@@ -266,7 +267,7 @@ foreach ($rows as $r) {
     echo '<td>' . $report_link . '</td>';
     echo '</tr>';
 }
-echo '</tbody></table>';
+echo '</tbody></table></div>';
 
 if (!empty($all_avgs)) {
     $avg_pct   = round(array_sum($all_avgs) / count($all_avgs), 1);

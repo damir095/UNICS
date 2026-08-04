@@ -139,8 +139,8 @@ if (!$milestones) {
         }
 
         echo '<div class="table-responsive">';
-        echo '<table class="table table-sm table-bordered">';
-        echo '<thead class="table-light"><tr><th>Учащийся</th>';
+        echo '<table class="' . local_unics_table_class(true) . '">';
+        echo '<thead><tr><th>Учащийся</th>';
         foreach ($milestones as $m) {
             echo '<th>' . format_string($m->name) . '</th>';
         }
