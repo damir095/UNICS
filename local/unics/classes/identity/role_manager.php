@@ -492,7 +492,8 @@ class role_manager {
             // ------------------------------------------------------------
             'parent' => [
                 'allow' => array_merge(
-                    $caps_messaging, $caps_view_grades, $caps_reports_view,
+                    // $caps_view_grades СОЗНАТЕЛЬНО не выдается - см. prevent ниже.
+                    $caps_messaging, $caps_reports_view,
                     [
                         'moodle/course:view', 'moodle/course:viewoverview',
                         'moodle/site:viewfullnames',
@@ -509,6 +510,15 @@ class role_manager {
                     ]
                 ),
                 'prevent' => array_merge(
+                    // Грейд-набор ЗАПРЕЩЕН явно, а не просто не выдан: apply_matrix() аддитивен и
+                    // трогает только перечисленные capability, поэтому удаления из allow мало -
+                    // на уже настроенном сайте строка CAP_ALLOW осталась бы в БД.
+                    // Роль parent назначается на СИСТЕМНОМ контексте (user_manager::create_user()),
+                    // поэтому grade:viewall действовал сразу во всех курсах и родитель прямым URL
+                    // получал персданные чужих детей ([[parent-leak-fix-design]]).
+                    // Своего ребенка родитель видит через my_children.php / student_report.php -
+                    // они гейтятся связкой unics_parent_student, а не capability.
+                    $caps_view_grades,
                     $caps_grading, $caps_course_edit, $caps_add_activities,
                     [
                         'moodle/course:managegroups', 'moodle/course:viewparticipants',

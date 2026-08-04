@@ -208,4 +208,41 @@ final class parent_access_test extends \advanced_testcase {
         $this->setUser($t);
         $this->assertFalse(access::can_view_course_staff($ctx, (int)$outsider->id));
     }
+
+    /**
+     * Матрица обязана ОТБИРАТЬ у роли parent весь грейд-набор, а не просто не выдавать его.
+     *
+     * ЛОВУШКА: apply_matrix() аддитивен - он трогает только перечисленные capability
+     * (role_manager.php:54-72). Если убрать право лишь из списка allow, на живом стенде
+     * строка CAP_ALLOW останется в mdl_role_capabilities и фикс не подействует. Поэтому
+     * права обязаны быть в prevent, и тест проверяет именно значение permission.
+     */
+    public function test_matrix_prevents_grade_capabilities_for_parent(): void {
+        $this->resetAfterTest();
+        global $DB;
+
+        $roleid = create_role('Родитель', 'parent', '');
+        set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
+
+        \local_unics\identity\role_manager::apply_matrix();
+
+        $ctxid = \context_system::instance()->id;
+        $caps = [
+            'moodle/grade:view', 'moodle/grade:viewall',
+            'gradereport/grader:view', 'gradereport/user:view',
+            'gradereport/overview:view', 'gradereport/history:view',
+            'gradereport/outcomes:view', 'gradereport/singleview:view',
+            'gradereport/summary:view',
+        ];
+        foreach ($caps as $cap) {
+            // Сначала само существование: apply_matrix() молча пропускает неизвестные
+            // capability, и опечатка в имени иначе выглядела бы как «право не запрещено».
+            $this->assertNotEmpty(get_capability_info($cap),
+                "capability {$cap} не существует в сборке - опечатка в матрице?");
+            $perm = $DB->get_field('role_capabilities', 'permission',
+                ['roleid' => $roleid, 'contextid' => $ctxid, 'capability' => $cap]);
+            $this->assertEquals(CAP_PREVENT, (int)$perm,
+                "{$cap} обязана быть запрещена роли parent, а не разрешена или не задана");
+        }
+    }
 }

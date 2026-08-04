@@ -1526,5 +1526,24 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026072500, 'local', 'unics');
     }
 
+    if ($oldversion < 2026080401) {
+        // Роли parent запрещен весь грейд-набор: она несла moodle/grade:viewall на СИСТЕМНОМ
+        // контексте, из-за чего родитель прямым URL открывал штабные страницы курса и видел
+        // ФИО, категорию ОВЗ, адаптивный уровень и группу риска ВСЕХ детей класса
+        // ([[parent-leak-fix-design]], воспроизведено 2026-08-04).
+        // apply_matrix() аддитивен - именно prevent, а не удаление из allow, снимает право
+        // на уже настроенном сайте.
+        require_once(__DIR__ . '/../classes/identity/role_manager.php');
+        try {
+            \local_unics\identity\role_manager::apply_matrix();
+        } catch (\Throwable $e) {
+            // Не валим апгрейд из-за матрицы: админ может применить руками через setup_roles.php.
+            debugging('local_unics: role_manager::apply_matrix() failed during upgrade: '
+                . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        upgrade_plugin_savepoint(true, 2026080401, 'local', 'unics');
+    }
+
     return true;
 }
