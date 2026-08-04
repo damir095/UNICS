@@ -1,0 +1,115 @@
+<?php
+namespace local_unics;
+
+defined('MOODLE_INTERNAL') || die();
+
+/**
+ * Доступ родителя к штабным страницам курса ([[parent-leak-fix-design]]).
+ *
+ * Утечка, ради которой это написано: Moodle-роль parent на стенде несет
+ * moodle/grade:viewall, а четыре штабные страницы гейтились именно по нему -
+ * родитель прямым URL получал ФИО, категорию ОВЗ, адаптивный уровень и группу
+ * риска ВСЕХ детей класса. Воспроизведено 2026-08-04 под uid 83 на курсе 21.
+ *
+ * Фикстуры намеренно дают родителю права через enrol_user(..., 'teacher'):
+ * архетип non-editing педагога несет и grade:viewall, и course:viewparticipants.
+ * Без этого тест зеленел бы вхолостую - родитель не прошел бы гейт и без
+ * исправления. НЕ упрощать фикстуру.
+ *
+ * @package local_unics
+ */
+#[\PHPUnit\Framework\Attributes\CoversClass(access::class)]
+final class parent_access_test extends \advanced_testcase {
+
+    /**
+     * Создать (если нет) Moodle-роль по shortname и назначить ее на системном контексте -
+     * access::user_has_role() ищет роль без учета контекста. Роль 'methodist' в окружении
+     * PHPUnit не создается ни install.xml, ни db/upgrade.php.
+     */
+    private function assign_role(string $shortname, string $archetype, int $userid): void {
+        global $DB;
+        $roleid = $DB->get_field('role', 'id', ['shortname' => $shortname]);
+        if (!$roleid) {
+            $roleid = create_role(ucfirst($shortname), $shortname, '', $archetype);
+            set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
+        }
+        role_assign((int)$roleid, $userid, \context_system::instance()->id);
+    }
+
+    /** Родитель ребенка системы: строки в unics_students и unics_parent_student. */
+    private function make_parent(\stdClass $parent): void {
+        global $DB;
+        $student = $this->getDataGenerator()->create_user();
+        $sid = $DB->insert_record('unics_students', (object)['mdl_user_id' => $student->id]);
+        $DB->insert_record('unics_parent_student',
+            (object)['parent_mdl_user_id' => $parent->id, 'student_id' => $sid]);
+    }
+
+    public function test_plain_parent_is_not_staff_person(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $parent = $gen->create_user();
+        $this->make_parent($parent);
+        $gen->enrol_user($parent->id, $course->id, 'teacher');
+        $this->setUser($parent);
+
+        $this->assertFalse(access::is_staff_person((int)$parent->id,
+            \context_course::instance($course->id)));
+    }
+
+    public function test_teacher_with_unics_row_is_staff_person(): void {
+        $this->resetAfterTest();
+        global $DB;
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $teacher = $gen->create_user();
+        // Non-editing педагог: ни manage, ни methodist, ни manageactivities - держится
+        // ровно на строке unics_teachers, которую заводит user_manager::create_user().
+        $DB->insert_record('unics_teachers', (object)['mdl_user_id' => $teacher->id]);
+        $gen->enrol_user($teacher->id, $course->id, 'teacher');
+        $this->setUser($teacher);
+
+        $this->assertTrue(access::is_staff_person((int)$teacher->id,
+            \context_course::instance($course->id)));
+    }
+
+    public function test_methodist_is_staff_person(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $m = $gen->create_user();
+        $this->assign_role('methodist', 'teacher', (int)$m->id);
+        $this->setUser($m);
+
+        $this->assertTrue(access::is_staff_person((int)$m->id));
+    }
+
+    public function test_editing_teacher_is_staff_person_via_context(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $t = $gen->create_user();
+        $gen->enrol_user($t->id, $course->id, 'editingteacher');
+        $this->setUser($t);
+
+        // Без строки unics_teachers, но с manageactivities в контексте курса.
+        $this->assertTrue(access::is_staff_person((int)$t->id,
+            \context_course::instance($course->id)));
+    }
+
+    public function test_is_staff_person_honours_userid_not_current_user(): void {
+        $this->resetAfterTest();
+        global $DB;
+        $gen = $this->getDataGenerator();
+        $teacher = $gen->create_user();
+        $DB->insert_record('unics_teachers', (object)['mdl_user_id' => $teacher->id]);
+        $outsider = $gen->create_user();
+
+        // Текущий - посторонний, спрашиваем про педагога.
+        $this->setUser($outsider);
+        $this->assertTrue(access::is_staff_person((int)$teacher->id));
+        // Текущий - педагог, спрашиваем про постороннего.
+        $this->setUser($teacher);
+        $this->assertFalse(access::is_staff_person((int)$outsider->id));
+    }
+}

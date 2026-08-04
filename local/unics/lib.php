@@ -124,6 +124,14 @@ function local_unics_is_nonediting_teacher(?int $userid = null): bool {
 }
 
 /**
+ * true, если пользователь - штатный сотрудник, а не «просто родитель».
+ * Тонкая обертка над {@see \local_unics\access::is_staff_person()}.
+ */
+function local_unics_is_staff_person(?int $userid = null, ?\context $context = null): bool {
+    return \local_unics\access::is_staff_person($userid, $context);
+}
+
+/**
  * Коды unics_role, которые пользователь вправе назначать при создании пользователя.
  * Тонкая обёртка над {@see \local_unics\access::creatable_roles()}.
  */

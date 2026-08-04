@@ -174,6 +174,42 @@ class access {
     }
 
     /**
+     * true, если пользователь - ШТАТНЫЙ СОТРУДНИК, а не «просто родитель».
+     *
+     * Нужен там, где родителя надо отсечь от штабной поверхности, не задев сотрудника,
+     * который ОДНОВРЕМЕННО родитель ученика системы - в школе это частый случай.
+     *
+     * Проверять только manage/methodist/manageactivities НЕДОСТАТОЧНО: у non-editing
+     * педагога (роль 'teacher', код 6) нет ни одного из них, его доступ держится на
+     * capability уровня курса. Поэтому четвертый признак - строка в unics_teachers,
+     * которую user_manager::create_user() заводит для КАЖДОЙ учительской роли,
+     * включая методистов.
+     *
+     * @param int|null      $userid  id пользователя; null = текущий $USER->id
+     * @param \context|null $context контекст курса; если задан, учитывается
+     *                               moodle/course:manageactivities в нем
+     * @return bool
+     */
+    public static function is_staff_person(?int $userid = null, ?\context $context = null): bool {
+        global $USER, $DB;
+        if ($userid === null) {
+            $userid = (int)$USER->id;
+        }
+        if ($userid <= 0) {
+            return false;
+        }
+        if (has_capability('local/unics:manage', \context_system::instance(), $userid)
+            || self::is_methodist($userid)) {
+            return true;
+        }
+        if ($context !== null
+            && has_capability('moodle/course:manageactivities', $context, $userid)) {
+            return true;
+        }
+        return $DB->record_exists('unics_teachers', ['mdl_user_id' => $userid]);
+    }
+
+    /**
      * Какие коды unics_role пользователь вправе назначать при создании другого пользователя.
      * Принцип: нельзя создать роль своего уровня или выше - только нижестоящих.
      *   - системный администратор (manage) - все роли;

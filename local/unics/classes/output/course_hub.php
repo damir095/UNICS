@@ -45,7 +45,7 @@ class course_hub {
      * @return array<int,array{key:string,title:string,tiles:array<int,array{label:string,desc:string,url:string,icon:string}>}>
      */
     public static function tiles(\stdClass $course, \context_course $context, ?int $userid = null): array {
-        global $USER, $DB;
+        global $USER;
         if ($userid === null) {
             $userid = (int)$USER->id;
         }
@@ -63,20 +63,12 @@ class course_hub {
         // такого условия не ставит, а без manageactivities non-editing педагог сюда и не попадет).
         $tag = $manage || $methodist || $activities;
 
-        // Родитель - не персонал курса. Moodle-роль parent на этом стенде несет
-        // moodle/grade:viewall, поэтому без явной проверки родитель прошел бы гейт STAFF и
-        // увидел журнал, отчет и состав класса, то есть чужие персональные данные. Зеркалит
-        // {@see course_staff_view::is_staff_view()}, где родитель исключен той же строкой.
-        //
-        // Сотрудник, который ОДНОВРЕМЕННО родитель ученика системы, доступ сохраняет: признак
-        // штатного сотрудника - строка в unics_teachers (ее заводит user_manager::create_user()
-        // для каждой учительской роли, включая методистов) либо системные manage/manageactivities.
-        // Проверять только $manage/$methodist/$activities НЕДОСТАТОЧНО - у non-editing педагога
-        // нет ни одного из них, его доступ держится на одном grade:viewall, и он потерял бы
-        // свои плитки, оказавшись заодно родителем.
-        $isstaffperson = $manage || $methodist || $activities
-            || $DB->record_exists('unics_teachers', ['mdl_user_id' => $userid]);
-        if (access::is_parent($userid) && !$isstaffperson) {
+        // Родитель - не персонал курса: Moodle-роль parent несет права уровня курса, поэтому без
+        // явной проверки родитель прошел бы гейт STAFF и увидел журнал, отчет и состав класса -
+        // чужие персональные данные. Зеркалит {@see course_staff_view::is_staff_view()}, где
+        // родитель исключен той же строкой. Сотрудник, который заодно родитель, доступ сохраняет:
+        // разбор признаков - в докблоке {@see access::is_staff_person()}.
+        if (access::is_parent($userid) && !access::is_staff_person($userid, $context)) {
             return [];
         }
 
