@@ -112,4 +112,100 @@ final class parent_access_test extends \advanced_testcase {
         $this->setUser($teacher);
         $this->assertFalse(access::is_staff_person((int)$outsider->id));
     }
+
+    public function test_parent_cannot_view_course_staff_even_with_grade_viewall(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $parent = $gen->create_user();
+        $this->make_parent($parent);
+        // Архетип non-editing педагога несет и grade:viewall, и course:viewparticipants -
+        // ровно так родитель и проходил старый гейт. НЕ упрощать.
+        $gen->enrol_user($parent->id, $course->id, 'teacher');
+        $this->setUser($parent);
+
+        $this->assertFalse(access::can_view_course_staff(
+            \context_course::instance($course->id), (int)$parent->id));
+    }
+
+    public function test_nonediting_teacher_can_view_course_staff(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $t = $gen->create_user();
+        $gen->enrol_user($t->id, $course->id, 'teacher');
+        $this->setUser($t);
+
+        $this->assertTrue(access::can_view_course_staff(
+            \context_course::instance($course->id), (int)$t->id));
+    }
+
+    public function test_editing_teacher_can_view_course_staff(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $t = $gen->create_user();
+        $gen->enrol_user($t->id, $course->id, 'editingteacher');
+        $this->setUser($t);
+
+        $this->assertTrue(access::can_view_course_staff(
+            \context_course::instance($course->id), (int)$t->id));
+    }
+
+    public function test_methodist_can_view_course_staff_without_enrolment(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $m = $gen->create_user();
+        $this->assign_role('methodist', 'teacher', (int)$m->id);
+        $this->setUser($m);
+
+        $this->assertTrue(access::can_view_course_staff(
+            \context_course::instance($course->id), (int)$m->id));
+    }
+
+    public function test_outsider_cannot_view_course_staff(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $u = $gen->create_user();
+        $this->setUser($u);
+
+        $this->assertFalse(access::can_view_course_staff(
+            \context_course::instance($course->id), (int)$u->id));
+    }
+
+    /**
+     * Регресс: сотрудник, который ОДНОВРЕМЕННО родитель ученика системы, доступ СОХРАНЯЕТ.
+     * Первая версия проверки родителя отбирала его у non-editing педагога-родителя.
+     */
+    public function test_staff_who_is_also_parent_keeps_access(): void {
+        $this->resetAfterTest();
+        global $DB;
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $teacher = $gen->create_user();
+        $this->make_parent($teacher);
+        $DB->insert_record('unics_teachers', (object)['mdl_user_id' => $teacher->id]);
+        $gen->enrol_user($teacher->id, $course->id, 'teacher');
+        $this->setUser($teacher);
+
+        $this->assertTrue(access::can_view_course_staff(
+            \context_course::instance($course->id), (int)$teacher->id));
+    }
+
+    public function test_can_view_course_staff_honours_userid_not_current_user(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator();
+        $course = $gen->create_course(['format' => 'topics']);
+        $ctx = \context_course::instance($course->id);
+        $t = $gen->create_user();
+        $gen->enrol_user($t->id, $course->id, 'editingteacher');
+        $outsider = $gen->create_user();
+
+        $this->setUser($outsider);
+        $this->assertTrue(access::can_view_course_staff($ctx, (int)$t->id));
+        $this->setUser($t);
+        $this->assertFalse(access::can_view_course_staff($ctx, (int)$outsider->id));
+    }
 }

@@ -210,6 +210,41 @@ class access {
     }
 
     /**
+     * true, если пользователь вправе видеть штабные страницы курса: журнал, отчет по курсу,
+     * состав класса, адаптивные уровни.
+     *
+     * ВАЖНО, какая именно capability. Раньше гейт стоял на moodle/grade:viewall, но это про
+     * «видеть все оценки», а не про «видеть состав класса». Moodle-роль parent несет
+     * grade:viewall (матрица вешает роли на СИСТЕМНЫЙ контекст, см. user_manager::create_user()),
+     * поэтому родитель прямым URL получал персональные данные всех детей класса
+     * ([[parent-leak-fix-design]], воспроизведено 2026-08-04).
+     *
+     * Верная capability - moodle/course:viewparticipants: именно ей ядро гейтит состав класса,
+     * и именно поэтому ядровые grader/user report родителю ничего не отдавали. Проверено по всей
+     * матрице role_manager: каждая штатная роль имеет ее, ученик и родитель - явный prevent.
+     * Ту же capability использует {@see \local_unics\output\course_staff_view::is_staff_view()}.
+     *
+     * Проверка родителя оставлена ВТОРЫМ рубежом на случай, если право придет из другой роли.
+     *
+     * @param \context_course $context контекст курса
+     * @param int|null        $userid  id пользователя; null = текущий $USER->id
+     * @return bool
+     */
+    public static function can_view_course_staff(\context_course $context, ?int $userid = null): bool {
+        global $USER;
+        if ($userid === null) {
+            $userid = (int)$USER->id;
+        }
+        $ok = has_capability('local/unics:manage', \context_system::instance(), $userid)
+            || self::is_methodist($userid)
+            || has_capability('moodle/course:viewparticipants', $context, $userid);
+        if ($ok && self::is_parent($userid) && !self::is_staff_person($userid, $context)) {
+            return false;
+        }
+        return $ok;
+    }
+
+    /**
      * Какие коды unics_role пользователь вправе назначать при создании другого пользователя.
      * Принцип: нельзя создать роль своего уровня или выше - только нижестоящих.
      *   - системный администратор (manage) - все роли;

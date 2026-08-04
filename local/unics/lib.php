@@ -132,6 +132,14 @@ function local_unics_is_staff_person(?int $userid = null, ?\context $context = n
 }
 
 /**
+ * true, если пользователь вправе видеть штабные страницы курса (журнал, отчет, состав класса,
+ * уровни). Тонкая обертка над {@see \local_unics\access::can_view_course_staff()}.
+ */
+function local_unics_can_view_course_staff(\context_course $context, ?int $userid = null): bool {
+    return \local_unics\access::can_view_course_staff($context, $userid);
+}
+
+/**
  * Коды unics_role, которые пользователь вправе назначать при создании пользователя.
  * Тонкая обёртка над {@see \local_unics\access::creatable_roles()}.
  */
