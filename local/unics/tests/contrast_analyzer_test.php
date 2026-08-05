@@ -75,4 +75,61 @@ final class contrast_analyzer_test extends \advanced_testcase {
         $this->assertSame('red', $decls[1]['val']);
         $this->assertSame(1, $decls[1]['ord']);
     }
+
+    public function test_tokens_applies_only_matching_scheme_blocks(): void {
+        $css = ':root{--unics-text:#1f2430}'
+             . 'html.unics-a11y-dark{--unics-text:#e8eaf0}';
+
+        $light = contrast_analyzer::tokens(contrast_analyzer::declarations($css), []);
+        $dark = contrast_analyzer::tokens(
+            contrast_analyzer::declarations($css), ['unics-a11y-dark']
+        );
+
+        $this->assertSame('1f2430', $light['--unics-text']);
+        $this->assertSame('e8eaf0', $dark['--unics-text']);
+    }
+
+    public function test_tokens_later_declaration_wins_equal_specificity(): void {
+        // Реальная коллизия из _accessibility.scss: контраст-блок (строка 598) ставит
+        // углубленный акцент, accent-миксин (строка 724) - свой, специфичность равна,
+        // побеждает поздний. Это и есть дефект «акцент отменяет контраст».
+        $css = 'html.unics-a11y-contrast{--unics-primary-text:#9a3216}'
+             . 'html.unics-a11y-accent-blue{--unics-primary-text:#1565c0}';
+
+        $tokens = contrast_analyzer::tokens(
+            contrast_analyzer::declarations($css),
+            ['unics-a11y-contrast', 'unics-a11y-accent-blue']
+        );
+
+        $this->assertSame('1565c0', $tokens['--unics-primary-text']);
+    }
+
+    public function test_tokens_higher_specificity_beats_earlier_order(): void {
+        // Два класса в селекторе = (0,2,1) и должны бить одноклассовый (0,1,1),
+        // даже если объявлены раньше.
+        $css = 'html.unics-a11y-dark.unics-a11y-contrast{--unics-text:#ffffff}'
+             . 'html.unics-a11y-contrast{--unics-text:#000000}';
+
+        $tokens = contrast_analyzer::tokens(
+            contrast_analyzer::declarations($css),
+            ['unics-a11y-dark', 'unics-a11y-contrast']
+        );
+
+        $this->assertSame('ffffff', $tokens['--unics-text']);
+    }
+
+    public function test_resolve_follows_var_chains_and_fallbacks(): void {
+        $tokens = ['--unics-surface' => 'ffffff', '--unics-section-bg' => 'ffffff'];
+
+        $this->assertSame('ffffff', contrast_analyzer::resolve('#fff', $tokens));
+        $this->assertSame('ffffff', contrast_analyzer::resolve('var(--unics-surface)', $tokens));
+        // Несуществующий токен -> используется fallback. Это механизм M4:
+        // var(--unics-muted, #6c757d) молча дает хардкод во всех схемах.
+        $this->assertSame('6c757d', contrast_analyzer::resolve('var(--unics-muted, #6c757d)', $tokens));
+        // Несуществующий токен без fallback -> null, пара непроверяема.
+        $this->assertNull(contrast_analyzer::resolve('var(--unics-nope)', $tokens));
+        // Не сводится к непрозрачному цвету.
+        $this->assertNull(contrast_analyzer::resolve('transparent', $tokens));
+        $this->assertNull(contrast_analyzer::resolve('linear-gradient(135deg,#fff,#000)', $tokens));
+    }
 }

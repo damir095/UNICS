@@ -190,4 +190,105 @@ final class contrast_analyzer {
         $lo = min($l1, $l2);
         return ($hi + 0.05) / ($lo + 0.05);
     }
+
+    /**
+     * Применим ли селектор к html с данным набором a11y-классов.
+     * Интересуют только `:root` и `html.unics-a11y-*` - остальные блоки токенов не объявляют.
+     * Возврат: [применим, специфичность] или [false, 0].
+     */
+    private static function scheme_match(string $sel, array $classes): array {
+        $sel = trim($sel);
+        if ($sel === ':root') {
+            return [true, 0];
+        }
+        if (!preg_match('/^html((?:\.unics-a11y-[a-z-]+)+)$/', $sel, $m)) {
+            return [false, 0];
+        }
+        $needed = array_filter(explode('.', $m[1]));
+        foreach ($needed as $c) {
+            if (!in_array($c, $classes, true)) {
+                return [false, 0];
+            }
+        }
+        // Специфичность = число классов в селекторе.
+        return [true, count($needed)];
+    }
+
+    /** Таблица токенов для комбинации. Ничьи по специфичности решает порядок ($ord). */
+    public static function tokens(array $decls, array $classes): array {
+        $best = [];   // токен -> [специфичность, ord]
+        $raw = [];    // токен -> сырое значение
+        foreach ($decls as $d) {
+            if (strncmp($d['prop'], '--unics-', 8) !== 0) {
+                continue;
+            }
+            [$ok, $spec] = self::scheme_match($d['sel'], $classes);
+            if (!$ok) {
+                continue;
+            }
+            $prev = $best[$d['prop']] ?? null;
+            if ($prev === null || $spec > $prev[0] || ($spec === $prev[0] && $d['ord'] > $prev[1])) {
+                $best[$d['prop']] = [$spec, $d['ord']];
+                $raw[$d['prop']] = $d['val'];
+            }
+        }
+        // Резолвим цепочки var() внутри самой таблицы: --unics-section-bg: var(--unics-surface).
+        $out = [];
+        foreach ($raw as $token => $val) {
+            $hex = self::resolve_raw($val, $raw, 0);
+            if ($hex !== null) {
+                $out[$token] = $hex;
+            }
+        }
+        return $out;
+    }
+
+    /** Разворачивает значение в hex, идя по цепочке var() внутри карты сырых значений. */
+    private static function resolve_raw(string $val, array $raw, int $depth): ?string {
+        if ($depth > 10) {
+            return null;   // цикл в токенах
+        }
+        $val = trim($val);
+        $val = preg_replace('/\s*!important$/', '', $val);
+
+        if (preg_match('/^#([0-9a-f]{6})$/i', $val, $m)) {
+            return strtolower($m[1]);
+        }
+        if (preg_match('/^#([0-9a-f]{3})$/i', $val, $m)) {
+            $s = strtolower($m[1]);
+            return $s[0] . $s[0] . $s[1] . $s[1] . $s[2] . $s[2];
+        }
+        // Шестизначный hex без #: встречается в таблице токенов.
+        if (preg_match('/^([0-9a-f]{6})$/i', $val, $m)) {
+            return strtolower($m[1]);
+        }
+        // Трехзначный hex без #.
+        if (preg_match('/^([0-9a-f]{3})$/i', $val, $m)) {
+            $s = strtolower($m[1]);
+            return $s[0] . $s[0] . $s[1] . $s[1] . $s[2] . $s[2];
+        }
+        if (preg_match('/^rgb\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)\s*\)$/i', $val, $m)) {
+            return sprintf('%02x%02x%02x', (int)$m[1], (int)$m[2], (int)$m[3]);
+        }
+        // Именованные цвета, встречающиеся в бандле как непрозрачные.
+        $named = ['white' => 'ffffff', 'black' => '000000', 'red' => 'ff0000'];
+        if (isset($named[strtolower($val)])) {
+            return $named[strtolower($val)];
+        }
+        // var(--token) или var(--token, fallback).
+        if (preg_match('/^var\(\s*(--[a-z0-9-]+)\s*(?:,\s*(.+))?\)$/i', $val, $m)) {
+            $token = $m[1];
+            if (isset($raw[$token])) {
+                return self::resolve_raw($raw[$token], $raw, $depth + 1);
+            }
+            return isset($m[2]) ? self::resolve_raw($m[2], $raw, $depth + 1) : null;
+        }
+        // transparent, currentColor, градиенты, rgba с альфой - непроверяемо.
+        return null;
+    }
+
+    /** Публичный резолв значения против ГОТОВОЙ таблицы токенов. */
+    public static function resolve(string $value, array $tokens): ?string {
+        return self::resolve_raw($value, $tokens, 0);
+    }
 }
