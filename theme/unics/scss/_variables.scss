@@ -23,7 +23,7 @@
     --unics-surface:        #FFFFFF;
     --unics-dark:           #292F3B;
     --unics-text:           #1F2430;
-    --unics-text-muted:     #6b7280;
+    --unics-text-muted:     #69707e;  // 4.61:1 на фоне страницы #F5F6F9 и 4.98:1 на белом. Прежний #6b7280 давал на фоне страницы лишь 4.47:1 - провал AA (на белом проходил, потому промах и не замечали)
     --unics-border:         #e3e6ea;
 
     // Semantic colors. Контраст ≥ 4.5:1 на белом. См. design-references §5a.

@@ -42,7 +42,10 @@
     .icon,
     [class^="fa-"],
     [class*=" fa-"] {
-        color: var(--unics-primary);
+        // Не --unics-primary: акцент задуман заливкой, и как ЦВЕТ значка на темной
+        // поверхности проваливается (темно-фиолетовый акцент дает 2.28:1).
+        // --unics-primary-text подобран под текст и перекрыт во всех схемах.
+        color: var(--unics-primary-text);
     }
 
     &:hover,
@@ -165,7 +168,9 @@
 
         &:hover,
         &:focus {
-            color: var(--unics-primary) !important;
+            // Тот же случай, что у значка дашборда выше: акцент как ЦВЕТ на темной
+            // поверхности навбара дает 2.28:1. Берем текстовый вариант токена.
+            color: var(--unics-primary-text) !important;
         }
 
         .icon {

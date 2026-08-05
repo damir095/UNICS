@@ -79,8 +79,12 @@
     align-items: center;
     gap: var(--unics-space-1);
     padding: var(--unics-space-1) var(--unics-space-3);
-    background: var(--unics-primary);
-    color: #fff;
+    // Заливка под БЕЛЫМ текстом: --unics-primary это акцент (3.2:1) и белое на нем
+    // проваливается. --unics-primary-btn подобран ровно под этот случай (4.6:1) и,
+    // в отличие от --unics-primary, не перекрашивается accent-миксином - значит
+    // держит порог во всех 16 комбинациях.
+    background: var(--unics-primary-btn);
+    color: var(--unics-on-primary);
     border-radius: var(--unics-radius-pill);
     font-weight: 600;
     font-size: 0.9375rem;
@@ -571,8 +575,11 @@
         padding: var(--unics-space-1) var(--unics-space-4);
         border: 0;
         border-radius: var(--unics-radius-pill);
-        background: var(--unics-primary-deep);
-        color: #fff;
+        // --unics-primary-deep - ТЕКСТОВЫЙ токен: темные схемы осветляют его, чтобы он
+        // читался НА темной поверхности (в dark+accent-green это #5fcf7a). Как заливка
+        // под белым текстом он дает 1.96:1. Под белый текст берем --unics-primary-btn.
+        background: var(--unics-primary-btn);
+        color: var(--unics-on-primary);
         font-size: 0.95rem;
         line-height: 1.4;
         box-shadow: var(--unics-shadow-md);
@@ -580,8 +587,8 @@
 
         &:hover,
         &:focus {
-            background: var(--unics-primary-hover);
-            color: #fff;
+            background: var(--unics-primary-btn-hover);   // парный btn-вариант: белое на нем 6:1
+            color: var(--unics-on-primary);
         }
     }
 
@@ -678,8 +685,11 @@
 
     &:hover,
     &:focus {
-        background: var(--unics-primary-deep);
-        color: #fff;
+        // --unics-primary-deep - ТЕКСТОВЫЙ токен: темные схемы осветляют его, чтобы он
+        // читался НА темной поверхности (в dark+accent-green это #5fcf7a). Как заливка
+        // под белым текстом он дает 1.96:1. Под белый текст берем --unics-primary-btn.
+        background: var(--unics-primary-btn);
+        color: var(--unics-on-primary);
         border-color: var(--unics-primary-deep);
     }
 }
@@ -701,13 +711,14 @@
     }
 
     &--active {
-        background: var(--unics-primary);
-        color: #fff;
+        background: var(--unics-primary-btn);   // акцент под белым текстом дает 3.12:1, btn-вариант 4.6:1
+        color: var(--unics-on-primary);
 
         &:hover,
         &:focus {
-            background: var(--unics-primary-deep);
-            color: #fff;
+            // Тот же случай: deep - текстовый токен, под белым текстом нужен btn-вариант.
+            background: var(--unics-primary-btn);
+            color: var(--unics-on-primary);
         }
     }
 
@@ -716,8 +727,8 @@
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background: var(--unics-primary);
-        color: #fff;
+        background: var(--unics-primary-btn);   // акцент под белым текстом дает 3.12:1, btn-вариант 4.6:1
+        color: var(--unics-on-primary);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -726,7 +737,10 @@
     }
 
     &--active &__avatar {
-        background: #fff;
+        // Фон обязан быть схемо-зависимым: deep в темной схеме СВЕТЛЫЙ (он текстовый),
+        // и на жестко белом фоне давал 1.96:1. На var(--unics-surface) пара сходится
+        // в обеих схемах - светлый текст ложится на темную поверхность.
+        background: var(--unics-surface);
         color: var(--unics-primary-deep);
     }
 
@@ -766,17 +780,17 @@
 
     // Беседа класса (M1) - визуально отделяем от персональных контактов.
     &--class &__avatar {
-        background: var(--unics-primary-deep);
+        background: var(--unics-primary-btn);   // заливка аватара под белым текстом
         font-size: 1.15rem;
     }
 
     &--class.unics-contact--active &__avatar {
-        background: #fff;
+        background: var(--unics-surface);   // как и у --active выше: фон схемо-зависимый
     }
 
     // Аватар групповой беседы в заголовке переписки (вне списка контактов).
     &__avatar--group {
-        background: var(--unics-primary-deep);
+        background: var(--unics-primary-btn);   // заливка аватара под белым текстом
         font-size: 1.15rem;
     }
 }
@@ -805,8 +819,11 @@
     }
 
     &--own &__bubble {
-        background: var(--unics-primary-deep);
-        color: #fff;
+        // --unics-primary-deep - ТЕКСТОВЫЙ токен: темные схемы осветляют его, чтобы он
+        // читался НА темной поверхности (в dark+accent-green это #5fcf7a). Как заливка
+        // под белым текстом он дает 1.96:1. Под белый текст берем --unics-primary-btn.
+        background: var(--unics-primary-btn);
+        color: var(--unics-on-primary);
     }
 
     &--other &__bubble {
