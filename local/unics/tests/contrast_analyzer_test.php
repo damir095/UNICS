@@ -132,4 +132,63 @@ final class contrast_analyzer_test extends \advanced_testcase {
         $this->assertNull(contrast_analyzer::resolve('transparent', $tokens));
         $this->assertNull(contrast_analyzer::resolve('linear-gradient(135deg,#fff,#000)', $tokens));
     }
+
+    /** Полный набор поверхностей схемы - без него правило 2 не с чем сравнивать. */
+    private const SURF = ':root{--unics-bg:#f5f6f9;--unics-surface:#ffffff;--unics-header-bg:#c44a2f;'
+        . '--unics-table-head-bg:#fbe9e3;--unics-rail-item-active-bg:#fdeee9}';
+
+    public function test_rule_one_flags_pair_declared_in_same_block(): void {
+        $css = self::SURF . '.note-date{color:#90a4ae;background:#e3f2fd}';
+
+        $found = contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]);
+
+        $this->assertCount(1, $found);
+        $this->assertSame('.note-date', $found[0]['sel']);
+        $this->assertSame(1, $found[0]['rule']);
+        $this->assertEqualsWithDelta(2.27, $found[0]['ratio'], 0.01);
+    }
+
+    public function test_rule_one_passes_sufficient_pair(): void {
+        $css = self::SURF . '.ok{color:#000000;background:#ffffff}';
+
+        $this->assertSame([], contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]));
+    }
+
+    public function test_rule_two_flags_text_colour_failing_every_surface(): void {
+        // Бренд-оранжевый как цвет текста проваливается и на белом, и на фоне страницы,
+        // и на персике шапки таблиц - значит он не текст нигде. Это случай .add-section.
+        $css = self::SURF . '.add-section{color:#f26545}';
+
+        $found = contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]);
+
+        $this->assertCount(1, $found);
+        $this->assertSame(2, $found[0]['rule']);
+        $this->assertSame('.add-section', $found[0]['sel']);
+    }
+
+    public function test_rule_two_ignores_colour_passing_at_least_one_surface(): void {
+        // Токен, подобранный под фон страницы, законен - он проходит хотя бы на одной
+        // поверхности. Правило 2 намеренно НЕ ловит «применен не туда»: это работа рантайма.
+        $css = self::SURF . '.link{color:#a93d24}';
+
+        $this->assertSame([], contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]));
+    }
+
+    public function test_audit_labels_combination_readably(): void {
+        $css = ':root{--unics-bg:#ffffff;--unics-surface:#ffffff;--unics-header-bg:#ffffff;'
+             . '--unics-table-head-bg:#ffffff;--unics-rail-item-active-bg:#ffffff}'
+             . 'html.unics-a11y-dark{--unics-bg:#12151c;--unics-surface:#12151c;'
+             . '--unics-header-bg:#12151c;--unics-table-head-bg:#12151c;'
+             . '--unics-rail-item-active-bg:#12151c}'
+             . '.x{color:#7a7a7a}';
+
+        $found = contrast_analyzer::audit(
+            contrast_analyzer::declarations($css),
+            [[], ['unics-a11y-dark']]
+        );
+
+        $labels = array_column($found, 'combo');
+        $this->assertContains('light', $labels);
+        $this->assertContains('dark', $labels);
+    }
 }

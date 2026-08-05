@@ -291,4 +291,105 @@ final class contrast_analyzer {
     public static function resolve(string $value, array $tokens): ?string {
         return self::resolve_raw($value, $tokens, 0);
     }
+
+    /**
+     * Скомпилированный CSS темы unics - весь бандл, включая плагинные и ядровые правила.
+     *
+     * В Moodle 5.0 класс лежит в namespace core\output (lib/classes/output/theme_config.php),
+     * а НЕ в глобальном пространстве: обращаться только по полному имени.
+     * Метод get_css_content() аргументов не принимает - это ровно то, что
+     * theme/styles.php отдает браузеру.
+     */
+    public static function css(): string {
+        $theme = \core\output\theme_config::load('unics');
+        return $theme->get_css_content();
+    }
+
+    /** Человекочитаемая метка комбинации: light / dark+contrast+accent-blue и т.п. */
+    private static function label(array $classes): string {
+        if ($classes === []) {
+            return 'light';
+        }
+        $parts = [];
+        foreach ($classes as $c) {
+            $parts[] = str_replace('unics-a11y-', '', $c);
+        }
+        return implode('+', $parts);
+    }
+
+    /**
+     * Два правила ([[contrast-audit-design]], раздел 6).
+     *
+     * Правило 1 - пара color+background объявлена в одном блоке, контраст считается напрямую.
+     * Правило 2 - color без фона: проверяется против ВСЕХ поверхностей схемы, и дефектом
+     * считается только провал на каждой из них. Цвет, проходящий хотя бы на одной
+     * поверхности, законен - «применен не на ту поверхность» статике недоступно,
+     * это работа рантайм-проверки.
+     */
+    public static function audit(array $decls, array $combos, float $threshold = 4.5): array {
+        // Сгруппировать декларации по селектору, чтобы видеть пары.
+        $blocks = [];
+        foreach ($decls as $d) {
+            if (strncmp($d['prop'], '--', 2) === 0) {
+                continue;
+            }
+            $blocks[$d['sel']][$d['prop']] = $d['val'];
+        }
+
+        $found = [];
+        foreach ($combos as $classes) {
+            $tokens = self::tokens($decls, $classes);
+            $combo = self::label($classes);
+
+            // Поверхности этой схемы.
+            $surfaces = [];
+            foreach (array_keys(self::SURFACES) as $token) {
+                if (isset($tokens[$token])) {
+                    $surfaces[$token] = $tokens[$token];
+                }
+            }
+
+            foreach ($blocks as $sel => $props) {
+                $fgraw = $props['color'] ?? null;
+                if ($fgraw === null) {
+                    continue;
+                }
+                $fg = self::resolve($fgraw, $tokens);
+                if ($fg === null) {
+                    continue;
+                }
+                $bgraw = $props['background-color'] ?? ($props['background'] ?? null);
+                $bg = $bgraw === null ? null : self::resolve($bgraw, $tokens);
+
+                if ($bg !== null) {
+                    // Правило 1: пара объявлена рядом.
+                    $r = self::ratio($fg, $bg);
+                    if ($r < $threshold) {
+                        $found[] = ['sel' => $sel, 'combo' => $combo, 'fg' => $fg,
+                                    'bg' => $bg, 'ratio' => round($r, 2), 'rule' => 1];
+                    }
+                    continue;
+                }
+
+                // Правило 2: фона нет - проверяем против всех поверхностей схемы.
+                if ($surfaces === []) {
+                    continue;
+                }
+                $bestratio = 0.0;
+                $bestbg = '';
+                foreach ($surfaces as $sbg) {
+                    $r = self::ratio($fg, $sbg);
+                    if ($r > $bestratio) {
+                        $bestratio = $r;
+                        $bestbg = $sbg;
+                    }
+                }
+                if ($bestratio < $threshold) {
+                    $found[] = ['sel' => $sel, 'combo' => $combo, 'fg' => $fg,
+                                'bg' => $bestbg, 'ratio' => round($bestratio, 2), 'rule' => 2];
+                }
+            }
+        }
+        return $found;
+    }
 }
