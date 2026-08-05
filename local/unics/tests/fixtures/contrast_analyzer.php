@@ -322,6 +322,23 @@ final class contrast_analyzer {
      * тысячи ложных срабатываний. Полноценный каскад между разными селекторами - это
      * CSS-движок, что вне задачи. Ядровые находки остаются в отчете как справка.
      */
+    /**
+     * ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ ОБЛАСТИ (не читать зеленого стража как «тема чиста»).
+     *
+     * Признак принадлежности - подстрока `unics` в СЕЛЕКТОРЕ. Но theme_unics намеренно
+     * стилизует и ядровые селекторы: `_navbar.scss`, `_buttons.scss`, `_forms.scss`,
+     * `_cards.scss`, `_core-*.scss` красят `.navbar`, `.btn`, `.generaltable` и прочее,
+     * где слова `unics` нет. Наш дефект на таком селекторе попадает в ядровую корзину
+     * и стражем НЕ судится. Пример, найденный ревью: `.generaltable thead th a:hover` -
+     * 4.37:1 в зеленом акценте, где НАШИ обе стороны (фон из --unics-table-head-bg,
+     * цвет из accent-миксина), но `is_ours()` возвращает false.
+     *
+     * Правильное решение - определять принадлежность по ФАЙЛУ-источнику, а не по
+     * селектору. Прямой путь через маркеры партиалов НЕ РАБОТАЕТ: `theme_unics_get_extra_scss`
+     * пишет их (`lib.php:116`) обычными CSS-комментариями, а компилятор в сжатом режиме
+     * комментарии вырезает - в собранном бандле их ноль (проверено). Понадобится либо
+     * компиляция партиалов по отдельности, либо маркер, переживающий сжатие. Отдельная задача.
+     */
     public static function is_ours(string $sel): bool {
         if (stripos($sel, 'unics') !== false) {
             return true;
@@ -377,6 +394,45 @@ final class contrast_analyzer {
             $parts[] = trim(preg_replace('/^html(?:\.unics-a11y-[a-z-]+)+\s*/', '', trim($part)));
         }
         return [$required, implode(',', $parts)];
+    }
+
+    /**
+     * Фон, приходящий от ПРЕДКА селектора (правило 3).
+     *
+     * Берем первую запятую-часть селектора, отрезаем от нее хвостовые компоненты
+     * по одному и ищем блок-предок с разрешимым фоном - от самого длинного префикса
+     * к самому короткому, то есть от ближайшего предка к дальнему. Это не каскадный
+     * движок: он не знает ни специфичности между разными цепочками, ни реального DOM.
+     * Но он закрывает господствующую у нас форму дефекта - тонированная карточка плюс
+     * приглушенный текст в потомке.
+     *
+     * @param array $winners блоки, применимые в текущей комбинации, по нормализованному селектору
+     * @return string|null hex фона предка либо null, если ни у одного предка фона нет
+     */
+    private static function ancestor_background(string $sel, array $winners, array $tokens): ?string {
+        $first = trim(explode(',', $sel)[0]);
+        // Схемный префикс уже учтен в нормализации, работаем с ней же.
+        [, $normal] = self::scheme_scope($first);
+        $parts = preg_split('/\s+/', trim($normal));
+        if (!is_array($parts) || count($parts) < 2) {
+            return null;
+        }
+        for ($i = count($parts) - 1; $i >= 1; $i--) {
+            $prefix = implode(' ', array_slice($parts, 0, $i));
+            if (!isset($winners[$prefix])) {
+                continue;
+            }
+            $props = $winners[$prefix]['props'];
+            $raw = $props['background-color'] ?? ($props['background'] ?? null);
+            if ($raw === null) {
+                continue;
+            }
+            $hex = self::resolve($raw, $tokens);
+            if ($hex !== null) {
+                return $hex;
+            }
+        }
+        return null;
     }
 
     public static function audit(array $decls, array $combos, float $threshold = 4.5): array {
@@ -470,7 +526,23 @@ final class contrast_analyzer {
                     continue;
                 }
 
-                // Правило 2: фона нет - проверяем против всех поверхностей схемы.
+                // Фона в самом блоке нет. Сначала ищем его у ПРЕДКА: подавляющее
+                // большинство наших компонентов - карточка с тонированным фоном и
+                // приглушенным текстом в потомке. Без этого прохода такая пара
+                // сверяется с белым (самой щадящей из поверхностей) и молча проходит:
+                // так проскочили .note-date 4.33:1 на тинте и ховер навбара 2.16:1
+                // на всегда-темной подложке.
+                $ancestorbg = self::ancestor_background($sel, $winners, $tokens);
+                if ($ancestorbg !== null) {
+                    $r = self::ratio($fg, $ancestorbg);
+                    if ($r < $threshold) {
+                        $found[] = ['sel' => $sel, 'combo' => $combo, 'fg' => $fg,
+                                    'bg' => $ancestorbg, 'ratio' => round($r, 2), 'rule' => 3];
+                    }
+                    continue;
+                }
+
+                // Правило 2: фона нет и у предков - проверяем против поверхностей схемы.
                 if ($surfaces === []) {
                     continue;
                 }

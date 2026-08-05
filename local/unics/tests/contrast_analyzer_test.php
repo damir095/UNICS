@@ -174,6 +174,47 @@ final class contrast_analyzer_test extends \advanced_testcase {
         $this->assertSame([], contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]));
     }
 
+    public function test_rule_three_takes_background_from_ancestor_block(): void {
+        // Господствующая у нас форма дефекта: тонированная карточка задает фон, а
+        // приглушенный текст живет в потомке. Без прохода по предкам такая пара
+        // сверялась бы с белым (самой щадящей поверхностью) и молча проходила -
+        // именно так проскочил .note-date 4.33:1 на тинте --unics-info-bg.
+        $css = self::SURF
+             . '.card{background:#e8f0fa}'
+             . '.card .meta{color:#69707e}';
+
+        $found = contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]);
+
+        $this->assertCount(1, $found);
+        $this->assertSame('.card .meta', $found[0]['sel']);
+        $this->assertSame(3, $found[0]['rule'], 'фон обязан прийти от предка, а не из набора поверхностей');
+        $this->assertSame('e8f0fa', $found[0]['bg']);
+        $this->assertEqualsWithDelta(4.33, $found[0]['ratio'], 0.01);
+    }
+
+    public function test_rule_three_prefers_nearest_ancestor(): void {
+        // Два предка с фоном - победить должен БЛИЖАЙШИЙ, иначе замер уедет на
+        // случайную дальнюю поверхность.
+        $css = self::SURF
+             . '.outer{background:#ffffff}'
+             . '.outer .inner{background:#1a1d24}'
+             . '.outer .inner .label{color:#2b2f38}';
+
+        $found = contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]);
+
+        $this->assertCount(1, $found);
+        $this->assertSame('1a1d24', $found[0]['bg'], 'взят должен быть ближайший предок, а не .outer');
+    }
+
+    public function test_rule_three_yields_to_own_background(): void {
+        // Если фон объявлен в самом блоке, предок не должен его перебивать.
+        $css = self::SURF
+             . '.card{background:#000000}'
+             . '.card .chip{color:#69707e;background:#ffffff}';
+
+        $this->assertSame([], contrast_analyzer::audit(contrast_analyzer::declarations($css), [[]]));
+    }
+
     public function test_audit_labels_combination_readably(): void {
         $css = ':root{--unics-bg:#ffffff;--unics-surface:#ffffff;--unics-header-bg:#ffffff;'
              . '--unics-table-head-bg:#ffffff;--unics-rail-item-active-bg:#ffffff}'

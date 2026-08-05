@@ -1001,7 +1001,10 @@
 
     .note-date {
         font-size: 0.75rem;
-        color: var(--unics-text-muted);
+        // НЕ --unics-text-muted: он подобран под белую и страничную поверхность и на
+        // тинте --unics-info-bg дает 4.33:1 - провал AA. --unics-neutral дает 6.93:1,
+        // а в темной схеме он и так сведен к тому же значению, что text-muted.
+        color: var(--unics-neutral);
     }
 
     .note-body {

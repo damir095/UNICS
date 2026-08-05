@@ -174,7 +174,7 @@
     --unics-notif-unread-bg:         var(--unics-info-bg);     // #e8f0fa - подсветка непрочитанного
     --unics-notif-unread-dot:        var(--unics-primary);     // точка-маркер непрочитанного (в паре с весом/текстом)
     --unics-notif-badge-bg:          var(--unics-error);       // бейдж-счётчик на колоколе (белый текст = AA)
-    --unics-notif-meta:              var(--unics-text-muted);  // время/мета
+    --unics-notif-meta:              var(--unics-neutral);     // время/мета. НЕ text-muted: мета непрочитанного лежит на тинте --unics-notif-unread-bg (= --unics-info-bg), где text-muted дает 4.33:1 - провал AA. neutral дает 6.93:1, в темной схеме оба сведены к одному значению
     --unics-notif-divider:           var(--unics-border);      // разделители (по датам)
     --unics-notif-z:                 1040;     // панель над рельсом
 
