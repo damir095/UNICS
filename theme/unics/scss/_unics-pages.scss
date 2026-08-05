@@ -62,7 +62,10 @@
     font-weight: 500;
 
     &--ok       { background: var(--unics-success-bg); color: var(--unics-success); }
-    &--warning  { background: var(--unics-warning-bg); color: var(--unics-warning); }
+    // --unics-warning на --unics-warning-bg дает лишь 4.28:1 - провал AA для некрупного
+    // текста бейджа. Берем более темный янтарный, заведенный ровно под эту пару
+    // (см. комментарий у --unics-cchip-todo-tx в _variables.scss): 4.97:1.
+    &--warning  { background: var(--unics-warning-bg); color: var(--unics-cchip-todo-tx); }
     &--error    { background: var(--unics-error-bg);   color: var(--unics-error); }
     &--info     { background: var(--unics-info-bg);    color: var(--unics-info); }
     &--neutral  { background: var(--unics-neutral-bg); color: var(--unics-neutral); }
@@ -502,7 +505,7 @@
         gap: var(--unics-space-2);
         padding: var(--unics-space-2) var(--unics-space-3);
         border-bottom: 1px solid var(--unics-border);
-        background: var(--unics-bg, #f7f4f2);
+        background: var(--unics-bg);
     }
 
     &__thread-title {
@@ -516,7 +519,7 @@
     &__thread-sub {
         font-weight: 400;
         font-size: 0.9rem;
-        color: var(--unics-muted, #6c757d);
+        color: var(--unics-text-muted);
     }
 
     &__thread {
@@ -532,7 +535,7 @@
         margin: auto;
         text-align: center;
         padding: var(--unics-space-4);
-        color: var(--unics-muted, #6c757d);
+        color: var(--unics-text-muted);
     }
 
     &__composer {
@@ -589,7 +592,7 @@
         justify-content: center;
         text-align: center;
         padding: var(--unics-space-4);
-        color: var(--unics-muted, #6c757d);
+        color: var(--unics-text-muted);
     }
 
     &__group-title {
@@ -597,7 +600,7 @@
         font-size: 0.95rem;
         color: var(--unics-primary-text);
         padding: var(--unics-space-2) var(--unics-space-3);
-        background: var(--unics-bg, #f7f4f2);
+        background: var(--unics-bg);
         border-bottom: 1px solid var(--unics-border);
         position: sticky;
         top: 0;
@@ -610,7 +613,7 @@
         flex: 0 0 auto;
         border: 0;
         border-bottom: 1px solid var(--unics-border);
-        background: var(--unics-bg, #f7f4f2);
+        background: var(--unics-bg);
         color: var(--unics-primary-text);
         padding: var(--unics-space-2);
         font-size: 0.95rem;
@@ -635,9 +638,9 @@
             display: inline-block;
             padding: 0 var(--unics-space-3);
             border-radius: var(--unics-radius-pill);
-            background: var(--unics-bg, #f7f4f2);
+            background: var(--unics-bg);
             border: 1px solid var(--unics-border);
-            color: var(--unics-muted, #6c757d);
+            color: var(--unics-text-muted);
             font-size: 0.8rem;
             line-height: 1.6;
         }
@@ -693,7 +696,7 @@
 
     &:hover,
     &:focus {
-        background: var(--unics-bg, #f7f4f2);
+        background: var(--unics-bg);
         text-decoration: none;
     }
 
@@ -807,7 +810,7 @@
     }
 
     &--other &__bubble {
-        background: var(--unics-bg, #f7f4f2);
+        background: var(--unics-bg);
         border: 1px solid var(--unics-border);
     }
 
