@@ -56,4 +56,23 @@ final class contrast_analyzer_test extends \advanced_testcase {
             $combos
         );
     }
+
+    public function test_declarations_handles_semicolons_inside_urls(): void {
+        // Парсер должен учитывать скобки: url(...) может содержать точку с запятой.
+        // Это типичный случай для скомпилированного CSS: data-URI с base64 в Bootstrap.
+        $css = '.icon{background:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iAA==);color:red}';
+        $decls = contrast_analyzer::declarations($css);
+
+        $this->assertCount(2, $decls);
+        // Фон должен прийти целым, с полным data-URI.
+        $this->assertSame('.icon', $decls[0]['sel']);
+        $this->assertSame('background', $decls[0]['prop']);
+        $this->assertSame('url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iAA==)', $decls[0]['val']);
+        $this->assertSame(0, $decls[0]['ord']);
+        // Цвет - второй.
+        $this->assertSame('.icon', $decls[1]['sel']);
+        $this->assertSame('color', $decls[1]['prop']);
+        $this->assertSame('red', $decls[1]['val']);
+        $this->assertSame(1, $decls[1]['ord']);
+    }
 }

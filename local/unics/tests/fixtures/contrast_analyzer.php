@@ -30,16 +30,18 @@ final class contrast_analyzer {
         $css = preg_replace('!/\*.*?\*/!s', '', $css);
         $out = [];
         $ord = 0;
-        // Селектор + тело блока. Вложенные @media дают селектор с префиксом - нам
-        // достаточно самого селектора, медиазапросы контраст не меняют.
+        // Селектор + тело блока. Вложенные @-правила (@media, @supports, @keyframes)
+        // игнорируются: их оболочка удаляется и вложенные правила добавляются на
+        // верхний уровень как независимые блоки.
         if (preg_match_all('/([^{}]+)\{([^{}]*)\}/s', $css, $blocks, PREG_SET_ORDER)) {
             foreach ($blocks as $b) {
                 $sel = trim($b[1]);
                 if ($sel === '' || $sel[0] === '@') {
                     continue;
                 }
-                foreach (explode(';', $b[2]) as $d) {
-                    $pos = strpos($d, ':');
+                $declarations = self::split_declarations($b[2]);
+                foreach ($declarations as $d) {
+                    $pos = self::find_colon_outside_context($d);
                     if ($pos === false) {
                         continue;
                     }
@@ -53,6 +55,98 @@ final class contrast_analyzer {
             }
         }
         return $out;
+    }
+
+    /**
+     * Разбивает тело блока на отдельные декларации, учитывая парные скобки и кавычки.
+     * Точка с запятой внутри url(...) или кавычек не считается границей.
+     */
+    private static function split_declarations(string $body): array {
+        $out = [];
+        $current = '';
+        $paren_depth = 0;
+        $quote_char = null;
+        $i = 0;
+        $len = strlen($body);
+
+        while ($i < $len) {
+            $ch = $body[$i];
+
+            // Обработка кавычек.
+            if (($ch === '"' || $ch === "'") && ($i === 0 || $body[$i - 1] !== '\\')) {
+                if ($quote_char === $ch) {
+                    $quote_char = null;
+                } elseif ($quote_char === null) {
+                    $quote_char = $ch;
+                }
+            }
+
+            // Обработка скобок (только вне кавычек).
+            if ($quote_char === null) {
+                if ($ch === '(') {
+                    $paren_depth++;
+                } elseif ($ch === ')') {
+                    $paren_depth--;
+                }
+            }
+
+            // Проверка границы декларации (вне скобок и кавычек).
+            if ($ch === ';' && $paren_depth === 0 && $quote_char === null) {
+                if ($current !== '') {
+                    $out[] = $current;
+                    $current = '';
+                }
+            } else {
+                $current .= $ch;
+            }
+
+            $i++;
+        }
+
+        if ($current !== '') {
+            $out[] = $current;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Находит первый символ ':' снаружи парных скобок и кавычек.
+     * Возвращает позицию или false если не найден.
+     */
+    private static function find_colon_outside_context(string $str): int|false {
+        $paren_depth = 0;
+        $quote_char = null;
+        $len = strlen($str);
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $str[$i];
+
+            // Обработка кавычек.
+            if (($ch === '"' || $ch === "'") && ($i === 0 || $str[$i - 1] !== '\\')) {
+                if ($quote_char === $ch) {
+                    $quote_char = null;
+                } elseif ($quote_char === null) {
+                    $quote_char = $ch;
+                }
+            }
+
+            // Обработка скобок (только вне кавычек).
+            if ($quote_char === null) {
+                if ($ch === '(') {
+                    $paren_depth++;
+                } elseif ($ch === ')') {
+                    $paren_depth--;
+                }
+            }
+
+            // Если нашли ':' вне контекста - вернуть позицию.
+            if ($ch === ':' && $paren_depth === 0 && $quote_char === null) {
+                return $i;
+            }
+        }
+
+        return false;
     }
 
     /** 16 комбинаций: theme(2) x contrast(2) x accent(4). См. accessibility.php:23-26. */
