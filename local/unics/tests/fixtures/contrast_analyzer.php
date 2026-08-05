@@ -305,6 +305,35 @@ final class contrast_analyzer {
         return $theme->get_css_content();
     }
 
+    /**
+     * Ядровые селекторы, цвет которых подставляем МЫ (через theme_unics_get_pre_scss),
+     * и потому по решению 3 спеки считаются нашими.
+     *
+     * `.btn.add-section` объявлен в boost/scss/moodle/course.scss как `color: $primary`,
+     * а `$primary` = #F26545 приходит из нашего get_pre_scss.
+     */
+    public const CORE_OWNED = ['.btn.add-section'];
+
+    /**
+     * Наш ли селектор. Нужен, чтобы отделить дефекты, за которые мы отвечаем, от
+     * ядровых: бандл содержит правила Moodle, написанные под светлую схему, а наши
+     * темные переопределения живут на ДРУГИХ селекторах (html.unics-a11y-dark a:not(.btn)),
+     * поэтому слияние по имени селектора ядровую пару «починенной» не видит и дает
+     * тысячи ложных срабатываний. Полноценный каскад между разными селекторами - это
+     * CSS-движок, что вне задачи. Ядровые находки остаются в отчете как справка.
+     */
+    public static function is_ours(string $sel): bool {
+        if (stripos($sel, 'unics') !== false) {
+            return true;
+        }
+        foreach (self::CORE_OWNED as $core) {
+            if (strpos($sel, $core) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Человекочитаемая метка комбинации: light / dark+contrast+accent-blue и т.п. */
     private static function label(array $classes): string {
         if ($classes === []) {
@@ -326,6 +355,30 @@ final class contrast_analyzer {
      * поверхности, законен - «применен не на ту поверхность» статике недоступно,
      * это работа рантайм-проверки.
      */
+    /**
+     * Классы схемы, которых селектор ТРЕБУЕТ, и селектор без них.
+     *
+     * `html.unics-a11y-dark .unics-teacher-note` требует [dark] и нормализуется в
+     * `.unics-teacher-note`. Нормализованная форма нужна, чтобы в темной комбинации
+     * темный вариант правила перекрыл базовый: это разные строки селектора, и слияние
+     * по имени их не объединяет.
+     *
+     * @return array{0: string[], 1: string} [требуемые классы, нормализованный селектор]
+     */
+    private static function scheme_scope(string $sel): array {
+        $required = [];
+        if (preg_match_all('/\.(unics-a11y-[a-z-]+)/', $sel, $m)) {
+            $required = array_values(array_unique($m[1]));
+        }
+        // Убрать префикс схемы: `html.unics-a11y-dark.unics-a11y-contrast ` в начале
+        // каждой запятой-части. Остаток и есть то, что правило красит.
+        $parts = [];
+        foreach (explode(',', $sel) as $part) {
+            $parts[] = trim(preg_replace('/^html(?:\.unics-a11y-[a-z-]+)+\s*/', '', trim($part)));
+        }
+        return [$required, implode(',', $parts)];
+    }
+
     public static function audit(array $decls, array $combos, float $threshold = 4.5): array {
         // Сгруппировать декларации по селектору, чтобы видеть пары.
         $blocks = [];
@@ -334,6 +387,14 @@ final class contrast_analyzer {
                 continue;
             }
             $blocks[$d['sel']][$d['prop']] = $d['val'];
+        }
+
+        // Разметить каждый блок его схемным скоупом один раз, а не на каждой комбинации.
+        $scoped = [];
+        foreach ($blocks as $sel => $props) {
+            [$required, $normal] = self::scheme_scope($sel);
+            $scoped[] = ['sel' => $sel, 'props' => $props,
+                         'required' => $required, 'normal' => $normal];
         }
 
         $found = [];
@@ -349,7 +410,32 @@ final class contrast_analyzer {
                 }
             }
 
-            foreach ($blocks as $sel => $props) {
+            // Отобрать блоки, применимые в ЭТОЙ комбинации, и для каждой нормализованной
+            // формы оставить самый квалифицированный вариант: правило под темную схему
+            // должно перекрывать базовое, иначе базовые светлые цвета меряются на темном фоне.
+            $winners = [];
+            foreach ($scoped as $b) {
+                $applies = true;
+                foreach ($b['required'] as $c) {
+                    if (!in_array($c, $classes, true)) {
+                        $applies = false;
+                        break;
+                    }
+                }
+                if (!$applies) {
+                    continue;
+                }
+                $key = $b['normal'];
+                $prev = $winners[$key] ?? null;
+                if ($prev === null || count($b['required']) >= count($prev['required'])) {
+                    // При равной квалификации выигрывает поздний - как в каскаде.
+                    $winners[$key] = $b;
+                }
+            }
+
+            foreach ($winners as $b) {
+                $sel = $b['sel'];
+                $props = $b['props'];
                 $fgraw = $props['color'] ?? null;
                 if ($fgraw === null) {
                     continue;
