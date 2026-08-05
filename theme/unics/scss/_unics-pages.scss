@@ -945,3 +945,112 @@
         color: var(--unics-text-muted);
     }
 }
+
+// -----------------------------------------------------------------------------
+// Компоненты, переехавшие из local/unics/styles.css ([[contrast-audit-design]], M3).
+//
+// Тот файл жил ВНЕ SCSS-пайплайна и потому не знал ни одной из 16 комбинаций схем:
+// 39 хардкодов на все 48 страниц плагина. Сюда переехали только те компоненты, которых
+// у темы не было; остальные (.unics-welcome, .unics-stat-card, .unics-section-title,
+// .unics-lvl, .unics-action-grid) тема уже определяла, и их дубли просто удалены.
+//
+// Все цвета - на СУЩЕСТВУЮЩИХ токенах: они уже доопределены в _accessibility.scss,
+// поэтому компоненты получают все схемы даром, без новых переменных.
+// -----------------------------------------------------------------------------
+
+// Заметка педагога. Замеры до переезда: .note-date 2.59:1, .note-author 2.28:1,
+// .note-body 1.28:1 в темной схеме (жестко заданный #263238 на темном фоне).
+.unics-teacher-note {
+    background: var(--unics-info-bg);
+    border-left: 4px solid var(--unics-info);
+    border-radius: var(--unics-radius);
+    padding: var(--unics-space-2) var(--unics-space-3);
+    font-size: 0.875rem;
+
+    .note-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: var(--unics-space-1);
+    }
+
+    .note-author {
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--unics-info);
+    }
+
+    .note-date {
+        font-size: 0.75rem;
+        color: var(--unics-text-muted);
+    }
+
+    .note-body {
+        white-space: pre-wrap;
+        margin: 0;
+        color: var(--unics-text);
+    }
+}
+
+// Строка заметки под строкой теста в таблице - та же подложка, что у блока заметки.
+tr.unics-note-row td {
+    background: var(--unics-info-bg);
+    padding: var(--unics-space-1) var(--unics-space-2) var(--unics-space-2) var(--unics-space-7);
+    border-top: none !important;
+}
+
+// Карточка значка достижения. Замер до переезда: неполученный .badge-name 2.68:1
+// (#9e9e9e на белом). Полученный использует warning-пару - она доопределена в темной.
+.unics-badge-card {
+    border-radius: var(--unics-radius-lg);
+    border: 2px solid var(--unics-border) !important;
+    transition: border-color var(--unics-duration-fast), background var(--unics-duration-fast);
+    text-align: center;
+
+    &.earned {
+        border-color: var(--unics-warning) !important;
+        background: var(--unics-warning-bg);
+    }
+
+    .badge-icon {
+        font-size: 2.4rem;
+        line-height: 1.3;
+        display: block;
+    }
+
+    .badge-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        margin-top: var(--unics-space-1);
+    }
+
+    &:not(.earned) {
+        .badge-icon {
+            opacity: 0.25;
+            filter: grayscale(1);
+        }
+
+        .badge-name {
+            color: var(--unics-text-muted);
+        }
+    }
+}
+
+// Прогресс-бар уровня.
+.unics-level-bar .progress {
+    height: var(--unics-space-2);
+    border-radius: var(--unics-radius-pill);
+}
+
+// Карточка комментария.
+.unics-comment-card {
+    border: none !important;
+    border-left: 3px solid var(--unics-border) !important;
+    border-radius: var(--unics-radius) !important;
+    box-shadow: var(--unics-shadow-sm);
+
+    .card-header {
+        background: transparent;
+        border-bottom: 1px solid var(--unics-border);
+        font-size: 0.85rem;
+    }
+}
