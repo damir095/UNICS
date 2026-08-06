@@ -74,6 +74,11 @@ class ai_generator {
         $class_letter  = trim((string)($profile['class_letter'] ?? ''));
         $special_needs = trim((string)($profile['special_needs'] ?? ''));
 
+        // Полоса балла. Точное число печатать нельзя: оно уходит в промт и в отпечаток
+        // профиля, и совпадение до процента развалило бы схлопывание одинаковых профилей
+        // ([[umk-per-student-design]], раздел 5). Границы - те же, что у adapt_level().
+        $avg_band = $avg_score < 50 ? 'менее 50%' : ($avg_score > 85 ? 'более 85%' : '50-85%');
+
         // Множественные категории / виды ОВЗ. Fallback на одиночные поля для бэк-компата.
         $category_ids = $profile['categories'] ?? null;
         if (!is_array($category_ids) || empty($category_ids)) {
@@ -139,9 +144,9 @@ class ai_generator {
 
         $level_change_reason = null;
         if ($eff_level < $base_level) {
-            $level_change_reason = "Уровень автоматически снижен (средний балл {$avg_score}% < 50%) - материал должен быть проще базового.";
+            $level_change_reason = "Уровень автоматически снижен (средний балл {$avg_band}) - материал должен быть проще базового.";
         } elseif ($eff_level > $base_level) {
-            $level_change_reason = "Уровень автоматически повышен (средний балл {$avg_score}% > 85%) - материал должен быть сложнее стандартного.";
+            $level_change_reason = "Уровень автоматически повышен (средний балл {$avg_band}) - материал должен быть сложнее стандартного.";
         }
         if ($level_change_reason !== null) {
             $special_parts[] = $level_change_reason;
@@ -153,6 +158,7 @@ class ai_generator {
             'level_label'         => $level_label,
             'level_change_reason' => $level_change_reason,
             'avg_score'           => $avg_score,
+            'avg_band'            => $avg_band,
             'class_str'           => $class_str,
             'category_ids'        => array_values(array_map('intval', $category_ids)),
             'category_label'      => $category_label,
@@ -187,7 +193,7 @@ class ai_generator {
 Профиль учащегося:
 - Категория: {$c['category_label']}
 - Уровень подготовки: {$c['level_label']}
-- Средний балл за последние 5 тестов: {$c['avg_score']}%
+- Средний балл за последние 5 тестов: {$c['avg_band']}
 {$special_block}{$extra_block}
 Требования:
 - Объём: {$c['word_count']} слов
