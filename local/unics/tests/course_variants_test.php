@@ -281,13 +281,14 @@ final class course_variants_test extends \advanced_testcase {
 
     /**
      * I3: персональная УМК-группа адресной выдачи ученику
-     * (\local_unics\ai\course_builder::restrict_activity_to_student_group()) заводится с idnumber
-     * umk_s{uid}_c{courseid} и ИМЕНЕМ "УМК: <ФИО ученика>". Если бы такая группа участвовала в
-     * пометке как обычная, who_label() отрисовал бы "для группы УМК: Иванов Иван · 1 ученик" прямо
-     * на странице курса - раскрытие ФИО ребенка педагогам без права это видеть. Пропускаем ее
-     * полностью, как удаленную группу: ни пометки, ни вердикта, ни вклада в аудиторию.
+     * (\local_unics\ai\course_builder::get_or_create_student_group()) заводится с idnumber
+     * umk_s{uid}_c{courseid} и ИМЕНЕМ "УМК: <ФИО ученика>".
+     *
+     * Контракт сменился в A2 ([[umk-per-student-design]], раздел 9): раньше такая группа
+     * выбрасывалась из пометок целиком, и активность индивидуального УМК читалась педагогом
+     * как «для всех» - ложь на странице. Теперь пометка есть, но имя ребенка в нее не попадает.
      */
-    public function test_personal_umk_group_gives_no_entry(): void {
+    public function test_personal_umk_group_labelled_without_name(): void {
         $this->resetAfterTest();
         [$course, $s1, , $t] = $this->make_course();
         $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
@@ -301,8 +302,9 @@ final class course_variants_test extends \advanced_testcase {
 
         $p = course_variants::build($course, $t->id);
 
-        $this->assertArrayNotHasKey((string)$page->cmid, $p['variants']);
-        $this->assertNull($p['orphans']);
+        $label = $p['variants'][(string)$page->cmid]['label'];
+        $this->assertStringContainsString('для отдельного ученика', $label);
+        $this->assertStringNotContainsString('Иванов', $label);
     }
 
     /**

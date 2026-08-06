@@ -122,9 +122,8 @@ class course_variants {
 
     /**
      * Id групп из ограничений доступа активности, в порядке условий. Ограничение на удаленную
-     * группу пропускаем: показывать «для группы <нет такой>» бессмысленно. Персональную УМК-группу
-     * выдачи (idnumber umk_s{uid}_c{courseid}, имя = ФИО ученика) пропускаем по той же причине, что
-     * и удаленную - {@see self::is_personal_umk_group()}.
+     * группу пропускаем: показывать «для группы <нет такой>» бессмысленно. Персональная УМК-группа
+     * участвует в пометке, но имя ученика в нее не попадает - {@see self::who_label()}.
      * @param array<int,\stdClass> $groups известные группы курса
      * @return int[]
      */
@@ -137,7 +136,7 @@ class course_variants {
                 continue;
             }
             $gid = (int)$cond['id'];
-            if (!isset($groups[$gid]) || self::is_personal_umk_group($groups[$gid])) {
+            if (!isset($groups[$gid])) {
                 continue;
             }
             if (!in_array($gid, $out, true)) {
@@ -149,10 +148,11 @@ class course_variants {
 
     /**
      * Персональная УМК-группа адресной выдачи ученику
-     * {@see \local_unics\ai\course_builder::restrict_activity_to_student_group()}: idnumber вида
+     * {@see \local_unics\ai\course_builder::get_or_create_student_group()}: idnumber вида
      * umk_s{uid}_c{courseid}, а ИМЯ группы - «УМК: <ФИО ученика>». В отличие от уровневой группы,
-     * эта не про уровень, а про одного конкретного ребенка - показ ее на странице курса раскрыл бы
-     * его ФИО педагогам без права на это. Спека прямо запрещает раскрытие имени ученика здесь.
+     * эта не про уровень, а про одного конкретного ребенка. Запрет касается ИМЕНИ, а не самой
+     * пометки: активность с индивидуальным УМК без пометки читалась бы как «для всех»
+     * ([[umk-per-student-design]], раздел 9), поэтому пометка выводится с нейтральной подписью.
      */
     private static function is_personal_umk_group(\stdClass $group): bool {
         return (bool)preg_match('/^umk_s\d+_c\d+$/', (string)$group->idnumber);
@@ -160,6 +160,10 @@ class course_variants {
 
     /** «Стандартный» для уровневой группы, «для группы 7А класс» - для обычной. */
     private static function who_label(\stdClass $group): string {
+        // Персональная группа несет ФИО в имени - показываем нейтральную подпись.
+        if (self::is_personal_umk_group($group)) {
+            return get_string('variant_personal', 'local_unics');
+        }
         $level = self::level_from_idnumber((string)$group->idnumber);
         if ($level === null) {
             // escape=>false: значение уходит в payload и вставляется AMD через textContent, а не

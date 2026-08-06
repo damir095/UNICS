@@ -277,6 +277,7 @@ $string['level_name_2'] = 'Стандартный';
 $string['level_name_3'] = 'Продвинутый';
 $string['level_name_other'] = 'Уровень {$a}';
 $string['variant_group'] = 'для группы {$a}';
+$string['variant_personal'] = 'для отдельного ученика';
 $string['variant_audience_one'] = '{$a} ученик';
 $string['variant_audience_few'] = '{$a} ученика';
 $string['variant_audience_many'] = '{$a} учеников';
