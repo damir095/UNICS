@@ -85,4 +85,47 @@ final class output_style_test extends \advanced_testcase {
         $this->assertSame('Что такое вулкан - кратко?', $parsed['questions'][0]['text']);
         $this->assertSame(0, $parsed['questions'][0]['correct']);
     }
+
+    /**
+     * Заголовки - не косметика. course_builder::add_text_page() пишет contentformat =
+     * FORMAT_MARKDOWN, то есть markdown РЕНДЕРИТСЯ: «#» от модели стал <h1> внутри страницы
+     * курса, где заголовок уже есть. На иерархию заголовков опираются программы экранного
+     * доступа, а слабовидящие - целевая аудитория проекта.
+     */
+    public function test_headings_shift_down_so_minimum_becomes_h4(): void {
+        $out = output_style::shift_headings("# Урок\n\n## Введение\n\nтекст\n\n### Итог\n");
+
+        $this->assertStringContainsString("#### Урок", $out);
+        $this->assertStringContainsString("##### Введение", $out);
+        $this->assertStringContainsString("###### Итог", $out);
+        $this->assertStringNotContainsString("\n# ", "\n" . $out);
+    }
+
+    /** Сдвиг работает и вверх: опускать некуда, надо поднимать. */
+    public function test_headings_shift_up_when_model_went_too_deep(): void {
+        $out = output_style::shift_headings("##### Раздел\n\n###### Подраздел\n");
+
+        $this->assertStringContainsString("#### Раздел", $out);
+        $this->assertStringContainsString("##### Подраздел", $out);
+    }
+
+    /** Глубже шестого уровня markdown не идет - лишнее упирается в потолок. */
+    public function test_headings_deeper_than_six_are_capped(): void {
+        $out = output_style::shift_headings("# А\n\n#### Б\n");
+
+        $this->assertStringContainsString("#### А", $out);
+        $this->assertStringContainsString("###### Б", $out);
+    }
+
+    public function test_text_without_headings_is_untouched(): void {
+        $src = "Просто абзац.\n\nИ еще один: 5 # 3 не заголовок.\n";
+
+        $this->assertSame($src, output_style::shift_headings($src));
+    }
+
+    public function test_headings_already_at_h4_are_untouched(): void {
+        $src = "#### Раздел\n\n##### Подраздел\n";
+
+        $this->assertSame($src, output_style::shift_headings($src));
+    }
 }

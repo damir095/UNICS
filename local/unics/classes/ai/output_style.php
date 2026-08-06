@@ -39,4 +39,32 @@ class output_style {
 
         return trim($text);
     }
+
+    /**
+     * Сдвинуть уровни заголовков так, чтобы минимальный стал «####».
+     *
+     * Именно сдвиг, а не выравнивание всех заголовков в один уровень: относительная структура
+     * разделов сохраняется, иначе программа экранного доступа потеряет вложенность вместо того,
+     * чтобы ее обрести.
+     */
+    public static function shift_headings(string $text): string {
+        if (!preg_match_all('/^(#{1,6})\h+/mu', $text, $matches)) {
+            return $text;
+        }
+
+        $min = 6;
+        foreach ($matches[1] as $hashes) {
+            $min = min($min, strlen($hashes));
+        }
+        $delta = 4 - $min;
+        if ($delta === 0) {
+            return $text;
+        }
+
+        return preg_replace_callback('/^(#{1,6})(\h+)/mu',
+            static function (array $m) use ($delta): string {
+                $level = min(6, max(1, strlen($m[1]) + $delta));
+                return str_repeat('#', $level) . $m[2];
+            }, $text) ?? $text;
+    }
 }
