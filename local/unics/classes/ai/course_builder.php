@@ -602,22 +602,7 @@ HTML;
         require_once($CFG->dirroot . '/group/lib.php');
 
         // Один постоянный idnumber на пару (курс, студент), чтобы не плодить группы
-        $idnumber = 'umk_s' . $mdl_user_id . '_c' . $course_id;
-
-        $group = $DB->get_record('groups', ['courseid' => $course_id, 'idnumber' => $idnumber]);
-        if (!$group) {
-            $user = $DB->get_record('user', ['id' => $mdl_user_id]);
-            $data             = new \stdClass();
-            $data->courseid   = $course_id;
-            $data->name       = 'УМК: ' . fullname($user);
-            $data->idnumber   = $idnumber;
-            $data->id = groups_create_group($data);
-            $group = $DB->get_record('groups', ['id' => $data->id]);
-        }
-
-        if (!groups_is_member($group->id, $mdl_user_id)) {
-            groups_add_member($group->id, $mdl_user_id);
-        }
+        $group_id = $this->get_or_create_student_group($course_id, $mdl_user_id);
 
         $section = $DB->get_record('course_sections', ['course' => $course_id, 'section' => $section_num]);
         if (!$section) {
@@ -626,7 +611,7 @@ HTML;
 
         $DB->set_field('course_sections', 'availability', json_encode([
             'op'    => '&',
-            'c'     => [['type' => 'group', 'id' => (int)$group->id]],
+            'c'     => [['type' => 'group', 'id' => $group_id]],
             'showc' => [false],
         ]), ['id' => $section->id]);
 
@@ -702,6 +687,67 @@ HTML;
     }
 
     /**
+     * Группа доступа для комплекта, собранного по отпечатку профиля
+     * ([[umk-per-student-design]], раздел 7).
+     *
+     * В отличие от уровневой группы, в idnumber НЕТ хеша темы: один и тот же набор учеников
+     * должен получать ту же группу во всех темах курса, иначе групп станет темы x варианты.
+     *
+     * Имя нейтральное («Вариант N») намеренно: имя группы видно на странице курса, и ни ФИО
+     * ребенка, ни его диагноз туда попадать не должны. Идентичность группы несет idnumber,
+     * поэтому повтор номера после ручного удаления группы безвреден.
+     */
+    public function get_or_create_profile_group(int $course_id, string $profile_key): int {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/group/lib.php');
+
+        $idnumber = 'umk_fp' . substr($profile_key, 0, 8) . '_c' . $course_id;
+        $group = $DB->get_record('groups', ['courseid' => $course_id, 'idnumber' => $idnumber]);
+        if ($group) {
+            return (int)$group->id;
+        }
+
+        $n = 1;
+        foreach ($DB->get_records('groups', ['courseid' => $course_id], '', 'id, idnumber') as $g) {
+            if (preg_match('/^umk_fp[0-9a-f]+_c\d+$/', (string)$g->idnumber)) {
+                $n++;
+            }
+        }
+
+        $data           = new \stdClass();
+        $data->courseid = $course_id;
+        $data->name     = 'Вариант ' . $n;
+        $data->idnumber = $idnumber;
+        return (int)groups_create_group($data);
+    }
+
+    /**
+     * Персональная группа выдачи «один курс - один ученик». Ученик сразу становится членом.
+     * Имя несет ФИО, поэтому на странице курса оно не показывается
+     * {@see \local_unics\output\course_variants::is_personal_umk_group()}.
+     */
+    public function get_or_create_student_group(int $course_id, int $mdl_user_id): int {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/group/lib.php');
+
+        $idnumber = 'umk_s' . $mdl_user_id . '_c' . $course_id;
+        $group = $DB->get_record('groups', ['courseid' => $course_id, 'idnumber' => $idnumber]);
+        if (!$group) {
+            $user             = $DB->get_record('user', ['id' => $mdl_user_id]);
+            $data             = new \stdClass();
+            $data->courseid   = $course_id;
+            $data->name       = 'УМК: ' . fullname($user);
+            $data->idnumber   = $idnumber;
+            $data->id         = groups_create_group($data);
+            $group            = $DB->get_record('groups', ['id' => $data->id]);
+        }
+        if (!groups_is_member($group->id, $mdl_user_id)) {
+            groups_add_member($group->id, $mdl_user_id);
+        }
+        return (int)$group->id;
+    }
+
+    /**
      * Ограничить активность группой (group_id уже создан вызывающим кодом).
      */
     public function restrict_activity_to_group(int $cmid, int $group_id): void {
@@ -722,26 +768,11 @@ HTML;
         global $DB, $CFG;
         require_once($CFG->dirroot . '/group/lib.php');
 
-        $idnumber = 'umk_s' . $mdl_user_id . '_c' . $course_id;
-
-        $group = $DB->get_record('groups', ['courseid' => $course_id, 'idnumber' => $idnumber]);
-        if (!$group) {
-            $user             = $DB->get_record('user', ['id' => $mdl_user_id]);
-            $data             = new \stdClass();
-            $data->courseid   = $course_id;
-            $data->name       = 'УМК: ' . fullname($user);
-            $data->idnumber   = $idnumber;
-            $data->id = groups_create_group($data);
-            $group = $DB->get_record('groups', ['id' => $data->id]);
-        }
-
-        if (!groups_is_member($group->id, $mdl_user_id)) {
-            groups_add_member($group->id, $mdl_user_id);
-        }
+        $group_id = $this->get_or_create_student_group($course_id, $mdl_user_id);
 
         $DB->set_field('course_modules', 'availability', json_encode([
             'op'    => '&',
-            'c'     => [['type' => 'group', 'id' => (int)$group->id]],
+            'c'     => [['type' => 'group', 'id' => $group_id]],
             'showc' => [false],
         ]), ['id' => $cmid]);
     }
