@@ -173,13 +173,33 @@ class ai_generator {
     // Формирование промпта на основе полного профиля учащегося.
     // Строка ЗАМОРОЖЕНА (golden-тест) - вычисления в build_criteria.
     // ----------------------------------------------------------------
-    public function build_prompt(array $profile, string $topic, string $extra_context = ''): string {
-        $c = $this->build_criteria($profile);
-
-        $special_block = '';
-        if (!empty($c['special_parts'])) {
-            $special_block = "\nОсобые указания:\n- " . implode("\n- ", $c['special_parts']) . "\n";
+    /**
+     * Блок промта про самого ребенка: профиль плюс особые указания
+     * ([[adaptation-full-kit-design]]).
+     *
+     * Вынесен из build_prompt(), чтобы тест, задание и видеосценарий адаптировались по тому же
+     * профилю, что и учебный текст. До этого они читали из профиля два поля - класс и сырой
+     * difficulty_level, - и ребенок с ЗПР получал адаптированный текст и неадаптированную
+     * проверку знаний по нему же.
+     *
+     * @param array $criteria результат build_criteria()
+     */
+    public function adaptation_block(array $criteria): string {
+        $special = '';
+        if (!empty($criteria['special_parts'])) {
+            $special = "\nОсобые указания:\n- " . implode("\n- ", $criteria['special_parts']) . "\n";
         }
+
+        return "Профиль учащегося:\n"
+             . "- Категория: {$criteria['category_label']}\n"
+             . "- Уровень подготовки: {$criteria['level_label']}\n"
+             . "- Средний балл за последние 5 тестов: {$criteria['avg_band']}\n"
+             . $special;
+    }
+
+    public function build_prompt(array $profile, string $topic, string $extra_context = ''): string {
+        $c     = $this->build_criteria($profile);
+        $block = $this->adaptation_block($c);
 
         $extra_block = '';
         if (trim($extra_context) !== '') {
@@ -190,11 +210,7 @@ class ai_generator {
 
 Задача: напиши учебный текст по теме «{$topic}» для ученика {$c['class_str']}.
 
-Профиль учащегося:
-- Категория: {$c['category_label']}
-- Уровень подготовки: {$c['level_label']}
-- Средний балл за последние 5 тестов: {$c['avg_band']}
-{$special_block}{$extra_block}
+{$block}{$extra_block}
 Требования:
 - Объём: {$c['word_count']} слов
 - Язык: русский, доступный для возраста учащегося
