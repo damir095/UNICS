@@ -139,7 +139,7 @@ if ($hassiteconfig) {
         'Сколько различных комплектов УМК разрешено поставить в очередь за одну генерацию. '
             . 'Один комплект - это отдельное обращение к ИИ на каждый выбранный материал. '
             . '0 - без ограничения.',
-        10, PARAM_INT
+        \local_unics\ai\umk_launcher::DEFAULT_LIMIT, PARAM_INT
     ));
 
     $settings->add(new admin_setting_heading(

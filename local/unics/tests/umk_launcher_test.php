@@ -93,6 +93,19 @@ final class umk_launcher_test extends \advanced_testcase {
         $this->assertSame(0, $DB->count_records('unics_ai_queue'));
     }
 
+    /**
+     * Найдено живой проверкой: настройка добавлена в settings.php ПОСЛЕ того, как апгрейд
+     * плагина уже прошел, поэтому на стенде строки конфига не было вовсе. get_config() отдает
+     * false, (int)false = 0, а ноль означает «без ограничения» - потолок молча снимался бы.
+     */
+    public function test_unset_limit_falls_back_to_default_not_unlimited(): void {
+        $this->resetAfterTest();
+        unset_config('umk_max_per_run', 'local_unics');
+
+        $this->assertSame(umk_launcher::DEFAULT_LIMIT, umk_launcher::limit());
+        $this->assertGreaterThan(0, umk_launcher::limit(), 'Отсутствие настройки - не «без потолка»');
+    }
+
     public function test_zero_limit_means_unlimited(): void {
         $this->resetAfterTest();
         set_config('umk_max_per_run', 0, 'local_unics');

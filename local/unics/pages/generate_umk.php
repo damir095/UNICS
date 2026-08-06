@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $generate_assignment = optional_param('generate_assignment', 0, PARAM_INT);
     $generate_video      = optional_param('generate_video',      0, PARAM_INT);
     $extra_prompt        = optional_param('extra_prompt',       '', PARAM_TEXT);
+    $individual          = optional_param('individual',          0, PARAM_INT);
     $student_ids    = array_filter($student_ids);
 
     $title          = required_param('title', PARAM_TEXT);
@@ -83,49 +84,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
-    // Группируем учащихся по уровню сложности
-    $level_groups = []; // level => [student_id, ...]
+    // Отсев по правам: педагог ставит генерацию только своим привязанным учащимся.
+    $allowed = [];
     foreach ($student_ids as $student_id) {
         if ($teacher_record && !$DB->record_exists('unics_teacher_student', [
             'teacher_id' => $teacher_record->id, 'student_id' => $student_id,
         ])) continue;
-        $st = $DB->get_record('unics_students', ['id' => $student_id], 'id, difficulty_level');
-        if (!$st) continue;
-        $level_groups[(int)$st->difficulty_level][] = (int)$student_id;
+        $allowed[] = (int)$student_id;
     }
 
+    // Группировка по отпечатку профиля ([[umk-per-student-design]]): внутри группы профили
+    // тождественны по построению, поэтому «представителя» и расхождений здесь больше нет.
+    $groups = \local_unics\ai\profile_fingerprint::group_students($allowed, (bool)$individual);
+    $limit  = \local_unics\ai\umk_launcher::limit();
+
     if ($action === 'confirm') {
-        $queued = 0;
-        foreach ($level_groups as $level => $sids) {
-            $umk_id = $DB->insert_record('unics_umk', (object)[
-                'difficulty_level' => $level,
-                'mdl_course_id'    => (int)$course_id,
-                'title'            => $title,
-                'topic'            => $topic,
-                'target_section'   => (int)$target_section,
-                'extra_prompt'     => $extra_prompt,
-                'status'           => 1,
-                'generated_at'     => time(),
-            ]);
-            // Постановка = строка очереди + adhoc-задача на параллельное исполнение
-            // ([[ai-queue-parallel-design]], 3.4 аудита).
-            \local_unics\ai\ai_queue::enqueue($umk_id, array_values($sids), [
+        // Потолок проверяется и здесь: ветку confirm можно позвать прямым POST мимо превью,
+        // и проверка только в превью была бы декоративной.
+        if ($limit > 0 && count($groups) > $limit) {
+            redirect(new moodle_url('/local/unics/pages/generate_umk.php'),
+                'Комплектов получилось: ' . count($groups) . ', потолок: ' . $limit
+                . '. Сузьте выбор учащихся.',
+                null, \core\output\notification::NOTIFY_WARNING);
+        }
+
+        // Постановка = строка УМК + группа доступа + строка очереди + adhoc-задача на
+        // параллельное исполнение ([[ai-queue-parallel-design]], 3.4 аудита).
+        $queued = \local_unics\ai\umk_launcher::launch((int)$course_id, $groups, [
+            'title'          => $title,
+            'topic'          => $topic,
+            'target_section' => (int)$target_section,
+            'extra_prompt'   => $extra_prompt,
+            'individual'     => (bool)$individual,
+            'flags'          => [
                 'generate_audio'      => (int)$generate_audio,
                 'generate_quiz'       => (int)$generate_quiz,
                 'generate_assignment' => (int)$generate_assignment,
                 'generate_video'      => (int)$generate_video,
-            ]);
-            $queued++;
-        }
+            ],
+        ]);
 
-        $level_names = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
-        $summary = [];
-        foreach ($level_groups as $lvl => $sids) {
-            $summary[] = ($level_names[$lvl] ?? 'Ур.' . $lvl) . ': ' . count($sids) . ' уч.';
+        $students_total = 0;
+        foreach ($groups as $g) {
+            $students_total += count($g['students']);
         }
 
         $msg  = $queued > 0
-            ? "Создано {$queued} задач по уровням (" . implode(', ', $summary) . "). Материалы появятся в курсе автоматически в ближайшее время."
+            ? "Создано {$queued} комплектов для {$students_total} учащихся. Материалы появятся в курсе автоматически в ближайшее время."
             : 'Не удалось добавить задачи - проверьте права доступа к учащимся.';
         $type = $queued > 0
             ? \core\output\notification::NOTIFY_SUCCESS
@@ -142,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     // action=preview: превью материала перед запуском (A3).
     // Live-вызовов ИИ здесь НЕТ - только build_criteria/build_prompt.
     // ------------------------------------------------------------
-    if (empty($level_groups)) {
+    if (empty($groups)) {
         redirect(new moodle_url('/local/unics/pages/generate_umk.php'),
             'Не удалось сформировать группы - проверьте права доступа к учащимся.',
             null, \core\output\notification::NOTIFY_WARNING);
@@ -185,57 +190,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     }
     echo '</div>';
 
-    foreach ($level_groups as $level => $sids) {
-        // Профили учеников группы; представитель - ПЕРВЫЙ (ровно как в process_ai_queue).
-        $infos = [];
-        foreach ($sids as $sid) {
-            $st = $DB->get_record('unics_students', ['id' => $sid]);
-            if (!$st) {
-                continue;
-            }
-            $u    = $DB->get_record('user', ['id' => $st->mdl_user_id],
-                'id, firstname, lastname, middlename');
-            $cats = \local_unics\identity\student_helper::categories_of((int)$st->id);
-            $ovz  = \local_unics\identity\student_helper::ovz_types_of((int)$st->id);
-            sort($cats);
-            sort($ovz);
-            $avg = $generator->get_avg_score((int)$st->mdl_user_id);
-            $infos[$sid] = [
-                'student' => $st,
-                'fio'     => $u ? trim("{$u->lastname} {$u->firstname} " . ($u->middlename ?? ''))
-                                : ('Ученик #' . $sid),
-                'cls'     => $st->class_number
-                    ? $st->class_number . ($st->class_letter ? " «{$st->class_letter}»" : '')
-                    : '-',
-                'cats'    => $cats,
-                'ovz'     => $ovz,
-                'avg'     => $avg,
-                'eff'     => $generator->adapt_level((int)$level, $avg),
-            ];
-        }
-        if (empty($infos)) {
-            continue;
-        }
+    // Цена запуска: комплект - это отдельное обращение к ИИ на каждый выбранный материал.
+    $per_set = 1 + (int)!empty($generate_quiz) + (int)!empty($generate_assignment)
+                 + (int)!empty($generate_audio) + (int)!empty($generate_video);
+    $sets    = count($groups);
+    // Формулировки без числительных в родительном падеже: числа тут переменные, и
+    // «1 комплектов» читалось бы неряшливо при любом значении потолка.
+    echo '<p class="mb-3">Комплектов будет создано: <strong>' . $sets . '</strong>. '
+       . 'Обращений к ИИ примерно: <strong>' . ($sets * $per_set) . '</strong>.</p>';
 
-        $rep_sid = array_key_first($infos);
-        $rep     = $infos[$rep_sid];
-        $profile = [
-            'category'         => $rep['cats'][0] ?? 2,
-            'categories'       => $rep['cats'],
-            'ovz_types'        => $rep['ovz'],
-            'difficulty_level' => (int)$level,
-            'class_number'     => (int)($rep['student']->class_number ?? 5),
-            'class_letter'     => $rep['student']->class_letter ?? '',
-            'ovz_type'         => $rep['ovz'][0] ?? 0,
-            'special_needs'    => $rep['student']->special_needs ?? '',
-            'avg_score'        => $rep['avg'],
-        ];
-        $crit   = $generator->build_criteria($profile);
-        $prompt = $generator->build_prompt($profile, $topic, $extra_prompt);
+    $over_limit = $limit > 0 && $sets > $limit;
+    if ($over_limit) {
+        echo $OUTPUT->notification(
+            'Это больше потолка. Максимум комплектов за запуск: ' . $limit . '. Сузьте выбор: '
+            . 'примените фильтр класса или организации либо снимите часть галочек. '
+            . 'Потолок меняется в настройках: Администрирование - УНИКС - Настройки ИИ.',
+            'error');
+    }
+
+    foreach ($groups as $key => $group) {
+        $profile = $group['profile'];
+        $crit    = $generator->build_criteria($profile);
+        $prompt  = $generator->build_prompt($profile, $topic, $extra_prompt);
 
         echo '<div class="card p-3 mb-3">';
-        echo '<h5>' . s(($level_names[$level] ?? ('Уровень ' . $level))
-            . ' уровень - ' . count($infos) . ' уч.') . '</h5>';
+        echo '<h5>' . s(($level_names[$crit['eff_level']] ?? ('Уровень ' . $crit['eff_level']))
+            . ' уровень - ' . count($group['students']) . ' уч.') . '</h5>';
 
         echo '<ul class="mb-2">';
         echo '<li>Категория: ' . s($crit['category_label']) . '</li>';
@@ -247,7 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             $lvl_line .= ' <span class="text-muted">(' . s($crit['level_change_reason']) . ')</span>';
         }
         echo '<li>' . $lvl_line . '</li>';
-        echo '<li>Средний балл представителя: ' . s((string)$crit['avg_score']) . '%</li>';
+        echo '<li>Полоса среднего балла: ' . s($crit['avg_band']) . '</li>';
         echo '<li>Объем: ' . s($crit['word_count']) . ' слов</li>';
         if (!empty($crit['special_parts'])) {
             echo '<li>Особые указания:<ul>';
@@ -258,36 +238,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         }
         echo '</ul>';
 
-        $has_divergence = false;
-        echo '<p class="mb-1"><strong>Ученики группы:</strong></p><ul class="mb-2">';
-        foreach ($infos as $sid => $info) {
-            $diff = [];
-            if ($info['cats'] !== $rep['cats']) {
-                $diff[] = 'другие категории';
+        // Профили внутри группы тождественны по построению, поэтому расхождений и
+        // «представителя» здесь больше нет - только собственный балл каждого ученика.
+        echo '<p class="mb-1"><strong>Ученики комплекта:</strong></p><ul class="mb-2">';
+        foreach ($group['students'] as $sid) {
+            $st = $DB->get_record('unics_students', ['id' => $sid]);
+            if (!$st) {
+                continue;
             }
-            if ($info['ovz'] !== $rep['ovz']) {
-                $diff[] = 'другие типы ОВЗ';
-            }
-            if ($info['eff'] !== $rep['eff']) {
-                $diff[] = 'расчетный уровень: ' . ($level_names[$info['eff']] ?? $info['eff']);
-            }
-            $line = s($info['fio']) . ' - ' . s($info['cls']);
-            if ($sid === $rep_sid) {
-                $line .= ' <span class="badge badge-info">представитель</span>';
-            } else if (!empty($diff)) {
-                $has_divergence = true;
-                $line .= ' <span class="badge badge-warning">'
-                       . s('отличается: ' . implode(', ', $diff)) . '</span>';
-            }
-            echo '<li>' . $line . '</li>';
+            $u   = $DB->get_record('user', ['id' => $st->mdl_user_id],
+                'id, firstname, lastname, middlename');
+            $fio = $u ? trim("{$u->lastname} {$u->firstname} " . ($u->middlename ?? ''))
+                      : ('Ученик #' . $sid);
+            $cls = $st->class_number
+                ? $st->class_number . ($st->class_letter ? " «{$st->class_letter}»" : '')
+                : '-';
+            $avg = $generator->get_avg_score((int)$st->mdl_user_id);
+            echo '<li>' . s($fio) . ' - ' . s($cls) . ', средний балл ' . s((string)$avg) . '%</li>';
         }
         echo '</ul>';
-
-        if ($has_divergence) {
-            echo $OUTPUT->notification(
-                'В группе есть ученики с отличающимся профилем. Материал группы будет создан '
-                . 'по профилю представителя: ' . s($rep['fio']) . '.', 'warning');
-        }
 
         echo '<details class="mt-2"><summary>Полный текст промта</summary>'
            . '<pre class="p-2 bg-light border rounded" style="white-space:pre-wrap">'
@@ -310,18 +279,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         'generate_quiz'       => (int)$generate_quiz,
         'generate_assignment' => (int)$generate_assignment,
         'generate_video'      => (int)$generate_video,
+        'individual'          => (int)$individual,
     ];
     foreach ($hidden as $hn => $hv) {
         echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => $hn, 'value' => $hv]);
     }
-    foreach ($level_groups as $sids) {
-        foreach ($sids as $sid) {
+    foreach ($groups as $group) {
+        foreach ($group['students'] as $sid) {
             echo html_writer::empty_tag('input',
                 ['type' => 'hidden', 'name' => 'student_ids[]', 'value' => (int)$sid]);
         }
     }
-    echo html_writer::tag('button', 'Подтвердить и запустить',
-        ['type' => 'submit', 'class' => 'btn btn-primary mr-2']);
+    if (!$over_limit) {
+        echo html_writer::tag('button', 'Подтвердить и запустить',
+            ['type' => 'submit', 'class' => 'btn btn-primary mr-2']);
+    }
     echo html_writer::tag('button', 'Назад',
         ['type' => 'button', 'class' => 'btn btn-outline-secondary',
          'onclick' => 'history.back()']);
@@ -661,7 +633,8 @@ if (empty($students)) {
     ksort($by_level);
 
     echo html_writer::tag('small',
-        'Для каждого уровня генерируется <strong>один</strong> вариант материала - все ученики уровня получат доступ к нему.',
+        'Ученики с одинаковым профилем получат <strong>один</strong> комплект материалов; '
+        . 'при различии профилей комплекты будут разными.',
         ['class' => 'text-muted d-block mb-1']
     );
 
@@ -730,6 +703,16 @@ echo html_writer::tag('small',
     'Эти указания будут переданы ИИ дополнительно к профилю учащегося. Можно уточнить предмет, особенности темы, что выделить или что опустить.',
     ['class' => 'form-text text-muted']
 );
+echo html_writer::end_tag('div');
+
+echo html_writer::start_tag('div', ['class' => 'form-check mt-3']);
+echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_individual',
+    'name' => 'individual', 'value' => '1', 'class' => 'form-check-input']);
+echo html_writer::tag('label', 'Отдельный комплект каждому выбранному ученику',
+    ['for' => 'gen_individual', 'class' => 'form-check-label']);
+echo html_writer::tag('small',
+    'Без объединения одинаковых профилей. Обращений к ИИ будет столько, сколько выбрано учащихся.',
+    ['class' => 'form-text text-muted']);
 echo html_writer::end_tag('div');
 
 echo html_writer::tag('button', 'Продолжить',

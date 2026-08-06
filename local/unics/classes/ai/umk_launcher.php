@@ -14,9 +14,23 @@ defined('MOODLE_INTERNAL') || die();
  */
 class umk_launcher {
 
-    /** Потолок комплектов за один запуск; 0 - без ограничения. */
+    /** Потолок комплектов за один запуск по умолчанию; дублируется в settings.php. */
+    public const DEFAULT_LIMIT = 10;
+
+    /**
+     * Потолок комплектов за один запуск; 0 - без ограничения.
+     *
+     * Ненайденная настройка - НЕ ноль. get_config() отдает false, пока дефолты новой
+     * настройки не применены (на живом стенде это случается, если апгрейд плагина прошел
+     * раньше, чем настройка появилась в settings.php), и приведение false к int дало бы 0,
+     * то есть молча снятый потолок. Отсутствие настройки означает дефолт.
+     */
     public static function limit(): int {
-        return (int)get_config('local_unics', 'umk_max_per_run');
+        $raw = get_config('local_unics', 'umk_max_per_run');
+        if ($raw === false || $raw === '') {
+            return self::DEFAULT_LIMIT;
+        }
+        return (int)$raw;
     }
 
     /**
@@ -38,8 +52,8 @@ class umk_launcher {
         $limit = self::limit();
         if ($limit > 0 && count($groups) > $limit) {
             throw new \moodle_exception('generalexceptionmessage', 'error', '',
-                'Потолок генерации: получилось ' . count($groups)
-                . ' комплектов при потолке ' . $limit . '.');
+                'Потолок генерации. Комплектов получилось: ' . count($groups)
+                . ', потолок: ' . $limit . '.');
         }
 
         $builder    = $builder ?? new course_builder();
