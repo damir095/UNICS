@@ -71,4 +71,42 @@ class profile_fingerprint {
         ksort($criteria);
         return sha1(json_encode($criteria, JSON_UNESCAPED_UNICODE));
     }
+
+    /**
+     * Разложить учеников по отпечатку профиля.
+     *
+     * Фильтрация доступа (unics_teacher_student, скоуп) остается на вызывающем коде -
+     * сюда приходят уже разрешенные id.
+     *
+     * @param int[] $student_ids unics_students.id
+     * @param bool $individual индивидуальный режим: схлопывания нет, ключ несет id ученика
+     * @param ai_generator|null $gen DI для тестов
+     * @return array<string,array{profile:array,level:int,students:int[]}>
+     */
+    public static function group_students(array $student_ids, bool $individual = false,
+                                          ?ai_generator $gen = null): array {
+        $gen = $gen ?? new ai_generator();
+        $out = [];
+        foreach ($student_ids as $sid) {
+            $sid = (int)$sid;
+            $profile = self::profile_of($sid, $gen);
+            if ($profile === null) {
+                continue;
+            }
+            $key = self::key($profile, $gen);
+            if ($individual) {
+                // Ключ остается 40-символьным sha1, но становится персональным.
+                $key = sha1($key . ':' . $sid);
+            }
+            if (!isset($out[$key])) {
+                $out[$key] = [
+                    'profile'  => $profile,
+                    'level'    => (int)$profile['difficulty_level'],
+                    'students' => [],
+                ];
+            }
+            $out[$key]['students'][] = $sid;
+        }
+        return $out;
+    }
 }

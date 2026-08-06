@@ -117,4 +117,49 @@ final class profile_fingerprint_test extends \advanced_testcase {
         $this->resetAfterTest();
         $this->assertNull(profile_fingerprint::profile_of(999999, $this->gen()));
     }
+
+    public function test_group_students_collapses_identical_profiles(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen();
+        $a = $this->make_student();
+        $b = $this->make_student();                              // тот же профиль, что у $a
+        $c = $this->make_student(['difficulty_level' => 3]);      // другой профиль
+
+        $groups = profile_fingerprint::group_students([$a, $b, $c], false, $gen);
+
+        $this->assertCount(2, $groups);
+        $sizes = array_map(fn($g) => count($g['students']), array_values($groups));
+        sort($sizes);
+        $this->assertSame([1, 2], $sizes);
+        foreach ($groups as $key => $g) {
+            $this->assertSame(40, strlen($key));
+            $this->assertArrayHasKey('profile', $g);
+            $this->assertSame((int)$g['profile']['difficulty_level'], $g['level']);
+        }
+    }
+
+    public function test_group_students_individual_mode_never_collapses(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen();
+        $a = $this->make_student();
+        $b = $this->make_student(); // профиль тот же
+
+        $groups = profile_fingerprint::group_students([$a, $b], true, $gen);
+
+        $this->assertCount(2, $groups);
+        foreach ($groups as $g) {
+            $this->assertCount(1, $g['students']);
+        }
+    }
+
+    public function test_group_students_skips_unknown_ids(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen();
+        $a = $this->make_student();
+
+        $groups = profile_fingerprint::group_students([$a, 999999], false, $gen);
+
+        $this->assertCount(1, $groups);
+        $this->assertSame([$a], array_values($groups)[0]['students']);
+    }
 }
