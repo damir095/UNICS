@@ -128,4 +128,27 @@ final class output_style_test extends \advanced_testcase {
 
         $this->assertSame($src, output_style::shift_headings($src));
     }
+
+    /**
+     * Чистка обязана стоять В ГОРЛОВИНЕ generate_text(), а не на местах вызова: через нее идут
+     * ВСЕ шесть выходов ИИ (учебный текст, тест, задание, слайды, пояснения адаптива, разбор
+     * эссе), и ни один вызывающий не должен иметь возможности о ней забыть.
+     *
+     * Подменяем самый нижний слой - HTTP к GigaChat, - поэтому тест проверяет именно
+     * generate_text(), а не свою же реализацию. Сети тест не касается.
+     */
+    public function test_generate_text_returns_cleaned_output(): void {
+        $this->resetAfterTest();
+        set_config('ai_api_key', 'FAKE_KEY_FOR_TEST', 'local_unics');
+
+        $gen = new class extends \local_unics\ai\ai_generator {
+            protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
+                return "Вулкан 🌋 — это гора.";
+            }
+        };
+
+        $out = $gen->generate_text('любой промт');
+
+        $this->assertSame('Вулкан - это гора.', $out);
+    }
 }

@@ -212,7 +212,11 @@ class ai_generator {
         if (empty($this->api_key)) {
             throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
         }
-        return $this->generate_text_gigachat($prompt, $max_tokens);
+        // Единственное горлышко всех шести выходов ИИ ([[ai-output-style-design]]): чистка стоит
+        // здесь, чтобы ни один вызывающий не мог о ней забыть. Для JSON-выходов (тест, слайды)
+        // это безопасно: вырезание эмодзи и замена тире не меняют ни скобок, ни кавычек, ни
+        // экранирования, поэтому восстановление обрезанного JSON в generate_quiz не страдает.
+        return output_style::clean($this->generate_text_gigachat($prompt, $max_tokens));
     }
 
     // ----------------------------------------------------------------
@@ -261,7 +265,9 @@ class ai_generator {
     // GigaChat (Sber) - OAuth 2.0 client_credentials
     // api_key здесь = Authorization key из личного кабинета (Base64)
     // ----------------------------------------------------------------
-    private function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
+    // protected, а не private: это шов для подмены сети в тестах. Публичный generate_text()
+    // остается единственной точкой входа, поведение снаружи не меняется.
+    protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
         // Шаг 1: получить access_token
         $token = $this->get_gigachat_token();
 

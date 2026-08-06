@@ -92,7 +92,10 @@ class umk_processor {
             // --- 1. Генерация текста ---
             $extra_context = isset($umk->extra_prompt) ? (string)$umk->extra_prompt : '';
             $prompt = $generator->build_prompt($profile, $umk->topic, $extra_context);
-            $text   = $generator->generate_text($prompt);
+            // Учебный текст - единственный выход, который ложится в страницу как FORMAT_MARKDOWN
+            // и потому РЕНДЕРИТСЯ: без сдвига «#» от модели стал бы <h1> внутри страницы курса,
+            // где заголовок уже есть ([[ai-output-style-design]], раздел 1).
+            $text   = \local_unics\ai\output_style::shift_headings($generator->generate_text($prompt));
 
             // --- Целевая секция ---
             if ((int)$umk->target_section >= 0) {
