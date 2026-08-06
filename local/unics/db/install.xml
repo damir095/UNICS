@@ -283,6 +283,7 @@
         <FIELD NAME="status"           TYPE="int"  LENGTH="2"   NOTNULL="true"  DEFAULT="1"   SEQUENCE="false"/>
         <FIELD NAME="generated_at"     TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="published_at"     TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="NULL = на проверке (черновик), задано = опубликован педагогом"/>
+        <FIELD NAME="profile_key"      TYPE="char" LENGTH="40"  NOTNULL="false" SEQUENCE="false" COMMENT="sha1 отпечатка профиля; NULL = старый уровневый регламент"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>

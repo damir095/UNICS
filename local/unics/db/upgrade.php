@@ -1545,5 +1545,18 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026080401, 'local', 'unics');
     }
 
+    if ($oldversion < 2026080601) {
+        // A2: отпечаток профиля, по которому схлопывались ученики этого УМК
+        // ([[umk-per-student-design]]). NULL остается у 92 УМК старого уровневого
+        // регламента - они не мигрируются, а помечаются бейджем в истории.
+        $table = new xmldb_table('unics_umk');
+        $field = new xmldb_field('profile_key', XMLDB_TYPE_CHAR, '40', null, null, null, null, 'published_at');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026080601, 'local', 'unics');
+    }
+
     return true;
 }
