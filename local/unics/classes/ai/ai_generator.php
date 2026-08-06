@@ -460,9 +460,14 @@ class ai_generator {
     // Возвращает массив: [['text'=>..., 'answers'=>[...], 'correct'=>0], ...]
     // ----------------------------------------------------------------
     public function generate_quiz(array $profile, string $topic, string $source_text = '', int $num = 5): array {
-        $levels    = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
+        // Уровень берется из build_criteria - он ЭФФЕКТИВНЫЙ (с поправкой adapt_level на балл).
+        // Раньше здесь стоял сырой difficulty_level, и у ребенка с базовым 3 и баллом 40% текст
+        // писался на уровне 2, а тест по этому же тексту - на уровне 3
+        // ([[adaptation-full-kit-design]]).
+        $c         = $this->build_criteria($profile);
         $class_num = $profile['class_number'] ?? 5;
-        $level     = $levels[$profile['difficulty_level'] ?? 2] ?? 'стандартный';
+        $level     = $c['level_label'];
+        $block     = $this->adaptation_block($c);
 
         $src = $source_text !== ''
             ? "\n\nОпирайся на следующий учебный текст:\n---\n" . mb_substr($source_text, 0, 2000) . "\n---"
@@ -472,6 +477,7 @@ class ai_generator {
 
 Составь ровно {$num} вопросов с множественным выбором по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
 
+{$block}
 Требования:
 - 4 варианта ответа для каждого вопроса
 - Ровно один правильный ответ
@@ -547,9 +553,12 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
     // Генерация текста задания (mod_assign)
     // ----------------------------------------------------------------
     public function generate_assignment_description(array $profile, string $topic, string $source_text = ''): string {
-        $levels    = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
+        // Эффективный уровень и профиль ребенка - как в промте учебного текста
+        // ([[adaptation-full-kit-design]]).
+        $c         = $this->build_criteria($profile);
         $class_num = $profile['class_number'] ?? 5;
-        $level     = $levels[$profile['difficulty_level'] ?? 2] ?? 'стандартный';
+        $level     = $c['level_label'];
+        $block     = $this->adaptation_block($c);
 
         $src = $source_text !== ''
             ? "\n\nУчебный текст по теме:\n---\n" . mb_substr($source_text, 0, 1500) . "\n---"
@@ -559,6 +568,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
 
 Составь одно письменное практическое задание по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
 
+{$block}
 Задание должно:
 - Опираться на изученный материал
 - Требовать развёрнутого ответа (3–7 предложений)
@@ -575,9 +585,12 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
     // Возвращает массив: [['title'=>..., 'content'=>..., 'key_points'=>[...]], ...]
     // ----------------------------------------------------------------
     public function generate_video_script(array $profile, string $topic, string $source_text = ''): array {
-        $levels    = [1 => 'базовый', 2 => 'стандартный', 3 => 'продвинутый'];
+        // Эффективный уровень и профиль ребенка - как в промте учебного текста
+        // ([[adaptation-full-kit-design]]).
+        $c         = $this->build_criteria($profile);
         $class_num = $profile['class_number'] ?? 5;
-        $level     = $levels[$profile['difficulty_level'] ?? 2] ?? 'стандартный';
+        $level     = $c['level_label'];
+        $block     = $this->adaptation_block($c);
 
         $src = $source_text !== ''
             ? "\n\nОпирайся на следующий учебный текст:\n---\n" . mb_substr($source_text, 0, 2000) . "\n---"
@@ -585,6 +598,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
 
         $prompt = "Составь сценарий видеоурока по теме «{$topic}» для ученика {$class_num} класса (уровень: {$level}).{$src}
 
+{$block}
 Верни РОВНО 5 слайдов в формате JSON без пояснений и без markdown-обёртки:
 {\"slides\":[{\"title\":\"...\",\"content\":\"...\",\"key_points\":[\"...\",\"...\"]}]}
 
