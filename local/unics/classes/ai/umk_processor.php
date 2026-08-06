@@ -76,26 +76,18 @@ class umk_processor {
                 throw new \moodle_exception('Не найден ни один учащийся для UMK #' . $umk->id);
             }
 
-            $umk_level  = (int)$umk->difficulty_level;
-            $avg_score  = $generator->get_avg_score((int)$first_student->mdl_user_id);
+            $umk_level = (int)$umk->difficulty_level;
 
-            // Категории/ОВЗ - из нормализованных таблиц по id (этап 2.6-C).
-            $cats_arr = \local_unics\identity\student_helper::categories_of((int)$first_student->id);
-            $ovz_arr  = \local_unics\identity\student_helper::ovz_types_of((int)$first_student->id);
-
-            $profile = [
-                // Бэк-компат - первая категория как скаляр.
-                'category'         => $cats_arr[0] ?? 2,
-                // Полные массивы - ai_generator решает, как использовать.
-                'categories'       => $cats_arr,
-                'ovz_types'        => $ovz_arr,
-                'difficulty_level' => $umk_level,
-                'class_number'     => (int)($first_student->class_number ?? 5),
-                'class_letter'     => $first_student->class_letter ?? '',
-                'ovz_type'         => $ovz_arr[0] ?? 0,
-                'special_needs'    => $first_student->special_needs ?? '',
-                'avg_score'        => $avg_score,
-            ];
+            // Профиль собирает profile_fingerprint - тот же код, что и на превью. Две копии
+            // обязаны совпадать, иначе превью врет о том, что будет сгенерировано.
+            $profile = \local_unics\ai\profile_fingerprint::profile_of(
+                (int)$first_student->id, $generator);
+            if ($profile === null) {
+                throw new \moodle_exception('Не найден профиль учащегося для UMK #' . $umk->id);
+            }
+            // Уровень УМК авторитетнее ученического: у старых уровневых УМК он единственный
+            // общий признак группы.
+            $profile['difficulty_level'] = $umk_level;
 
             // --- 1. Генерация текста ---
             $extra_context = isset($umk->extra_prompt) ? (string)$umk->extra_prompt : '';
@@ -109,13 +101,20 @@ class umk_processor {
                 $section = $builder->get_or_create_topic_section((int)$umk->mdl_course_id, $umk->topic);
             }
 
-            // --- Создаём группу уровня ---
-            $group_id = $builder->get_or_create_level_group(
-                (int)$umk->mdl_course_id,
-                $umk_level,
-                $umk->topic
-            );
-            $DB->set_field('unics_umk', 'mdl_group_id', $group_id, ['id' => $umk->id]);
+            // --- Группа доступа ---
+            // Профильный регламент заводит группу на постановке ([[umk-per-student-design]]),
+            // воркер берет готовую. Пустое поле - это УМК старого уровневого регламента
+            // (в том числе перезапуск давнего), для него группа создается здесь как раньше.
+            if (!empty($umk->mdl_group_id)) {
+                $group_id = (int)$umk->mdl_group_id;
+            } else {
+                $group_id = $builder->get_or_create_level_group(
+                    (int)$umk->mdl_course_id,
+                    $umk_level,
+                    $umk->topic
+                );
+                $DB->set_field('unics_umk', 'mdl_group_id', $group_id, ['id' => $umk->id]);
+            }
 
             // --- Текстовая страница ---
             $text_cmid = $builder->add_text_page(

@@ -66,6 +66,32 @@ final class umk_processor_test extends \advanced_testcase {
         return [$course, $user, $studentid, $umkid, $queueid];
     }
 
+    /**
+     * Группа доступа заводится на постановке ([[umk-per-student-design]], раздел 7), поэтому
+     * воркер обязан взять готовую, а не создавать уровневую. Иначе материал ляжет в чужую
+     * группу, а нумерация «Вариант N» стала бы гонкой параллельных воркеров.
+     */
+    public function test_process_uses_group_prepared_at_enqueue(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [$course, $user, $studentid, $umkid, $queueid] = $this->make_fixture();
+
+        $prepared = (int)$this->getDataGenerator()->create_group([
+            'courseid' => $course->id, 'name' => 'Вариант 1',
+            'idnumber' => 'umk_fpdeadbeef_c' . $course->id,
+        ])->id;
+        $DB->set_field('unics_umk', 'mdl_group_id', $prepared, ['id' => $umkid]);
+        $before = $DB->count_records('groups', ['courseid' => $course->id]);
+
+        $this->expectOutputRegex('~готов~');
+        (new umk_processor($this->fake_generator()))->process(ai_queue::claim($queueid));
+
+        $this->assertSame($prepared,
+            (int)$DB->get_field('unics_umk', 'mdl_group_id', ['id' => $umkid]));
+        $this->assertSame($before, $DB->count_records('groups', ['courseid' => $course->id]),
+            'Новых групп воркер заводить не должен');
+    }
+
     public function test_process_happy_path_creates_hidden_material(): void {
         global $DB;
         $this->resetAfterTest();
