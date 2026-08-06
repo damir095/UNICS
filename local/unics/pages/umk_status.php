@@ -210,7 +210,8 @@ $status_labels = [
 
 $total = (int)$DB->count_records('unics_umk');
 $records = $DB->get_records_sql(
-    "SELECT u.id, u.title, u.topic, u.difficulty_level, u.status, u.generated_at, u.published_at, u.mdl_course_id,
+    "SELECT u.id, u.title, u.topic, u.difficulty_level, u.status, u.generated_at, u.published_at,
+            u.mdl_course_id, u.profile_key,
             (SELECT q.error_message FROM {unics_ai_queue} q
               WHERE q.umk_id = u.id ORDER BY q.id DESC LIMIT 1) AS error_message,
             (SELECT q.processed_at FROM {unics_ai_queue} q
@@ -245,7 +246,7 @@ if (empty($records)) {
     $level_labels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Продвинутый'];
 
     $table = new html_table();
-    $table->head = ['Тема', 'Уровень', 'Учащихся', 'Курс', 'Статус', 'Дата', ''];
+    $table->head = ['Тема', 'Уровень', 'Регламент', 'Учащихся', 'Курс', 'Статус', 'Дата', ''];
     $table->attributes['class'] = local_unics_table_class(true);
 
     foreach ($records as $r) {
@@ -294,9 +295,17 @@ if (empty($records)) {
                      'onclick' => "return confirm('Удалить черновик УМК #{$r->id}? Активности будут удалены.')"]);
         }
 
+        // Регламент группировки: у 92 УМК, созданных до A2, profile_key пуст. Без бейджа
+        // история врет - два разных смысла под одной вывеской, и непонятно, почему у старых
+        // УМК в одной группе дети с разными профилями ([[umk-per-student-design]], раздел 10).
+        $regime = empty($r->profile_key)
+            ? '<span class="badge badge-light">по уровню</span>'
+            : '<span class="badge badge-info">по профилю</span>';
+
         $table->data[] = [
             s($r->topic),
             $lvl_label,
+            $regime,
             (int)$r->student_count,
             $course_link,
             $status,
