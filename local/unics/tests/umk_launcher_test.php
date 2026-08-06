@@ -1,0 +1,120 @@
+<?php
+namespace local_unics;
+
+use local_unics\ai\ai_generator;
+use local_unics\ai\profile_fingerprint;
+use local_unics\ai\umk_launcher;
+
+/**
+ * Постановка комплектов в очередь ([[umk-per-student-design]], разделы 6 и 8).
+ * Группа доступа заводится ЗДЕСЬ, а не в воркере: очередь дренится параллельно, и нумерация
+ * «Вариант N» в воркере была бы гонкой двух воркеров за один номер.
+ *
+ * @package local_unics
+ */
+#[\PHPUnit\Framework\Attributes\CoversClass(umk_launcher::class)]
+final class umk_launcher_test extends \advanced_testcase {
+
+    private function gen(): ai_generator {
+        return new class extends ai_generator {
+            public function get_avg_score(int $mdl_user_id): float {
+                return 70.0;
+            }
+        };
+    }
+
+    private function make_student(array $fields = []): int {
+        global $DB;
+        $user = $this->getDataGenerator()->create_user();
+        return (int)$DB->insert_record('unics_students', (object)(array_merge([
+            'mdl_user_id'      => $user->id,
+            'difficulty_level' => 2,
+            'class_number'     => 7,
+        ], $fields)));
+    }
+
+    private function params(array $over = []): array {
+        return array_merge([
+            'title'          => 'Дроби',
+            'topic'          => 'Обыкновенные дроби',
+            'target_section' => 1,
+            'extra_prompt'   => '',
+            'individual'     => false,
+            'flags'          => ['generate_audio' => 0, 'generate_quiz' => 1,
+                                 'generate_assignment' => 0, 'generate_video' => 0],
+        ], $over);
+    }
+
+    public function test_one_umk_per_profile_with_group_and_queue(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $a = $this->make_student();
+        $b = $this->make_student();                          // тот же профиль
+        $c = $this->make_student(['difficulty_level' => 3]);  // другой
+        $groups = profile_fingerprint::group_students([$a, $b, $c], false, $this->gen());
+
+        $created = umk_launcher::launch((int)$course->id, $groups, $this->params());
+
+        $this->assertSame(2, $created);
+        $umks = $DB->get_records('unics_umk', ['mdl_course_id' => $course->id]);
+        $this->assertCount(2, $umks);
+        foreach ($umks as $umk) {
+            $this->assertSame(40, strlen((string)$umk->profile_key), 'Регламент профильный');
+            $this->assertNotEmpty($umk->mdl_group_id, 'Группа заводится на постановке');
+            $this->assertSame(1, $DB->count_records('unics_ai_queue', ['umk_id' => $umk->id]));
+        }
+        // Ученики одного профиля лежат в одной строке очереди.
+        $sizes = [];
+        foreach ($umks as $umk) {
+            $q = $DB->get_record('unics_ai_queue', ['umk_id' => $umk->id]);
+            $sizes[] = count(json_decode($q->student_ids, true));
+        }
+        sort($sizes);
+        $this->assertSame([1, 2], $sizes);
+    }
+
+    public function test_over_limit_creates_nothing(): void {
+        global $DB;
+        $this->resetAfterTest();
+        set_config('umk_max_per_run', 1, 'local_unics');
+        $course = $this->getDataGenerator()->create_course();
+        $groups = profile_fingerprint::group_students(
+            [$this->make_student(), $this->make_student(['difficulty_level' => 3])], false, $this->gen());
+
+        try {
+            umk_launcher::launch((int)$course->id, $groups, $this->params());
+            $this->fail('Превышение потолка обязано бросать исключение');
+        } catch (\moodle_exception $e) {
+            $this->assertStringContainsString('отолок', $e->getMessage());
+        }
+
+        $this->assertSame(0, $DB->count_records('unics_umk', ['mdl_course_id' => $course->id]));
+        $this->assertSame(0, $DB->count_records('unics_ai_queue'));
+    }
+
+    public function test_zero_limit_means_unlimited(): void {
+        $this->resetAfterTest();
+        set_config('umk_max_per_run', 0, 'local_unics');
+        $course = $this->getDataGenerator()->create_course();
+        $groups = profile_fingerprint::group_students(
+            [$this->make_student(), $this->make_student(['difficulty_level' => 3])], false, $this->gen());
+
+        $this->assertSame(2, umk_launcher::launch((int)$course->id, $groups, $this->params()));
+    }
+
+    public function test_individual_mode_uses_personal_group(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $sid = $this->make_student();
+        $uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $sid]);
+        $groups = profile_fingerprint::group_students([$sid], true, $this->gen());
+
+        umk_launcher::launch((int)$course->id, $groups, $this->params(['individual' => true]));
+
+        $umk = $DB->get_record('unics_umk', ['mdl_course_id' => $course->id], '*', MUST_EXIST);
+        $this->assertSame('umk_s' . $uid . '_c' . $course->id,
+            $DB->get_field('groups', 'idnumber', ['id' => $umk->mdl_group_id]));
+    }
+}

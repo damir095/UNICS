@@ -133,6 +133,15 @@ if ($hassiteconfig) {
         '', PARAM_TEXT
     ));
 
+    $settings->add(new admin_setting_configtext(
+        'local_unics/umk_max_per_run',
+        'Потолок комплектов за один запуск',
+        'Сколько различных комплектов УМК разрешено поставить в очередь за одну генерацию. '
+            . 'Один комплект - это отдельное обращение к ИИ на каждый выбранный материал. '
+            . '0 - без ограничения.',
+        10, PARAM_INT
+    ));
+
     $settings->add(new admin_setting_heading(
         'local_unics/tts_heading', 'Провайдер синтеза речи (TTS)', ''
     ));
