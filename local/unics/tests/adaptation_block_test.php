@@ -47,6 +47,27 @@ final class adaptation_block_test extends \advanced_testcase {
     }
 
     /**
+     * Свободные указания педагога ([[teacher-extra-prompt-design]]). Сборка вынесена из
+     * build_prompt(), иначе повторилась бы еще трижды - в тесте, задании и видео.
+     */
+    public function test_extra_block_is_empty_without_instructions(): void {
+        $gen = new ai_generator();
+
+        $this->assertSame('', $gen->extra_block(''));
+        $this->assertSame('', $gen->extra_block('   '));
+    }
+
+    public function test_extra_block_trims_and_labels(): void {
+        $gen = new ai_generator();
+
+        $block = $gen->extra_block('  предмет - биология, избегать латинских терминов  ');
+
+        $this->assertStringContainsString('Дополнительные указания от педагога:', $block);
+        $this->assertStringContainsString('предмет - биология, избегать латинских терминов', $block);
+        $this->assertStringNotContainsString('  предмет', $block, 'Пробелы по краям обрезаются');
+    }
+
+    /**
      * Наследник, перехватывающий промт вместо обращения к сети. Шов protected появился в
      * [[ai-output-style-plan]] ради другого теста и здесь оказался единственным способом вообще
      * увидеть промт: он собирается внутри generate_* и наружу не возвращается.
@@ -122,5 +143,40 @@ final class adaptation_block_test extends \advanced_testcase {
             'Одаренный с баллом выше 85% получает повышенный уровень');
         $this->assertStringContainsString('Категория: одарённый', $p);
         $this->assertStringContainsString('исследовательский вопрос', $p);
+    }
+
+    /**
+     * Указания педагога доходят до всех трех вторичных промтов
+     * ([[teacher-extra-prompt-design]]). Раньше они уходили только в учебный текст, хотя
+     * «избегать латинских терминов без пояснений» относится и к вопросам теста.
+     */
+    public function test_teacher_instructions_reach_all_secondary_prompts(): void {
+        $this->resetAfterTest();
+        set_config('ai_api_key', 'FAKE_KEY_FOR_TEST', 'local_unics');
+        $extra = 'предмет - биология, избегать латинских терминов без пояснений';
+
+        $quiz = $this->capturing('{"questions":[{"text":"В?","answers":["А","Б"],"correct":0}]}');
+        $quiz->generate_quiz($this->zpr_profile(), 'Клетка', '', 5, $extra);
+        $this->assertStringContainsString('Дополнительные указания от педагога:', $quiz->last_prompt);
+        $this->assertStringContainsString($extra, $quiz->last_prompt);
+
+        $assign = $this->capturing('Текст задания.');
+        $assign->generate_assignment_description($this->zpr_profile(), 'Клетка', '', $extra);
+        $this->assertStringContainsString($extra, $assign->last_prompt);
+
+        $video = $this->capturing('{"slides":[{"title":"Т","content":"С","key_points":["а"]}]}');
+        $video->generate_video_script($this->zpr_profile(), 'Клетка', '', $extra);
+        $this->assertStringContainsString($extra, $video->last_prompt);
+    }
+
+    /** Без указаний педагога заголовок не появляется - как и в промте учебного текста. */
+    public function test_no_teacher_heading_when_instructions_empty(): void {
+        $this->resetAfterTest();
+        set_config('ai_api_key', 'FAKE_KEY_FOR_TEST', 'local_unics');
+
+        $quiz = $this->capturing('{"questions":[{"text":"В?","answers":["А","Б"],"correct":0}]}');
+        $quiz->generate_quiz($this->zpr_profile(), 'Клетка');
+
+        $this->assertStringNotContainsString('Дополнительные указания', $quiz->last_prompt);
     }
 }

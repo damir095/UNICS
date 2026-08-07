@@ -166,7 +166,7 @@ class umk_processor {
             $generate_quiz = isset($task->generate_quiz) ? (int)$task->generate_quiz : 1;
             if ($generate_quiz) {
                 try {
-                    $questions = $generator->generate_quiz($profile, $umk->topic, $text);
+                    $questions = $generator->generate_quiz($profile, $umk->topic, $text, 5, $extra_context);
                     $quiz_cmid = $builder->add_quiz_with_questions(
                         (int)$umk->mdl_course_id,
                         $section,
@@ -193,7 +193,8 @@ class umk_processor {
             $generate_assignment = isset($task->generate_assignment) ? (int)$task->generate_assignment : 0;
             if ($generate_assignment) {
                 try {
-                    $assign_desc = $generator->generate_assignment_description($profile, $umk->topic, $text);
+                    $assign_desc = $generator->generate_assignment_description(
+                        $profile, $umk->topic, $text, $extra_context);
                     $assign_cmid = $builder->add_assignment(
                         (int)$umk->mdl_course_id,
                         $section,
@@ -218,7 +219,8 @@ class umk_processor {
             $generate_video = isset($task->generate_video) ? (int)$task->generate_video : 0;
             if ($generate_video) {
                 try {
-                    $slides = $generator->generate_video_script($profile, $umk->topic, $text);
+                    $slides = $generator->generate_video_script(
+                        $profile, $umk->topic, $text, $extra_context);
 
                     $slide_audios = [];
                     $salute_key = get_config('local_unics', 'salute_speech_api_key');
