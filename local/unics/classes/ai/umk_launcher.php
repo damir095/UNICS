@@ -79,7 +79,7 @@ class umk_launcher {
                     ['id' => (int)$group['students'][0]]);
                 $groupid = $builder->get_or_create_student_group($course_id, $uid);
             } else {
-                $groupid = $builder->get_or_create_profile_group($course_id, $key);
+                $groupid = $builder->get_or_create_profile_group($course_id, $key, $params['topic']);
                 foreach ($group['students'] as $sid) {
                     $uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => (int)$sid]);
                     if ($uid && !groups_is_member($groupid, $uid)) {

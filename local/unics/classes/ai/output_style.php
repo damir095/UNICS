@@ -17,8 +17,18 @@ defined('MOODLE_INTERNAL') || die();
  */
 class output_style {
 
-    /** Эмодзи, вариационный селектор и ZWJ. Стрелки (U+2190-U+21FF) сюда НЕ входят. */
-    private const EMOJI = '/[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}\x{200D}]/u';
+    /**
+     * Эмодзи, вариационный селектор, ZWJ и keycap.
+     *
+     * Текстовые стрелки U+2190-U+21FF (->, <-) сюда НЕ входят: в учебном тексте стрелка
+     * осмысленна. А вот дингбатные и «толстые» стрелки блоков U+2600-U+27BF и U+2B00-U+2BFF
+     * (вместе со звездами вроде U+2B50) - декор, и они вырезаются.
+     *
+     * Блок U+1F000-U+1F2FF (закрытые буквы, флаги) и keycap U+20E3 добавлены после ревью
+     * 2026-08-07: без них инвариант «эмодзи в выходе ИИ нет» не выполнялся.
+     */
+    private const EMOJI = '/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}'
+                        . '\x{FE0F}\x{200D}\x{20E3}]/u';
 
     /** Тире: figure dash, en dash, em dash, horizontal bar. Дефис-минус не трогаем. */
     private const DASHES = '/[\x{2012}-\x{2015}]/u';
@@ -48,23 +58,47 @@ class output_style {
      * чтобы ее обрести.
      */
     public static function shift_headings(string $text): string {
-        if (!preg_match_all('/^(#{1,6})\h+/mu', $text, $matches)) {
+        $lines = preg_split('/\R/u', $text);
+        if ($lines === false) {
             return $text;
         }
 
-        $min = 6;
-        foreach ($matches[1] as $hashes) {
-            $min = min($min, strlen($hashes));
+        // Решетка внутри блока кода - комментарий, а не заголовок. Без этой проверки одна
+        // строка «# считаем сумму» в примере на Python задирала минимум до первого уровня,
+        // перекашивала весь сдвиг и портила сам код (найдено ревью 2026-08-07).
+        $min      = 7;
+        $in_fence = false;
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*```/u', $line)) {
+                $in_fence = !$in_fence;
+                continue;
+            }
+            if (!$in_fence && preg_match('/^(#{1,6})\h+/u', $line, $m)) {
+                $min = min($min, strlen($m[1]));
+            }
         }
+
         $delta = 4 - $min;
-        if ($delta === 0) {
+        if ($min === 7 || $delta === 0) {
             return $text;
         }
 
-        return preg_replace_callback('/^(#{1,6})(\h+)/mu',
-            static function (array $m) use ($delta): string {
-                $level = min(6, max(1, strlen($m[1]) + $delta));
-                return str_repeat('#', $level) . $m[2];
-            }, $text) ?? $text;
+        $in_fence = false;
+        foreach ($lines as $i => $line) {
+            if (preg_match('/^\s*```/u', $line)) {
+                $in_fence = !$in_fence;
+                continue;
+            }
+            if ($in_fence) {
+                continue;
+            }
+            $lines[$i] = preg_replace_callback('/^(#{1,6})(\h+)/u',
+                static function (array $m) use ($delta): string {
+                    $level = min(6, max(1, strlen($m[1]) + $delta));
+                    return str_repeat('#', $level) . $m[2];
+                }, $line) ?? $line;
+        }
+
+        return implode("\n", $lines);
     }
 }

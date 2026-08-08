@@ -28,6 +28,21 @@ final class output_style_test extends \advanced_testcase {
         return preg_match_all('/[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}]/u', $t);
     }
 
+    /**
+     * Диапазоны за пределами первой версии clean(): звезды и стрелки блока U+2B00,
+     * закрытые буквы и флаги блока U+1F000, клавиатурный keycap U+20E3. Найдено ревью
+     * 2026-08-07: инвариант «эмодзи в выходе ИИ нет» на них не выполнялся.
+     */
+    public function test_emoji_outside_first_ranges_are_also_cut(): void {
+        $out = output_style::clean("⭐ Главное: раз 1️⃣ и 🆗 дальше ➡ конец");
+
+        foreach (['⭐', '🆗', '➡', "\u{20E3}", "\u{FE0F}"] as $ch) {
+            $this->assertStringNotContainsString($ch, $out, "Не вырезан символ {$ch}");
+        }
+        $this->assertStringContainsString('Главное: раз', $out);
+        $this->assertStringContainsString('конец', $out);
+    }
+
     public function test_emoji_and_long_dashes_are_gone(): void {
         $out = output_style::clean($this->dirty());
 
@@ -115,6 +130,22 @@ final class output_style_test extends \advanced_testcase {
 
         $this->assertStringContainsString("#### А", $out);
         $this->assertStringContainsString("###### Б", $out);
+    }
+
+    /**
+     * Решетка внутри блока кода - это комментарий, а не заголовок. Найдено ревью 2026-08-07:
+     * на уроке информатики строка «# считаем сумму» задирала минимум до первого уровня, весь
+     * сдвиг перекашивался, а сам пример кода портился.
+     */
+    public function test_hash_inside_code_fence_is_not_a_heading(): void {
+        $src = "## Введение\n\n```python\n# считаем сумму\nprint(1)\n```\n\n## Итог\n";
+
+        $out = output_style::shift_headings($src);
+
+        $this->assertStringContainsString("#### Введение", $out);
+        $this->assertStringContainsString("#### Итог", $out);
+        $this->assertStringContainsString("# считаем сумму", $out, 'Код не тронут');
+        $this->assertStringNotContainsString("#### считаем сумму", $out);
     }
 
     public function test_text_without_headings_is_untouched(): void {

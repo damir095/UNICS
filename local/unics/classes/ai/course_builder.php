@@ -690,18 +690,21 @@ HTML;
      * Группа доступа для комплекта, собранного по отпечатку профиля
      * ([[umk-per-student-design]], раздел 7).
      *
-     * В отличие от уровневой группы, в idnumber НЕТ хеша темы: один и тот же набор учеников
-     * должен получать ту же группу во всех темах курса, иначе групп станет темы x варианты.
+     * Ключ группы - пара «отпечаток + ТЕМА», как и у уровневой группы. Тема обязательна: без
+     * нее группа переиспользуется между запусками, состав в ней НАКАПЛИВАЕТСЯ, и ученик прошлой
+     * темы молча получает доступ к материалу следующей, для которого его не выбирали (найдено
+     * ревью 2026-08-07). Экономия на числе групп такой цены не стоит.
      *
-     * Имя нейтральное («Вариант N») намеренно: имя группы видно на странице курса, и ни ФИО
-     * ребенка, ни его диагноз туда попадать не должны. Идентичность группы несет idnumber,
-     * поэтому повтор номера после ручного удаления группы безвреден.
+     * Имя не несет ни ФИО ребенка, ни диагноза: имя группы видно на странице курса. Нумерация
+     * идет внутри темы, иначе номера росли бы через весь курс.
      */
-    public function get_or_create_profile_group(int $course_id, string $profile_key): int {
+    public function get_or_create_profile_group(int $course_id, string $profile_key, string $topic): int {
         global $DB, $CFG;
         require_once($CFG->dirroot . '/group/lib.php');
 
-        $idnumber = 'umk_fp' . substr($profile_key, 0, 8) . '_c' . $course_id;
+        $topic_hash = substr(md5($topic), 0, 8);
+        $idnumber   = 'umk_fp' . substr($profile_key, 0, 8) . '_c' . $course_id . '_' . $topic_hash;
+
         $group = $DB->get_record('groups', ['courseid' => $course_id, 'idnumber' => $idnumber]);
         if ($group) {
             return (int)$group->id;
@@ -709,14 +712,14 @@ HTML;
 
         $n = 1;
         foreach ($DB->get_records('groups', ['courseid' => $course_id], '', 'id, idnumber') as $g) {
-            if (preg_match('/^umk_fp[0-9a-f]+_c\d+$/', (string)$g->idnumber)) {
+            if (preg_match('/^umk_fp[0-9a-f]+_c\d+_' . $topic_hash . '$/', (string)$g->idnumber)) {
                 $n++;
             }
         }
 
         $data           = new \stdClass();
         $data->courseid = $course_id;
-        $data->name     = 'Вариант ' . $n;
+        $data->name     = mb_substr($topic, 0, 40) . ' - вариант ' . $n;
         $data->idnumber = $idnumber;
         return (int)groups_create_group($data);
     }
