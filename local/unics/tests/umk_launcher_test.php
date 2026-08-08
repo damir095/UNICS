@@ -23,9 +23,17 @@ final class umk_launcher_test extends \advanced_testcase {
         };
     }
 
-    private function make_student(array $fields = []): int {
+    /**
+     * Ученик, ЗАПИСАННЫЙ на курс. Запись обязательна: groups_add_member() молча возвращает
+     * false для незаписанного (group/lib.php, is_enrolled), и без нее тесты не заметили бы
+     * регресс «в группу никто не попал» - найдено ревью 2026-08-07.
+     */
+    private function make_student(array $fields = [], ?\stdClass $course = null): int {
         global $DB;
         $user = $this->getDataGenerator()->create_user();
+        if ($course !== null) {
+            $this->getDataGenerator()->enrol_user($user->id, $course->id, 'student');
+        }
         return (int)$DB->insert_record('unics_students', (object)(array_merge([
             'mdl_user_id'      => $user->id,
             'difficulty_level' => 2,
@@ -49,9 +57,9 @@ final class umk_launcher_test extends \advanced_testcase {
         global $DB;
         $this->resetAfterTest();
         $course = $this->getDataGenerator()->create_course();
-        $a = $this->make_student();
-        $b = $this->make_student();                          // тот же профиль
-        $c = $this->make_student(['difficulty_level' => 3]);  // другой
+        $a = $this->make_student([], $course);
+        $b = $this->make_student([], $course);                          // тот же профиль
+        $c = $this->make_student(['difficulty_level' => 3], $course);   // другой
         $groups = profile_fingerprint::group_students([$a, $b, $c], false, $this->gen());
 
         $created = umk_launcher::launch((int)$course->id, $groups, $this->params());
@@ -72,6 +80,18 @@ final class umk_launcher_test extends \advanced_testcase {
         }
         sort($sizes);
         $this->assertSame([1, 2], $sizes);
+
+        // Главное, ради чего лаунчер существует: дети ЛЕЖАТ в группе доступа. Без этой
+        // проверки регресс «в группу никто не попал» проходил бы сьют зеленым.
+        foreach ($umks as $umk) {
+            $sids = json_decode(
+                $DB->get_field('unics_ai_queue', 'student_ids', ['umk_id' => $umk->id]), true);
+            foreach ($sids as $sid) {
+                $uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $sid]);
+                $this->assertTrue(groups_is_member((int)$umk->mdl_group_id, $uid),
+                    "Ученик {$sid} не попал в группу доступа комплекта");
+            }
+        }
     }
 
     public function test_over_limit_creates_nothing(): void {

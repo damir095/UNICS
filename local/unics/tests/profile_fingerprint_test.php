@@ -113,6 +113,23 @@ final class profile_fingerprint_test extends \advanced_testcase {
         }
     }
 
+    /**
+     * Битый UTF-8 в профиле не должен схлопывать ключи: json_encode отдает false, а sha1(false)
+     * это sha1('') - все такие дети получили бы один комплект. Найдено ревью 2026-08-07.
+     */
+    public function test_key_survives_broken_utf8_and_stays_distinct(): void {
+        $gen  = $this->gen();
+        $base = ['categories' => [2], 'ovz_types' => [], 'difficulty_level' => 2,
+                 'class_number' => 7, 'class_letter' => 'А', 'avg_score' => 70.0];
+
+        $a = profile_fingerprint::key($base + ['special_needs' => "\xB0\xB1 первый"], $gen);
+        $b = profile_fingerprint::key($base + ['special_needs' => "\xB2\xB3 второй"], $gen);
+
+        $this->assertNotSame($a, $b, 'Разные профили - разные ключи даже при битой кодировке');
+        $this->assertNotSame(sha1(''), $a, 'Ключ не вырождается в хеш пустой строки');
+        $this->assertSame(40, strlen($a));
+    }
+
     public function test_missing_student_gives_null(): void {
         $this->resetAfterTest();
         $this->assertNull(profile_fingerprint::profile_of(999999, $this->gen()));

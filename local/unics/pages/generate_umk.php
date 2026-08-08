@@ -190,9 +190,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     }
     echo '</div>';
 
-    // Цена запуска: комплект - это отдельное обращение к ИИ на каждый выбранный материал.
+    // Цена запуска. Видео - НЕ одно обращение: сверх сценария воркер просит картинку на
+    // каждый из 5 слайдов и, если задан ключ SaluteSpeech, еще и озвучку каждого слайда
+    // (umk_processor.php, раздел 5). Первая версия счетчика считала видео за единицу и
+    // занижала цену в разы - найдено ревью 2026-08-07.
+    $video_calls = 0;
+    if (!empty($generate_video)) {
+        $video_calls = 1 + 5;                                    // сценарий + картинки слайдов
+        if (!empty(get_config('local_unics', 'salute_speech_api_key'))) {
+            $video_calls += 5;                                   // озвучка каждого слайда
+        }
+    }
     $per_set = 1 + (int)!empty($generate_quiz) + (int)!empty($generate_assignment)
-                 + (int)!empty($generate_audio) + (int)!empty($generate_video);
+                 + (int)!empty($generate_audio) + $video_calls;
     $sets    = count($groups);
     // Формулировки без числительных в родительном падеже: числа тут переменные, и
     // «1 комплектов» читалось бы неряшливо при любом значении потолка.
@@ -213,8 +223,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         $crit    = $generator->build_criteria($profile);
         $prompt  = $generator->build_prompt($profile, $topic, $extra_prompt);
 
+        // В шапке - БАЗОВЫЙ уровень группы: именно он лежит в unics_umk.difficulty_level и
+        // показывается в истории генерации. Эффективный уровень (с поправкой на балл) виден
+        // строкой ниже вместе с причиной снижения. Ставить в шапку эффективный нельзя: история
+        // хранит базовый, и педагог видел бы расхождение - а хранить в базе эффективный тем
+        // более нельзя, воркер прогнал бы adapt_level по нему второй раз.
+        $base_level = (int)$group['level'];
         echo '<div class="card p-3 mb-3">';
-        echo '<h5>' . s(($level_names[$crit['eff_level']] ?? ('Уровень ' . $crit['eff_level']))
+        echo '<h5>' . s(($level_names[$base_level] ?? ('Уровень ' . $base_level))
             . ' уровень - ' . count($group['students']) . ' уч.') . '</h5>';
 
         echo '<ul class="mb-2">';

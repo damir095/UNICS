@@ -60,6 +60,11 @@ class umk_launcher {
         $individual = !empty($params['individual']);
         $created    = 0;
 
+        // Все комплекты запуска - одной транзакцией. Без нее сбой на середине оставлял строку
+        // unics_umk со статусом «Ожидает», но БЕЗ строки очереди: воркер такую не подберет
+        // никогда, а педагог не знает, что запустилось, а что нет (найдено ревью 2026-08-07).
+        $transaction = $DB->start_delegated_transaction();
+        try {
         foreach ($groups as $key => $group) {
             $umkid = (int)$DB->insert_record('unics_umk', (object)[
                 'difficulty_level' => (int)$group['level'],
@@ -77,6 +82,12 @@ class umk_launcher {
             if ($individual) {
                 $uid = (int)$DB->get_field('unics_students', 'mdl_user_id',
                     ['id' => (int)$group['students'][0]]);
+                if (!$uid) {
+                    // Ученик исчез между превью и подтверждением. Без этой проверки uid=0
+                    // заводил группу с именем «УМК: » и падал внутри groups_add_member.
+                    throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                        'Учащийся #' . (int)$group['students'][0] . ' не найден - запуск отменен.');
+                }
                 $groupid = $builder->get_or_create_student_group($course_id, $uid);
             } else {
                 $groupid = $builder->get_or_create_profile_group($course_id, $key, $params['topic']);
@@ -91,6 +102,11 @@ class umk_launcher {
 
             ai_queue::enqueue($umkid, array_values($group['students']), $params['flags']);
             $created++;
+        }
+            $transaction->allow_commit();
+        } catch (\Throwable $e) {
+            // rollback() пробрасывает исключение дальше сам.
+            $transaction->rollback($e);
         }
 
         return $created;

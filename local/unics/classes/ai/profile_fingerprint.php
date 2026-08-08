@@ -69,7 +69,15 @@ class profile_fingerprint {
         $criteria = $gen->build_criteria($profile);
         unset($criteria['avg_score']);
         ksort($criteria);
-        return sha1(json_encode($criteria, JSON_UNESCAPED_UNICODE));
+
+        // json_encode отдает false на битом UTF-8 (например строка из импорта в cp1251), а
+        // sha1(false) - это sha1(''), то есть ВСЕ такие профили схлопнулись бы в один ключ и
+        // ребенок с ЗПР получил бы материал по профилю одаренного. Найдено ревью 2026-08-07.
+        $json = json_encode($criteria, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            $json = serialize($criteria);
+        }
+        return sha1($json);
     }
 
     /**
