@@ -74,4 +74,31 @@ final class refusal_detector_test extends \basic_testcase {
     public function test_length_finish_reason_is_not_refusal(): void {
         $this->assertFalse(refusal_detector::is_refusal(self::REAL_LECTURE, 'length'));
     }
+
+    /**
+     * Полноразмерная лекция с маркерной фразой внутри - НЕ отказ.
+     *
+     * Найдено ревью: маркеры искались подстрокой по всему ответу, и законный урок про
+     * искусственный интеллект («программа не обладает собственным мнением») объявлялся
+     * отказом и убивался. Болванки укладываются в 336-367 символов, настоящие материалы
+     * начинаются от 1700, поэтому маркеры применяются только к короткому тексту.
+     */
+    public function test_full_length_lecture_with_marker_phrase_is_not_refusal(): void {
+        $lecture = "#### Что такое искусственный интеллект\n\n"
+            . str_repeat('Текст урока про машинное обучение. ', 40)
+            . 'Важно понимать: программа не обладает собственным мнением и лишь повторяет '
+            . 'закономерности из данных. '
+            . str_repeat('Продолжение урока про нейронные сети. ', 40);
+
+        $this->assertGreaterThan(refusal_detector::MAX_REFUSAL_LEN, \core_text::strlen($lecture));
+        $this->assertFalse(refusal_detector::is_refusal($lecture, 'stop'));
+    }
+
+    /** Но blacklist перевешивает любую длину: это прямой сигнал сервера. */
+    public function test_blacklist_wins_over_full_length_text(): void {
+        $long = str_repeat('Совершенно обычный учебный текст. ', 100);
+
+        $this->assertGreaterThan(refusal_detector::MAX_REFUSAL_LEN, \core_text::strlen($long));
+        $this->assertTrue(refusal_detector::is_refusal($long, refusal_detector::BLACKLIST));
+    }
 }

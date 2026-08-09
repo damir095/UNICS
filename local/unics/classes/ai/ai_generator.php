@@ -265,7 +265,14 @@ class ai_generator {
             $this->last_finish_reason = '';
             $raw = $this->generate_text_gigachat($prompt, $max_tokens);
 
-            if (!refusal_detector::is_refusal($raw, $this->last_finish_reason)) {
+            if (refusal_detector::is_refusal($raw, $this->last_finish_reason)) {
+                // След обязателен: без него удачный повтор неотличим от чистого прогона, и
+                // мы не узнаем ни частоту отказов, ни какой сигнал сработал. Эта задача и
+                // возникла из-за сбоя, который молчал.
+                debugging('local_unics: отказ ИИ, попытка ' . $attempt . ' из 2, finish_reason: ['
+                    . $this->last_finish_reason . '], ответ: '
+                    . mb_substr(trim($raw), 0, 120), DEBUG_NORMAL);
+            } else {
                 // Единственное горлышко всех шести выходов ИИ ([[ai-output-style-design]]): чистка
                 // стоит здесь, чтобы ни один вызывающий не мог о ней забыть. Для JSON-выходов
                 // (тест, слайды) это безопасно: вырезание эмодзи и замена тире не меняют ни

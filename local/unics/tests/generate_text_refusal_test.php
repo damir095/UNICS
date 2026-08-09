@@ -51,6 +51,8 @@ final class generate_text_refusal_test extends \advanced_testcase {
 
         $this->assertSame(2, $gen->calls);
         $this->assertStringContainsString('Круговорот воды', $out);
+        // След первого отказа обязателен: иначе удачный повтор неотличим от чистого прогона.
+        $this->assertDebuggingCalledCount(1);
     }
 
     /** Два отказа подряд - исключение с внятным текстом, третьей попытки нет. */
@@ -74,6 +76,8 @@ final class generate_text_refusal_test extends \advanced_testcase {
         }
 
         $this->assertSame(2, $gen->calls);
+        // По следу на каждую неудачную попытку - видно, что повтор действительно был.
+        $this->assertDebuggingCalledCount(2);
     }
 
     /** Нормальный ответ - ровно один запрос, лишнего обращения к ИИ нет. */
