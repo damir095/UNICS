@@ -134,6 +134,15 @@ if ($hassiteconfig) {
     ));
 
     $settings->add(new admin_setting_configtext(
+        'local_unics/ai_image_model',
+        'Модель для изображений',
+        'Нужна модель со встроенной функцией text2image. Проверено: GigaChat-2. '
+            . 'Модель GigaChat (без цифры) на запрос картинки не отвечает вовсе. '
+            . 'Оставьте пустым - будет использована GigaChat-2.',
+        '', PARAM_TEXT
+    ));
+
+    $settings->add(new admin_setting_configtext(
         'local_unics/umk_max_per_run',
         'Потолок комплектов за один запуск',
         'Сколько различных комплектов УМК разрешено поставить в очередь за одну генерацию. '

@@ -11,6 +11,7 @@ class ai_generator {
     private string $provider;
     private string $api_key;
     private string $model;
+    private string $image_model;
     private string $tts_provider;
     private string $salute_key;
 
@@ -22,6 +23,11 @@ class ai_generator {
 
         $configured  = get_config('local_unics', 'ai_model');
         $this->model = $configured ?: 'GigaChat';
+
+        // Картинки требуют модели со встроенной функцией text2image. GigaChat без цифры
+        // на такой запрос не отвечает вовсе (HTTP 0, замерено 2026-08-09), поэтому модель
+        // картинок отвязана от текстовой: текстовая генерация работает и трогать ее незачем.
+        $this->image_model = get_config('local_unics', 'ai_image_model') ?: 'GigaChat-2';
     }
 
     public function get_audio_ext(): string {
@@ -680,6 +686,23 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
     // Генерация изображения через GigaChat text2image
     // Возвращает бинарные данные JPEG или пустую строку при ошибке
     // ----------------------------------------------------------------
+    /**
+     * Тело запроса на генерацию картинки.
+     *
+     * КЛЮЧЕВОЕ: массива `functions` тут быть НЕ ДОЛЖНО. Объявляя text2image в functions,
+     * мы делали встроенную серверную функцию GigaChat клиентской - модель возвращала вызов
+     * НАМ (finish_reason: function_call, content пуст), а UUID наш код ищет именно в content.
+     * Отсюда «UUID изображения не найден в ответе» и ноль картинок за все время работы
+     * функции ([[ai-lecture-images-design]], раздел 1).
+     */
+    public function build_image_payload(string $prompt): array {
+        return [
+            'model'         => $this->image_model,
+            'messages'      => [['role' => 'user', 'content' => $prompt]],
+            'function_call' => ['name' => 'text2image'],
+        ];
+    }
+
     public function generate_image(string $prompt): string {
         if (empty($this->api_key)) {
             throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
@@ -687,22 +710,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
 
         $token = $this->get_gigachat_token();
 
-        $payload = json_encode([
-            'model'         => $this->model,
-            'messages'      => [['role' => 'user', 'content' => $prompt]],
-            'function_call' => 'auto',
-            'functions'     => [[
-                'name'        => 'text2image',
-                'description' => 'Generates an image from a text description',
-                'parameters'  => [
-                    'type'       => 'object',
-                    'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'Image generation prompt'],
-                    ],
-                    'required' => ['query'],
-                ],
-            ]],
-        ]);
+        $payload = json_encode($this->build_image_payload($prompt));
 
         $ch = curl_init('https://gigachat.devices.sberbank.ru/api/v1/chat/completions');
         curl_setopt_array($ch, [
