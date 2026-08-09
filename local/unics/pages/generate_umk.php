@@ -79,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $generate_quiz       = optional_param('generate_quiz',       1, PARAM_INT);
     $generate_assignment = optional_param('generate_assignment', 0, PARAM_INT);
     $generate_video      = optional_param('generate_video',      0, PARAM_INT);
+    $generate_images     = optional_param('generate_images',     0, PARAM_INT);
     $extra_prompt        = optional_param('extra_prompt',       '', PARAM_TEXT);
     $individual          = optional_param('individual',          0, PARAM_INT);
     $student_ids    = array_filter($student_ids);
@@ -181,6 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 'generate_quiz'       => (int)$generate_quiz,
                 'generate_assignment' => (int)$generate_assignment,
                 'generate_video'      => (int)$generate_video,
+                'generate_images'     => (int)$generate_images,
             ],
         ]);
 
@@ -234,6 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     if ($generate_assignment) { $materials[] = 'письменное задание'; }
     if ($generate_audio)      { $materials[] = 'аудиоматериал'; }
     if ($generate_video)      { $materials[] = 'видеопрезентация'; }
+    if ($generate_images)     { $materials[] = 'иллюстрации в тексте'; }
 
     echo $OUTPUT->header();
     echo local_unics_dashboard_button();
@@ -261,8 +264,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             $video_calls += 5;                                   // озвучка каждого слайда
         }
     }
+    // Иллюстрации лекции - до MAX_IMAGES обращений (по одному на смысловой раздел).
+    // Считаем по потолку, как видео считается по фиксированным пяти слайдам: занизить
+    // цену хуже, чем завысить, а страница и так говорит «примерно».
+    $image_calls = !empty($generate_images)
+        ? \local_unics\ai\lecture_illustrator::MAX_IMAGES
+        : 0;
     $per_set = 1 + (int)!empty($generate_quiz) + (int)!empty($generate_assignment)
-                 + (int)!empty($generate_audio) + $video_calls;
+                 + (int)!empty($generate_audio) + $video_calls + $image_calls;
     $sets    = count($groups);
     // Формулировки без числительных в родительном падеже: числа тут переменные, и
     // «1 комплектов» читалось бы неряшливо при любом значении потолка.
@@ -355,6 +364,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         'generate_quiz'       => (int)$generate_quiz,
         'generate_assignment' => (int)$generate_assignment,
         'generate_video'      => (int)$generate_video,
+        'generate_images'     => (int)$generate_images,
         'individual'          => (int)$individual,
     ];
     foreach ($hidden as $hn => $hv) {
@@ -657,6 +667,13 @@ echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
 echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_video', 'name' => 'generate_video',
     'value' => '1', 'class' => 'form-check-input']);
 echo html_writer::tag('label', 'Видеопрезентация (HTML5, 5 слайдов)', ['for' => 'gen_video', 'class' => 'form-check-label']);
+echo html_writer::end_tag('div');
+
+echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
+echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_images', 'name' => 'generate_images',
+    'value' => '1', 'checked' => 'checked', 'class' => 'form-check-input']);
+echo html_writer::tag('label', 'Иллюстрации в тексте (до 4 обращений к ИИ)',
+    ['for' => 'gen_images', 'class' => 'form-check-label']);
 echo html_writer::end_tag('div');
 
 echo '</div>';

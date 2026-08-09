@@ -26,7 +26,7 @@ class ai_queue {
      *
      * @param int $umkid id строки unics_umk
      * @param int[] $studentids id учащихся (unics_students)
-     * @param array $flags generate_audio|generate_quiz|generate_assignment|generate_video (0/1)
+     * @param array $flags generate_audio|generate_quiz|generate_assignment|generate_video|generate_images (0/1)
      * @return int id строки очереди
      */
     public static function enqueue(int $umkid, array $studentids, array $flags): int {
@@ -40,6 +40,7 @@ class ai_queue {
             'generate_quiz'       => (int)($flags['generate_quiz'] ?? 1),
             'generate_assignment' => (int)($flags['generate_assignment'] ?? 0),
             'generate_video'      => (int)($flags['generate_video'] ?? 0),
+            'generate_images'     => (int)($flags['generate_images'] ?? 0),
             'status'              => self::STATUS_PENDING,
             'created_at'          => time(),
         ]);

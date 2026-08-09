@@ -105,4 +105,28 @@ final class ai_queue_test extends \advanced_testcase {
         $this->assertSame(ai_queue::STATUS_PROCESSING, (int)$DB->get_field('unics_ai_queue', 'status', ['id' => $live]));
         $this->assertStringContainsString('прервана', (string)$DB->get_field('unics_ai_queue', 'error_message', ['id' => $stale]));
     }
+
+    /**
+     * Флаг иллюстраций доезжает до строки очереди. На форме галочка включена по
+     * умолчанию, а в БД DEFAULT 0: умолчание интерфейса и умолчание схемы - разные
+     * вещи ([[ai-lecture-images-design]], раздел 5).
+     */
+    public function test_enqueue_stores_generate_images_flag(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $umkid = (int)$DB->insert_record('unics_umk', (object)[
+            'difficulty_level' => 1,
+            'title'            => 'Вода',
+            'topic'            => 'Вода в природе',
+            'target_section'   => 1,
+            'status'           => 1,
+        ]);
+
+        $onid  = ai_queue::enqueue($umkid, [1], ['generate_images' => 1]);
+        $offid = ai_queue::enqueue($umkid, [1], []);
+
+        $this->assertSame(1, (int)$DB->get_field('unics_ai_queue', 'generate_images', ['id' => $onid]));
+        $this->assertSame(0, (int)$DB->get_field('unics_ai_queue', 'generate_images', ['id' => $offid]));
+    }
 }
