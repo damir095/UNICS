@@ -39,6 +39,12 @@ if ($is_methodist) {
     $methodist_org_id = 0;
 }
 
+// Курсы, доступные пользователю по делегированию. null = без ограничения (админ, региональные
+// роли, педагог-создатель); массив (возможно пустой) - для методистов организации и
+// муниципалитета. Резолвится ОДИН раз и питает и выпадающий список, и проверку POST: раздвоение
+// этих двух путей и породило утечку по ученической оси (см. запись в журнале за 2026-08-09).
+$deleg_course_ids = \local_unics\identity\delegation_manager::get_delegated_course_ids_for_user((int)$USER->id);
+
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/generate_umk.php'));
 $PAGE->set_title('Генерация УМК - УНИКС');
@@ -81,6 +87,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             new moodle_url('/local/unics/pages/generate_umk.php'),
             'Не настроен API-ключ ИИ. Администрирование → Локальные плагины → УНИКС: Настройки ИИ',
             null, \core\output\notification::NOTIFY_ERROR
+        );
+    }
+
+    // Ось КУРСА: методист может засевать материалом только делегированные ему курсы. Без этой
+    // проверки он мог создать активности в ЛЮБОМ курсе сайта. Прием и текст - как в
+    // enrol_students.php; предусловий по правам у get_delegated_course_ids_for_user() нет,
+    // педагогу-создателю она возвращает null, поэтому его это не затрагивает.
+    if ($deleg_course_ids !== null && !in_array((int)$course_id, $deleg_course_ids, true)) {
+        redirect(
+            new moodle_url('/local/unics/pages/generate_umk.php'),
+            'Этот курс вам не делегирован.',
+            null, \core\output\notification::NOTIFY_WARNING
         );
     }
 
@@ -375,8 +393,13 @@ for ($i = 1; $i <= 11; $i++) { $classes_menu[$i] = "{$i} класс"; }
 $letters_menu = ['' => '- все буквы -', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
                  'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
 
-// Курсы
+// Курсы. Список фильтруется тем же $deleg_course_ids, что проверяет POST, - страница не должна
+// предлагать то, что потом отвергнет.
 $courses = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
+if ($deleg_course_ids !== null) {
+    $allowed_courses = array_fill_keys($deleg_course_ids, true);
+    $courses = array_filter($courses, fn($c) => isset($allowed_courses[(int)$c->id]));
+}
 
 // Предвыбор курса при переходе из шаблонов (course_templates.php)
 $preselect_course = optional_param('course_id', 0, PARAM_INT);
