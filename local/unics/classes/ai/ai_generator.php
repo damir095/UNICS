@@ -19,6 +19,16 @@ class ai_generator {
      * тесты поле не трогают, у них остается пустая строка.
      */
     private string $last_finish_reason = '';
+    /**
+     * Кеш OAuth-токена GigaChat: сам токен и время истечения (секунды Unix).
+     *
+     * Токен живет 30 минут, а запрашивался на КАЖДЫЙ вызов ИИ - комплект с девятью
+     * картинками делал около 11 авторизаций вместо одной. Кеш уровня экземпляра
+     * достаточен: umk_processor держит один ai_generator на весь прогон
+     * ([[ai-image-reliability-design]], раздел 2.3).
+     */
+    private string $token_cache = '';
+    private int $token_expires_at = 0;
     private string $tts_provider;
     private string $salute_key;
 
@@ -293,7 +303,12 @@ class ai_generator {
     // ----------------------------------------------------------------
     // GigaChat OAuth 2.0 - получить Bearer-токен
     // ----------------------------------------------------------------
-    private function get_gigachat_token(): string {
+    /**
+     * Сырой OAuth. protected - шов для подмены сети в тестах.
+     *
+     * @return array{token: string, expires_at: int} expires_at в СЕКУНДАХ Unix
+     */
+    protected function fetch_gigachat_token(): array {
         $ch = curl_init('https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -324,12 +339,34 @@ class ai_generator {
             throw new \moodle_exception('GigaChat auth HTTP ' . $auth_code . ': ' . $auth_resp);
         }
 
-        $token = json_decode($auth_resp, true)['access_token'] ?? '';
+        $decoded = json_decode($auth_resp, true);
+        $token   = $decoded['access_token'] ?? '';
         if (empty($token)) {
             throw new \moodle_exception('GigaChat: не удалось получить access_token');
         }
 
-        return $token;
+        // Сбер отдает expires_at в МИЛЛИСЕКУНДАХ (замерено: 1786308715480). Без перевода
+        // в секунды сравнение с time() считало бы токен вечным, и после реального
+        // истечения все посыпалось бы с 401.
+        $expires_ms = (int)($decoded['expires_at'] ?? 0);
+
+        return ['token' => $token, 'expires_at' => (int)($expires_ms / 1000)];
+    }
+
+    /**
+     * Токен с кешем. Запас в 60 секунд обязателен: без него токен мог бы истечь между
+     * проверкой и самим запросом к ИИ, и вызов упал бы с 401 на ровном месте.
+     */
+    protected function get_gigachat_token(): string {
+        if ($this->token_cache !== '' && $this->token_expires_at - time() > 60) {
+            return $this->token_cache;
+        }
+
+        $fresh = $this->fetch_gigachat_token();
+        $this->token_cache      = $fresh['token'];
+        $this->token_expires_at = $fresh['expires_at'];
+
+        return $this->token_cache;
     }
 
     // ----------------------------------------------------------------
