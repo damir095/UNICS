@@ -303,6 +303,52 @@ final class umk_processor_test extends \advanced_testcase {
             ['umk_id' => $umkid, 'material_type' => 3]));
     }
 
+    /**
+     * Метка недоступности гасит и озвучку СЛАЙДОВ, а не только галочку аудиоматериала.
+     *
+     * Найдено ревью: слайды гейтились одним лишь наличием ключа, поэтому при известной
+     * недоступности видеопрезентация все равно делала обреченный запрос на каждый слайд -
+     * до сотни бесполезных обращений за запуск при потолке комплектов.
+     */
+    public function test_known_unavailable_tts_skips_slide_narration(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, , , , $queueid] = $this->make_fixture();
+        $DB->set_field('unics_ai_queue', 'generate_video', 1, ['id' => $queueid]);
+        set_config('ai_api_key', 'fake-key-for-test', 'local_unics');
+        set_config('salute_speech_api_key', 'FAKE_KEY', 'local_unics');
+        \local_unics\ai\tts_status::mark_unavailable('Payment Required');
+
+        $generator = new class extends ai_generator {
+            public int $audio_calls = 0;
+            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+                return 'Учебный текст про воду длиной более пятидесяти символов для проверки.';
+            }
+            public function generate_video_script(array $profile, string $topic,
+                    string $source_text = '', string $extra_context = ''): array {
+                return [
+                    ['title' => 'Слайд 1', 'content' => 'Текст 1', 'key_points' => []],
+                    ['title' => 'Слайд 2', 'content' => 'Текст 2', 'key_points' => []],
+                ];
+            }
+            public function generate_audio(string $text): string {
+                $this->audio_calls++;
+                return 'fake-wav';
+            }
+            public function generate_image(string $prompt): string {
+                return "\xFF\xD8\xFF\xE0fake";
+            }
+            public function get_avg_score(int $mdl_user_id): float {
+                return 75.0;
+            }
+        };
+
+        $this->expectOutputRegex('~готов~');
+        (new umk_processor($generator))->process(ai_queue::claim($queueid));
+
+        $this->assertSame(0, $generator->audio_calls);
+    }
+
     /** Флаг снят - ни одного обращения за картинкой, счетчики остаются NULL. */
     public function test_without_flag_no_images_and_counters_stay_null(): void {
         global $DB;

@@ -37,10 +37,26 @@ class tts_status {
         set_config(self::AT, time(), 'local_unics');
     }
 
-    /** Снять метку: синтез удался, значит пакет оплачен. */
+    /**
+     * Снять метку: синтез удался, значит пакет оплачен.
+     *
+     * Гейт по is_unavailable() не косметика: без него метод писал бы настройки на КАЖДОМ
+     * удачном синтезе (пять раз на одну видеопрезентацию), а set_config сравнивает значения
+     * строго (`$record->value !== $value`, moodlelib.php:982) - переданный int 0 никогда не
+     * равен хранимой строке, поэтому короткое замыкание ядра не срабатывало и каждый вызов
+     * сбрасывал кеш всех настроек плагина.
+     */
     public static function mark_available(): void {
+        if (!self::is_unavailable()) {
+            return;
+        }
         set_config(self::REASON, '', 'local_unics');
-        set_config(self::AT, 0, 'local_unics');
+        set_config(self::AT, '0', 'local_unics');
+    }
+
+    /** Когда поставлена метка; 0 = метки нет. Показывается педагогу на форме генерации. */
+    public static function marked_at(): int {
+        return (int)get_config('local_unics', self::AT);
     }
 
     public static function is_unavailable(): bool {

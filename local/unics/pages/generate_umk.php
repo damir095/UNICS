@@ -677,9 +677,12 @@ echo html_writer::empty_tag('input', $audio_attrs);
 echo html_writer::tag('label', 'Аудиоматериал (TTS, SaluteSpeech)',
     ['for' => 'gen_audio', 'class' => 'form-check-label' . ($tts_off ? ' text-muted' : '')]);
 if ($tts_off) {
+    // Дата делает метку проверяемой: без нее непонятно, свежий это отказ или прошлогодний.
+    $tts_at   = \local_unics\ai\tts_status::marked_at();
+    $tts_when = $tts_at > 0 ? ' Проверено ' . userdate($tts_at, '%d.%m.%Y') . '.' : '';
     echo html_writer::tag('div',
         'Недоступно: у аккаунта Сбера нет оплаченного пакета SmartSpeech. '
-        . 'Заработает само после оплаты.',
+        . 'Заработает само после оплаты.' . $tts_when,
         ['class' => 'small text-muted ml-4']);
 }
 echo html_writer::end_tag('div');

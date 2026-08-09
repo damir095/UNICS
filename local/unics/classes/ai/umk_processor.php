@@ -274,7 +274,10 @@ class umk_processor {
 
                     $slide_audios = [];
                     $salute_key = get_config('local_unics', 'salute_speech_api_key');
-                    if (!empty($salute_key)) {
+                    // Метка недоступности гасит и слайды: иначе при известном 402 каждый
+                    // слайд делал бы обреченный запрос, до сотни за запуск при потолке
+                    // комплектов ([[tts-honest-availability-design]]).
+                    if (!empty($salute_key) && !tts_status::is_unavailable()) {
                         foreach ($slides as $i => $slide) {
                             $slide_text = $generator->strip_for_tts($slide['content']);
                             try {

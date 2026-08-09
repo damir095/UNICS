@@ -63,6 +63,28 @@ final class tts_402_test extends \advanced_testcase {
         $this->assertFalse(tts_status::is_unavailable());
     }
 
+    /**
+     * 402 с пустым телом все равно ставит метку.
+     *
+     * Найдено ревью: причина бралась из ответа без запасного значения, а
+     * mark_unavailable() на пустой причине выходит молча. Ответ без message оставлял бы
+     * галочку активной навсегда, и вся функция была бы мертвой.
+     */
+    public function test_402_with_empty_body_still_marks(): void {
+        $this->resetAfterTest();
+        set_config('salute_speech_api_key', 'FAKE_KEY', 'local_unics');
+
+        try {
+            $this->generator(402, '')->generate_audio('Текст урока.');
+            $this->fail('Ожидалось исключение при 402');
+        } catch (\moodle_exception $e) {
+            $this->assertStringContainsString('402', $e->getMessage());
+        }
+
+        $this->assertTrue(tts_status::is_unavailable());
+        $this->assertNotSame('', tts_status::reason());
+    }
+
     /** Удачный синтез снимает метку - путь «пакет оплатили». */
     public function test_success_clears_the_mark(): void {
         $this->resetAfterTest();
