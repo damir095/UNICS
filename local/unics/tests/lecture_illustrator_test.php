@@ -59,6 +59,43 @@ final class lecture_illustrator_test extends \basic_testcase {
         $this->assertStringEndsWith('словоформа', $secs[0]['lead']);
     }
 
+    /**
+     * Модель размечает не плоский список «####», а иерархию: после
+     * output_style::shift_headings() в тексте живут #### / ##### / ######.
+     * Найдено живой генерацией 2026-08-09: заголовок «##### Краткое введение»
+     * попадал в alt как «# Краткое введение» - лишние решетки утекали в разметку.
+     */
+    public function test_split_sections_handles_deeper_heading_levels(): void {
+        $md = "#### Урок\n\nВступление.\n\n##### Краткое введение\n\nТекст.\n\n"
+            . "###### Что такое порода\n\nЕще текст.";
+        $secs = lecture_illustrator::split_sections($md, 'Тема');
+
+        $this->assertCount(3, $secs);
+        $this->assertSame('Урок', $secs[0]['heading']);
+        $this->assertSame('Краткое введение', $secs[1]['heading']);
+        $this->assertSame('Что такое порода', $secs[2]['heading']);
+    }
+
+    /** Markdown-выделение в заголовке не должно попадать ни в alt, ни в промт. */
+    public function test_split_sections_strips_markdown_emphasis_from_heading(): void {
+        $secs = lecture_illustrator::split_sections(
+            "###### **Что такое горная порода?**\n\nТекст.", 'Тема');
+
+        $this->assertSame('Что такое горная порода?', $secs[0]['heading']);
+    }
+
+    public function test_insert_images_alt_has_no_hashes_or_asterisks(): void {
+        $md   = "##### Краткое введение\n\nТекст.\n\n###### **Виды пород**\n\nТекст.";
+        $secs = lecture_illustrator::split_sections($md, 'Тема');
+        $out  = lecture_illustrator::insert_images($md, $secs,
+            [0 => 'lecture-1.jpg', 1 => 'lecture-2.jpg']);
+
+        $this->assertStringContainsString('alt="Краткое введение"', $out);
+        $this->assertStringContainsString('alt="Виды пород"', $out);
+        $this->assertStringNotContainsString('alt="#', $out);
+        $this->assertStringNotContainsString('alt="**', $out);
+    }
+
     public function test_prompt_for_zpr_asks_for_single_object(): void {
         $p = lecture_illustrator::build_image_prompt(
             ['ovz_type_ids' => [4]], 'Вода в природе', 'Круговорот', 'Вода испаряется.');

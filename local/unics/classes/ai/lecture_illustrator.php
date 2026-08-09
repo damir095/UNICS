@@ -25,8 +25,14 @@ class lecture_illustrator {
      */
     public const MAX_IMAGES = 4;
 
-    /** Заголовок раздела после output_style::shift_headings(). Общий для разбора и вставки. */
-    private const HEADING_RE = '/^####[ \t]*(.+?)[ \t]*$/mu';
+    /**
+     * Заголовок раздела после output_style::shift_headings(). Общий для разбора и вставки.
+     *
+     * Уровней от четырех до шести намеренно: сдвиг превращает модельные # / ## / ### в
+     * #### / ##### / ######, и модель размечает не плоский список, а иерархию. Ловить
+     * только «####» значило бы иллюстрировать один заголовок документа.
+     */
+    private const HEADING_RE = '/^#{4,6}[ \t]*(.+?)[ \t]*$/mu';
 
     /** Сколько символов раздела уходит в промт картинки. */
     private const LEAD_LEN = 200;
@@ -62,7 +68,7 @@ class lecture_illustrator {
         if (preg_match_all(self::HEADING_RE, $md, $m, PREG_OFFSET_CAPTURE)) {
             foreach ($m[0] as $i => $whole) {
                 $found[] = [
-                    'heading' => trim($m[1][$i][0]),
+                    'heading' => self::clean_heading($m[1][$i][0]),
                     'hstart'  => $whole[1],
                     'bstart'  => $whole[1] + strlen($whole[0]),
                 ];
@@ -141,8 +147,16 @@ class lecture_illustrator {
                 if (!isset($filenames[$idx])) {
                     return $m[0];
                 }
-                return $m[0] . "\n\n" . self::img_tag($filenames[$idx], trim($m[1]));
+                return $m[0] . "\n\n" . self::img_tag($filenames[$idx], self::clean_heading($m[1]));
             }, $md);
+    }
+
+    /**
+     * Текст заголовка без разметки: остаток решеток от более глубокого уровня и
+     * markdown-выделение. И то и другое утекало в alt картинки при живой генерации.
+     */
+    private static function clean_heading(string $raw): string {
+        return trim(preg_replace('/^[#*_\s]+|[#*_\s]+$/u', '', $raw));
     }
 
     /** Разметка одной картинки. Класс - хук для стиля в _unics-pages.scss. */
