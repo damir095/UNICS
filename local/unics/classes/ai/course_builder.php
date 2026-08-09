@@ -71,16 +71,23 @@ class course_builder {
                 if ((string)$binary === '') {
                     continue;
                 }
-                $fs->create_file_from_string([
-                    'contextid'    => $ctx->id,
-                    'component'    => 'mod_page',
-                    'filearea'     => 'content',
-                    'itemid'       => 0, // mod_page_pluginfile() читает область жестко с itemid 0.
-                    'filepath'     => '/',
-                    'filename'     => $filename,
-                    'timecreated'  => time(),
-                    'timemodified' => time(),
-                ], $binary);
+                try {
+                    $fs->create_file_from_string([
+                        'contextid'    => $ctx->id,
+                        'component'    => 'mod_page',
+                        'filearea'     => 'content',
+                        'itemid'       => 0, // mod_page_pluginfile() читает область жестко с itemid 0.
+                        'filepath'     => '/',
+                        'filename'     => $filename,
+                        'timecreated'  => time(),
+                        'timemodified' => time(),
+                    ], $binary);
+                } catch (\Throwable $e) {
+                    // Страница уже создана: падение на записи файла угробило бы весь УМК
+                    // из-за одной картинки. Ссылка останется битой, зато материал выйдет.
+                    mtrace('  [warn] Файл иллюстрации ' . $filename . ' не сохранен: '
+                        . $e->getMessage());
+                }
             }
         }
 

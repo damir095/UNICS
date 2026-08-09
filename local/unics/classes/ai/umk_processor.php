@@ -104,6 +104,7 @@ class umk_processor {
             $lecture_names = [];   // индекс раздела => имя файла, уходит в insert_images
             $images_made   = 0;
             $images_total  = 0;
+            $illustrated_text = $text;   // текст СТРАНИЦЫ; $text остается чистым для остальных
 
             $generate_images = isset($task->generate_images) ? (int)$task->generate_images : 0;
             if ($generate_images && !empty(get_config('local_unics', 'ai_api_key'))) {
@@ -127,7 +128,13 @@ class umk_processor {
                     }
                 }
 
-                $text = lecture_illustrator::insert_images($text, $sections, $lecture_names);
+                // ОТДЕЛЬНАЯ переменная, а не перезапись $text. Иллюстрированный текст идет
+                // ТОЛЬКО в страницу лекции. Если положить разметку обратно в $text, она
+                // уедет во вторичные генераторы: strip_for_tts() чистит markdown, но HTML
+                // не трогает вообще, и синтез речи зачитал бы ребенку тег <img>; а тесту,
+                // заданию и видео 400 символов разметки вытеснили бы настоящий текст -
+                // источник там режется по 2000 символов.
+                $illustrated_text = lecture_illustrator::insert_images($text, $sections, $lecture_names);
                 mtrace("  Иллюстрации лекции: {$images_made} из " . count($sections));
             }
 
@@ -158,7 +165,7 @@ class umk_processor {
                 (int)$umk->mdl_course_id,
                 $section,
                 $umk->title,
-                $text,
+                $illustrated_text,
                 $lecture_files
             );
             $builder->restrict_activity_to_group($text_cmid, $group_id);

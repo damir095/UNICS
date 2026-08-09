@@ -214,6 +214,55 @@ final class umk_processor_test extends \advanced_testcase {
             ['umk_id' => $umkid, 'material_type' => 1]));
     }
 
+    /**
+     * Разметка картинок НЕ должна утекать во вторичные генераторы.
+     *
+     * strip_for_tts() чистит markdown и LaTeX, но HTML не трогает вообще
+     * (ai_generator.php:360), поэтому тег <img> ушел бы в синтез речи и ребенок
+     * услышал бы его зачитанным вслух. Те же 400 символов разметки вытесняли бы
+     * настоящий текст из промтов теста, задания и видео - там источник режется
+     * по 2000 символов.
+     */
+    public function test_illustration_markup_does_not_leak_into_secondary_generators(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, , , , $queueid] = $this->make_fixture();
+        $DB->set_field('unics_ai_queue', 'generate_images', 1, ['id' => $queueid]);
+        $DB->set_field('unics_ai_queue', 'generate_audio', 1, ['id' => $queueid]);
+        set_config('ai_api_key', 'fake-key-for-test', 'local_unics');
+
+        $seen = new \stdClass();
+        $seen->tts = null;
+        $generator = new class($seen) extends ai_generator {
+            public function __construct(private \stdClass $seen) {
+                parent::__construct();
+            }
+            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+                return "#### Круговорот\n\nВода испаряется.\n\n#### Осадки\n\nВода выпадает.";
+            }
+            public function generate_image(string $prompt): string {
+                return "\xFF\xD8\xFF\xE0fake-jpeg-bytes";
+            }
+            public function generate_audio(string $text): string {
+                $this->seen->tts = $text;
+                return 'fake-wav';
+            }
+            public function get_avg_score(int $mdl_user_id): float {
+                return 75.0;
+            }
+        };
+
+        $this->expectOutputRegex('~готов~');
+        (new umk_processor($generator))->process(ai_queue::claim($queueid));
+
+        $this->assertNotNull($seen->tts);
+        $this->assertStringNotContainsString('unics-lecture-img', $seen->tts);
+        $this->assertStringNotContainsString('@@PLUGINFILE@@', $seen->tts);
+        $this->assertStringNotContainsString('<img', $seen->tts);
+        // Настоящий текст при этом на месте.
+        $this->assertStringContainsString('Вода испаряется', $seen->tts);
+    }
+
     /** Флаг снят - ни одного обращения за картинкой, счетчики остаются NULL. */
     public function test_without_flag_no_images_and_counters_stay_null(): void {
         global $DB;

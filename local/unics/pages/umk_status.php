@@ -268,11 +268,13 @@ if (empty($records)) {
         // уходил только в лог задачи, и ноль из пяти жил годами незамеченным
         // ([[ai-lecture-images-design]], раздел 6).
         if ($r->images_total !== null && (int)$r->images_total > 0) {
-            $made  = (int)$r->images_made;
-            $total = (int)$r->images_total;
-            $cls   = $made < $total ? 'text-danger' : 'text-muted';
+            // Имена с префиксом img_: голое $total выше по файлу (строка 211) - это число
+            // записей для пагинатора, и перезапись внутри цикла гасила бы его целиком.
+            $img_made  = (int)$r->images_made;
+            $img_total = (int)$r->images_total;
+            $cls       = $img_made < $img_total ? 'text-danger' : 'text-muted';
             $status .= '<br><small class="' . $cls . '">Иллюстрации: '
-                . $made . ' из ' . $total . '</small>';
+                . $img_made . ' из ' . $img_total . '</small>';
         }
 
         $course_link = $r->mdl_course_id
