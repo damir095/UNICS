@@ -12,6 +12,13 @@ class ai_generator {
     private string $api_key;
     private string $model;
     private string $image_model;
+    /**
+     * finish_reason последнего ответа GigaChat. Поле, а не возврат метода: сигнатуру
+     * generate_text_gigachat() менять нельзя - это объявленный шов для подмены сети, и
+     * его переопределяют adaptation_block_test и output_style_test. Подменившие шов
+     * тесты поле не трогают, у них остается пустая строка.
+     */
+    private string $last_finish_reason = '';
     private string $tts_provider;
     private string $salute_key;
 
@@ -244,11 +251,36 @@ class ai_generator {
         if (empty($this->api_key)) {
             throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
         }
-        // Единственное горлышко всех шести выходов ИИ ([[ai-output-style-design]]): чистка стоит
-        // здесь, чтобы ни один вызывающий не мог о ней забыть. Для JSON-выходов (тест, слайды)
-        // это безопасно: вырезание эмодзи и замена тире не меняют ни скобок, ни кавычек, ни
-        // экранирования, поэтому восстановление обрезанного JSON в generate_quiz не страдает.
-        return output_style::clean($this->generate_text_gigachat($prompt, $max_tokens));
+        // Отказ модели - это болванка вместо материала, и приходит он с HTTP 200 и непустым
+        // текстом, то есть штатными проверками не ловится. 2026-08-09 такая болванка легла в
+        // курс страницей урока, а УМК получил статус «готов» ([[ai-refusal-detector-design]]).
+        //
+        // Один повтор, а не сразу ошибка: тот отказ оказался транзиентным - на следующий день
+        // тот же промт дал 3180 символов нормального текста. Второго повтора нет: транзиентный
+        // сбой лечится первым, а устойчивая блокировка не вылечится и десятым.
+        //
+        // Проверка идет по СЫРОМУ ответу, до output_style::clean(): чистка меняет тире и режет
+        // эмодзи, а проверять осмысленно то, что пришло от модели.
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $this->last_finish_reason = '';
+            $raw = $this->generate_text_gigachat($prompt, $max_tokens);
+
+            if (!refusal_detector::is_refusal($raw, $this->last_finish_reason)) {
+                // Единственное горлышко всех шести выходов ИИ ([[ai-output-style-design]]): чистка
+                // стоит здесь, чтобы ни один вызывающий не мог о ней забыть. Для JSON-выходов
+                // (тест, слайды) это безопасно: вырезание эмодзи и замена тире не меняют ни
+                // скобок, ни кавычек, ни экранирования, поэтому восстановление обрезанного JSON
+                // в generate_quiz не страдает.
+                return output_style::clean($raw);
+            }
+        }
+
+        // generalexceptionmessage, а не голая строка: moodle_exception трактует первый аргумент
+        // как идентификатор языковой строки, и педагог видел бы «error/ИИ отказался...».
+        // Это сообщение единственное написано для педагога, а не для лога.
+        throw new \moodle_exception('generalexceptionmessage', 'error', '',
+            'ИИ отказался отвечать по этой теме (сработал фильтр модели). '
+            . 'Попробуйте переформулировать тему материала.');
     }
 
     // ----------------------------------------------------------------
@@ -337,7 +369,9 @@ class ai_generator {
             throw new \moodle_exception('GigaChat HTTP ' . $http_code . ': ' . mb_substr($response, 0, 300));
         }
 
-        $text = json_decode($response, true)['choices'][0]['message']['content'] ?? '';
+        $decoded = json_decode($response, true);
+        $this->last_finish_reason = (string)($decoded['choices'][0]['finish_reason'] ?? '');
+        $text = $decoded['choices'][0]['message']['content'] ?? '';
         if (mb_strlen(trim($text)) < 50) {
             throw new \moodle_exception('GigaChat вернул пустой ответ');
         }
