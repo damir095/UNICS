@@ -137,4 +137,96 @@ final class umk_processor_test extends \advanced_testcase {
         $this->assertStringContainsString('GigaChat недоступен', (string)$q->error_message);
         $this->assertSame(4, (int)$DB->get_field('unics_umk', 'status', ['id' => $umkid]));
     }
+
+    /** Генератор с размеченным на разделы текстом и управляемым исходом рисования. */
+    private function illustrating_generator(bool $image_fails): ai_generator {
+        return new class($image_fails) extends ai_generator {
+            public function __construct(private bool $image_fails) {
+                parent::__construct();
+            }
+            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+                return "#### Круговорот\n\nВода испаряется.\n\n#### Осадки\n\nВода выпадает.";
+            }
+            public function generate_image(string $prompt): string {
+                if ($this->image_fails) {
+                    throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                        'GigaChat image: UUID изображения не найден в ответе');
+                }
+                return "\xFF\xD8\xFF\xE0fake-jpeg-bytes";
+            }
+            public function get_avg_score(int $mdl_user_id): float {
+                return 75.0;
+            }
+        };
+    }
+
+    /**
+     * Иллюстрации лекции: картинки уходят в файловое хранилище, ссылки - в текст,
+     * счетчики - в УМК ([[ai-lecture-images-design]]).
+     */
+    public function test_process_illustrates_lecture_and_counts_images(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, , , $umkid, $queueid] = $this->make_fixture();
+        $DB->set_field('unics_ai_queue', 'generate_images', 1, ['id' => $queueid]);
+        set_config('ai_api_key', 'fake-key-for-test', 'local_unics');
+
+        $this->expectOutputRegex('~готов~');
+        (new umk_processor($this->illustrating_generator(false)))->process(ai_queue::claim($queueid));
+
+        $umk = $DB->get_record('unics_umk', ['id' => $umkid], '*', MUST_EXIST);
+        $this->assertSame(2, (int)$umk->images_total);
+        $this->assertSame(2, (int)$umk->images_made);
+
+        $cmid = (int)$DB->get_field('unics_umk_materials', 'mdl_course_module_id',
+            ['umk_id' => $umkid, 'material_type' => 1]);
+        $instance = (int)$DB->get_field('course_modules', 'instance', ['id' => $cmid]);
+        $content  = (string)$DB->get_field('page', 'content', ['id' => $instance]);
+
+        $this->assertStringContainsString('@@PLUGINFILE@@/lecture-1.jpg', $content);
+        $this->assertStringContainsString('@@PLUGINFILE@@/lecture-2.jpg', $content);
+
+        $ctx = \context_module::instance($cmid);
+        $this->assertNotFalse(get_file_storage()
+            ->get_file($ctx->id, 'mod_page', 'content', 0, '/', 'lecture-1.jpg'));
+    }
+
+    /**
+     * Отказ картинки не валит генерацию: лекция создается, счетчик честно показывает
+     * недобор. Именно глушение этой ошибки скрывало поломку годами.
+     */
+    public function test_image_failure_keeps_lecture_and_reports_shortfall(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, , , $umkid, $queueid] = $this->make_fixture();
+        $DB->set_field('unics_ai_queue', 'generate_images', 1, ['id' => $queueid]);
+        set_config('ai_api_key', 'fake-key-for-test', 'local_unics');
+
+        $this->expectOutputRegex('~готов~');
+        (new umk_processor($this->illustrating_generator(true)))->process(ai_queue::claim($queueid));
+
+        $umk = $DB->get_record('unics_umk', ['id' => $umkid], '*', MUST_EXIST);
+        $this->assertSame(2, (int)$umk->images_total);
+        $this->assertSame(0, (int)$umk->images_made);
+        // Материал вышел несмотря на отказ картинок.
+        $this->assertSame(3, (int)$umk->status);
+        $this->assertTrue($DB->record_exists('unics_umk_materials',
+            ['umk_id' => $umkid, 'material_type' => 1]));
+    }
+
+    /** Флаг снят - ни одного обращения за картинкой, счетчики остаются NULL. */
+    public function test_without_flag_no_images_and_counters_stay_null(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, , , $umkid, $queueid] = $this->make_fixture();
+        set_config('ai_api_key', 'fake-key-for-test', 'local_unics');
+
+        $this->expectOutputRegex('~готов~');
+        // Генератор бросает на любой запрос картинки: если воркер его дернет, тест упадет.
+        (new umk_processor($this->illustrating_generator(true)))->process(ai_queue::claim($queueid));
+
+        $umk = $DB->get_record('unics_umk', ['id' => $umkid], '*', MUST_EXIST);
+        $this->assertNull($umk->images_total);
+        $this->assertNull($umk->images_made);
+    }
 }

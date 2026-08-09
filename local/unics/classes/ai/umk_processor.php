@@ -97,6 +97,40 @@ class umk_processor {
             // где заголовок уже есть ([[ai-output-style-design]], раздел 1).
             $text   = \local_unics\ai\output_style::shift_headings($generator->generate_text($prompt));
 
+            // --- 1a. Иллюстрации учебного текста ([[ai-lecture-images-design]]) ---
+            // Картинки нужны ДО создания страницы: в тексте уже должны стоять ссылки
+            // @@PLUGINFILE@@, иначе привязывать файлы будет не к чему.
+            $lecture_files = [];   // имя файла => бинарник, уходит в add_text_page
+            $lecture_names = [];   // индекс раздела => имя файла, уходит в insert_images
+            $images_made   = 0;
+            $images_total  = 0;
+
+            $generate_images = isset($task->generate_images) ? (int)$task->generate_images : 0;
+            if ($generate_images && !empty(get_config('local_unics', 'ai_api_key'))) {
+                $criteria = $generator->build_criteria($profile);
+                $sections = lecture_illustrator::split_sections($text, (string)$umk->topic);
+                $images_total += count($sections);
+
+                foreach ($sections as $i => $sec) {
+                    try {
+                        $img = $generator->generate_image(lecture_illustrator::build_image_prompt(
+                            $criteria, (string)$umk->topic, $sec['heading'], $sec['lead']));
+                        if ($img !== '') {
+                            $fname = 'lecture-' . ($i + 1) . '.jpg';
+                            $lecture_files[$fname] = $img;
+                            $lecture_names[$i]     = $fname;
+                            $images_made++;
+                        }
+                    } catch (\Throwable $ei) {
+                        mtrace("  [warn] Иллюстрация раздела " . ($i + 1) . " не создана: "
+                            . $ei->getMessage());
+                    }
+                }
+
+                $text = lecture_illustrator::insert_images($text, $sections, $lecture_names);
+                mtrace("  Иллюстрации лекции: {$images_made} из " . count($sections));
+            }
+
             // --- Целевая секция ---
             if ((int)$umk->target_section >= 0) {
                 $section = (int)$umk->target_section;
@@ -124,7 +158,8 @@ class umk_processor {
                 (int)$umk->mdl_course_id,
                 $section,
                 $umk->title,
-                $text
+                $text,
+                $lecture_files
             );
             $builder->restrict_activity_to_group($text_cmid, $group_id);
             $builder->set_view_completion($text_cmid); // B1/B8
@@ -253,6 +288,13 @@ class umk_processor {
 
                     $img_count = count(array_filter($slide_images, fn($img) => $img !== ''));
 
+                    // Слайды считаются теми же счетчиками: дыра невидимости была именно
+                    // тут - ноль картинок из пяти годами и ни следа в интерфейсе.
+                    if (!empty($ai_key)) {
+                        $images_total += count($slides);
+                        $images_made  += $img_count;
+                    }
+
                     $video_cmid = $builder->add_video_slideshow(
                         (int)$umk->mdl_course_id,
                         $section,
@@ -283,6 +325,16 @@ class umk_processor {
             if ($quiz_cmid_gate !== null) {
                 $builder->gate_quiz_on_materials($quiz_cmid_gate, $group_id, $material_cmids);
                 mtrace("  Гейт теста: доступен после " . count($material_cmids) . " материал(ов)");
+            }
+
+            // Счетчики иллюстраций - педагогу в историю УМК. NULL остается, если картинки
+            // не запрашивались вовсе.
+            if ($images_total > 0) {
+                $DB->update_record('unics_umk', (object)[
+                    'id'           => $umk->id,
+                    'images_made'  => $images_made,
+                    'images_total' => $images_total,
+                ]);
             }
 
             // --- 6. Обработка каждого учащегося ---
