@@ -18,6 +18,16 @@ if (!confirm_sesskey()) {
 
 $course_id = required_param('course_id', PARAM_INT);
 
+// То же правило, что и на странице генерации: без него эндпоинт отдавал структуру ЛЮБОГО курса
+// сайта в обход гейта страницы. Предикат общий (lib.php), чтобы страница и эндпоинт не
+// разъехались снова.
+require_once(__DIR__ . '/../lib.php');
+if (!local_unics_can_build_in_course($course_id)) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Access denied']);
+    exit;
+}
+
 $rows = $DB->get_records_sql(
     "SELECT section, name FROM {course_sections}
       WHERE course = :course

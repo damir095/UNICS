@@ -188,6 +188,39 @@ function local_unics_require_manage_or_scope_district(int $district_id): void {
 }
 
 /**
+ * Может ли текущий пользователь создавать учебный материал В ЭТОМ курсе.
+ *
+ * Одно правило на всю семью страниц, работающих внутри курса (course_diagnostic,
+ * course_final_exam, course_milestones, course_students, codifier_tag): админ ИЛИ владелец курса
+ * ИЛИ методист, и никогда - педагог без права редактирования.
+ *
+ * Вынесено в lib.php, потому что спрашивают его РАЗНЫЕ входы: страница генерации УМК и
+ * AJAX-эндпоинт разделов. Пока правило жило копией в странице, эндпоинт его не знал и отдавал
+ * структуру любого курса сайта - то самое раздвоение путей, которое уже дало одну утечку
+ * ([[log]] за 2026-08-09).
+ *
+ * Курс 1 - главная страница сайта, материалы туда не кладем.
+ */
+function local_unics_can_build_in_course(int $course_id): bool {
+    if ($course_id <= 1) {
+        return false;
+    }
+    if (local_unics_is_nonediting_teacher()) {
+        return false;
+    }
+    // IGNORE_MISSING: на несуществующем/удаленном курсе instance() бросает исключение, и вместо
+    // чистого отказа пользователь получал бы HTML-страницу ошибки, а JSON-эндпоинт - мусор
+    // вместо ответа.
+    $ctx = context_course::instance($course_id, IGNORE_MISSING);
+    if (!$ctx) {
+        return false;
+    }
+    return has_capability('local/unics:manage', context_system::instance())
+        || has_capability('moodle/course:manageactivities', $ctx)
+        || local_unics_is_methodist();
+}
+
+/**
  * Guard write-операций над пользователем (manage ИЛИ manageorg + скоуп target'а).
  * Тонкая обёртка над {@see \local_unics\access::require_manage_or_scope_user()}.
  */

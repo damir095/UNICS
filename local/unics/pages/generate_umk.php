@@ -56,14 +56,7 @@ if ($is_methodist) {
  * Вопрос «должен ли методист иметь власть над ЛЮБЫМ курсом» здесь сознательно не решается:
  * это политика, одинаково зашитая в шесть страниц, и менять ее в одной - значит разъехаться.
  */
-$can_build_in_course = function (int $course_id): bool {
-    if ($course_id <= 1) {
-        return false; // курс 1 - главная страница сайта, материалы туда не кладем
-    }
-    return has_capability('local/unics:manage', context_system::instance())
-        || has_capability('moodle/course:manageactivities', context_course::instance($course_id))
-        || local_unics_is_methodist();
-};
+$can_build_in_course = fn(int $course_id): bool => local_unics_can_build_in_course($course_id);
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/generate_umk.php'));
