@@ -161,7 +161,10 @@ if ($hassiteconfig) {
     $settings->add(new admin_setting_configpasswordunmask(
         'local_unics/salute_speech_api_key',
         'SaluteSpeech API Key',
-        'Authorization Key (Base64) из developers.sber.ru. Тот же ключ, что используется для GigaChat.',
+        'Authorization Key (Base64) из developers.sber.ru, раздел SaluteSpeech. Это ОТДЕЛЬНЫЙ '
+            . 'ключ, НЕ тот же, что у GigaChat: ключ GigaChat на scope озвучки отвечает '
+            . '400 «scope from db not fully includes consumed scope» (замерено 2026-08-09). '
+            . 'Синтезу нужен оплаченный пакет SmartSpeech, иначе приходит 402 Payment Required.',
         ''
     ));
     $settings->add(new admin_setting_configselect(

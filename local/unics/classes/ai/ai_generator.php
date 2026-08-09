@@ -432,12 +432,11 @@ class ai_generator {
     // Использует тот же OAuth-endpoint, что и GigaChat,
     // но со scope=SALUTE_SPEECH_PERS
     // ----------------------------------------------------------------
-    private function generate_audio_salute(string $text): string {
-        if (empty($this->salute_key)) {
-            throw new \moodle_exception('SaluteSpeech API key не настроен в настройках плагина');
-        }
-
-        // Шаг 1: OAuth-токен
+    /**
+     * OAuth-токен SmartSpeech. protected - шов для подмены сети в тестах, как у
+     * generate_text_gigachat(). Тело перенесено из generate_audio_salute() без правок.
+     */
+    protected function salute_token(): string {
         $ch = curl_init('https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -471,11 +470,15 @@ class ai_generator {
         if (empty($token)) {
             throw new \moodle_exception('SaluteSpeech: не удалось получить access_token');
         }
+        return $token;
+    }
 
-        // Шаг 2: синтез речи
-        $voice = get_config('local_unics', 'salute_voice') ?: 'Nec_24000';
-        $text  = mb_substr($text, 0, 1999); // лимит REST API
-
+    /**
+     * Сам запрос синтеза. protected - тот же шов для подмены сети в тестах.
+     *
+     * @return array{0: int, 1: string} код ответа и тело
+     */
+    protected function salute_synthesize(string $text, string $voice): array {
         $ch = curl_init(
             'https://smartspeech.sber.ru/rest/v1/text:synthesize?format=wav16&voice=' . urlencode($voice)
         );
@@ -485,7 +488,7 @@ class ai_generator {
             CURLOPT_POSTFIELDS     => $text,
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/text',
-                'Authorization: Bearer ' . $token,
+                'Authorization: Bearer ' . $this->salute_token(),
             ],
             CURLOPT_TIMEOUT        => 60,
             CURLOPT_SSL_VERIFYPEER => false,
@@ -499,15 +502,39 @@ class ai_generator {
         if ($curl_err) {
             throw new \moodle_exception('SaluteSpeech cURL ошибка: ' . $curl_err);
         }
+        return [$http_code, (string)$audio];
+    }
+
+    private function generate_audio_salute(string $text): string {
+        if (empty($this->salute_key)) {
+            throw new \moodle_exception('SaluteSpeech API key не настроен в настройках плагина');
+        }
+
+        $voice = get_config('local_unics', 'salute_voice') ?: 'Nec_24000';
+        $text  = mb_substr($text, 0, 1999); // лимит REST API
+
+        [$http_code, $audio] = $this->salute_synthesize($text, $voice);
+
         if ($http_code !== 200) {
-            $err = json_decode((string)$audio, true);
-            throw new \moodle_exception(
-                'SaluteSpeech HTTP ' . $http_code . ': ' . ($err['message'] ?? mb_substr((string)$audio, 0, 200))
-            );
+            $err = json_decode($audio, true);
+            $message = $err['message'] ?? mb_substr($audio, 0, 200);
+
+            // 402 - устойчивое состояние оплаты аккаунта, а не сбой: гасим галочку на форме,
+            // чтобы педагог не тратил запуск на заведомо недоступный материал. Любой другой
+            // код (таймаут, пятисотка) метку НЕ ставит - это временные неурядицы
+            // ([[tts-honest-availability-design]], раздел 3.2).
+            if ($http_code === 402) {
+                tts_status::mark_unavailable($message);
+            }
+
+            throw new \moodle_exception('SaluteSpeech HTTP ' . $http_code . ': ' . $message);
         }
         if (strlen($audio) < 1000) {
             throw new \moodle_exception('SaluteSpeech вернул некорректные аудиоданные');
         }
+
+        // Синтез удался - значит пакет оплачен. Метка снимается сама, без администратора.
+        tts_status::mark_available();
 
         return $audio;
     }

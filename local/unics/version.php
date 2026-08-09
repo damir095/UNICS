@@ -2,7 +2,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_unics';
-$plugin->version   = 2026080902;
+$plugin->version   = 2026080903;
 $plugin->requires  = 2024100700;
 $plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '0.7.26';
+$plugin->release   = '0.7.27';
