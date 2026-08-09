@@ -646,6 +646,11 @@ echo html_writer::tag('label', 'Учебный текст (всегда)', ['for
 echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
+// Спутник-hidden обязателен: неотмеченный чекбокс браузер не шлет вовсе, и
+// optional_param('generate_quiz', 1) возвращал умолчание 1. Снять галочку теста через
+// интерфейс было НЕВОЗМОЖНО - тест генерировался всегда, тратя лишнее обращение к ИИ.
+// У остальных галочек умолчание параметра 0, поэтому спутник им не нужен.
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'generate_quiz', 'value' => '0']);
 echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_quiz', 'name' => 'generate_quiz',
     'value' => '1', 'checked' => 'checked', 'class' => 'form-check-input']);
 echo html_writer::tag('label', 'Тест (5 вопросов с выбором ответа)', ['for' => 'gen_quiz', 'class' => 'form-check-label']);
