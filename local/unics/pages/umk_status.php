@@ -211,7 +211,7 @@ $status_labels = [
 $total = (int)$DB->count_records('unics_umk');
 $records = $DB->get_records_sql(
     "SELECT u.id, u.title, u.topic, u.difficulty_level, u.status, u.generated_at, u.published_at,
-            u.mdl_course_id, u.profile_key,
+            u.mdl_course_id, u.profile_key, u.images_made, u.images_total,
             (SELECT q.error_message FROM {unics_ai_queue} q
               WHERE q.umk_id = u.id ORDER BY q.id DESC LIMIT 1) AS error_message,
             (SELECT q.processed_at FROM {unics_ai_queue} q
@@ -262,6 +262,17 @@ if (empty($records)) {
 
         if ($r->status == 4 && $r->error_message) {
             $status .= '<br><small class="text-danger">' . s($r->error_message) . '</small>';
+        }
+
+        // Иллюстрации ИИ по всему комплекту - лекция плюс слайды. Раньше отказ картинки
+        // уходил только в лог задачи, и ноль из пяти жил годами незамеченным
+        // ([[ai-lecture-images-design]], раздел 6).
+        if ($r->images_total !== null && (int)$r->images_total > 0) {
+            $made  = (int)$r->images_made;
+            $total = (int)$r->images_total;
+            $cls   = $made < $total ? 'text-danger' : 'text-muted';
+            $status .= '<br><small class="' . $cls . '">Иллюстрации: '
+                . $made . ' из ' . $total . '</small>';
         }
 
         $course_link = $r->mdl_course_id
