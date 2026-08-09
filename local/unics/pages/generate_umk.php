@@ -662,10 +662,26 @@ echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_assign'
 echo html_writer::tag('label', 'Письменное задание (развёрнутый ответ)', ['for' => 'gen_assign', 'class' => 'form-check-label']);
 echo html_writer::end_tag('div');
 
+// Галочка озвучки гаснет, если синтез уже отвечал 402: педагог не должен тратить запуск
+// на заведомо недоступный материал ([[tts-honest-availability-design]], раздел 3.4).
+// Метка снимется сама при первом удачном синтезе, то есть сразу после оплаты пакета.
+$tts_off = \local_unics\ai\tts_status::is_unavailable();
+
 echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
-echo html_writer::empty_tag('input', ['type' => 'checkbox', 'id' => 'gen_audio', 'name' => 'generate_audio',
-    'value' => '1', 'class' => 'form-check-input']);
-echo html_writer::tag('label', 'Аудиоматериал (TTS, SaluteSpeech)', ['for' => 'gen_audio', 'class' => 'form-check-label']);
+$audio_attrs = ['type' => 'checkbox', 'id' => 'gen_audio', 'name' => 'generate_audio',
+    'value' => '1', 'class' => 'form-check-input'];
+if ($tts_off) {
+    $audio_attrs['disabled'] = 'disabled';
+}
+echo html_writer::empty_tag('input', $audio_attrs);
+echo html_writer::tag('label', 'Аудиоматериал (TTS, SaluteSpeech)',
+    ['for' => 'gen_audio', 'class' => 'form-check-label' . ($tts_off ? ' text-muted' : '')]);
+if ($tts_off) {
+    echo html_writer::tag('div',
+        'Недоступно: у аккаунта Сбера нет оплаченного пакета SmartSpeech. '
+        . 'Заработает само после оплаты.',
+        ['class' => 'small text-muted ml-4']);
+}
 echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-check mb-1']);
