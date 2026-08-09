@@ -813,13 +813,15 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         ];
     }
 
-    public function generate_image(string $prompt): string {
-        if (empty($this->api_key)) {
-            throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
-        }
-
-        $token = $this->get_gigachat_token();
-
+    /**
+     * Запрос за UUID картинки. protected - шов для подмены сети в тестах.
+     *
+     * Таймаут 30, а не 90: замер 2026-08-10 показал, что удачные ответы приходят за
+     * 13.8-14.1 секунды с разбросом в треть секунды. Медленных успехов не бывает, значит
+     * девяносто секунд ждали заведомо мертвое соединение и стоили полторы минуты простоя
+     * на каждом зависании ([[ai-image-reliability-design]], раздел 2.1).
+     */
+    protected function fetch_image_uuid(string $prompt): string {
         $payload = json_encode($this->build_image_payload($prompt));
 
         $ch = curl_init('https://gigachat.devices.sberbank.ru/api/v1/chat/completions');
@@ -830,9 +832,9 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/json',
                 'Accept: application/json',
-                'Authorization: Bearer ' . $token,
+                'Authorization: Bearer ' . $this->get_gigachat_token(),
             ],
-            CURLOPT_TIMEOUT        => 90,
+            CURLOPT_TIMEOUT        => 30,
             CURLOPT_SSL_VERIFYPEER => false,
         ]);
 
@@ -875,13 +877,25 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             throw new \moodle_exception('GigaChat image: UUID изображения не найден в ответе');
         }
 
-        // Скачиваем содержимое файла
+        return $uuid;
+    }
+
+    /**
+     * Скачать готовую картинку по UUID. protected - шов для тестов.
+     *
+     * Повтор сюда НЕ распространяется: за все живые прогоны скачивание не сбоило ни разу,
+     * виснет всегда запрос за UUID (в ошибке «0 bytes received»).
+     *
+     * Токен берется ВНУТРИ метода, а не аргументом: иначе подменивший этот шов тест все
+     * равно уходил бы в реальный OAuth, потому что аргумент вычисляется до вызова.
+     */
+    protected function download_image(string $uuid): string {
         $ch = curl_init('https://gigachat.devices.sberbank.ru/api/v1/files/' . $uuid . '/content');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => [
                 'Accept: application/jpg',
-                'Authorization: Bearer ' . $token,
+                'Authorization: Bearer ' . $this->get_gigachat_token(),
             ],
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_SSL_VERIFYPEER => false,
@@ -900,6 +914,32 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         }
 
         return (string) $img_data;
+    }
+
+    public function generate_image(string $prompt): string {
+        if (empty($this->api_key)) {
+            throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
+        }
+
+        // Один повтор. Арифметика лучше по обеим веткам: зависание сегодня стоит 90 секунд
+        // и потерянную картинку, а станет 30 + 14 = 44 секунды с картинкой либо 60 секунд
+        // без нее - то есть даже неудачный повтор быстрее нынешнего одиночного провала.
+        // Причина неудачи не разбирается намеренно: устойчивая ошибка провалится второй раз
+        // быстро, и лишний быстрый запрос дешевле пропущенной классификации.
+        $last = null;
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            try {
+                return $this->download_image($this->fetch_image_uuid($prompt));
+            } catch (\Throwable $e) {
+                $last = $e;
+                if ($attempt === 1) {
+                    debugging('local_unics: картинка не создана с первой попытки, повтор. '
+                        . $e->getMessage(), DEBUG_NORMAL);
+                }
+            }
+        }
+
+        throw $last;
     }
 
     // ----------------------------------------------------------------
