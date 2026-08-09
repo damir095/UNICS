@@ -339,7 +339,17 @@ class ai_generator {
             throw new \moodle_exception('GigaChat auth HTTP ' . $auth_code . ': ' . $auth_resp);
         }
 
-        $decoded = json_decode($auth_resp, true);
+        return self::parse_token_response((string)$auth_resp);
+    }
+
+    /**
+     * Разбор ответа OAuth. Отдельным чистым методом, чтобы перевод миллисекунд и
+     * запасное значение проверялись тестом: сам fetch_gigachat_token ходит в сеть.
+     *
+     * @return array{token: string, expires_at: int} expires_at в СЕКУНДАХ Unix
+     */
+    public static function parse_token_response(string $json): array {
+        $decoded = json_decode($json, true);
         $token   = $decoded['access_token'] ?? '';
         if (empty($token)) {
             throw new \moodle_exception('GigaChat: не удалось получить access_token');
@@ -349,8 +359,23 @@ class ai_generator {
         // в секунды сравнение с time() считало бы токен вечным, и после реального
         // истечения все посыпалось бы с 401.
         $expires_ms = (int)($decoded['expires_at'] ?? 0);
+        if ($expires_ms <= 0) {
+            // Поле пропало или переименовано. Ноль всегда провалит проверку запаса, и мы
+            // тихо вернулись бы к авторизации на каждый вызов - ровно к тому, что чинили.
+            // Осторожные 25 минут при заявленных Сбером тридцати.
+            return ['token' => $token, 'expires_at' => time() + 1500];
+        }
 
         return ['token' => $token, 'expires_at' => (int)($expires_ms / 1000)];
+    }
+
+    /**
+     * Сбросить кеш токена. Вызывается при 401: до кеша каждый вызов брал свежий токен и
+     * протухший токен лечился сам, а с кешем экземпляр тащил бы негодный до конца прогона.
+     */
+    protected function invalidate_gigachat_token(): void {
+        $this->token_cache      = '';
+        $this->token_expires_at = 0;
     }
 
     /**
@@ -410,6 +435,11 @@ class ai_generator {
             throw new \moodle_exception('GigaChat cURL ошибка: ' . $curl_err);
         }
         if ($http_code !== 200) {
+            // 401 = токен негоден раньше вычисленного срока (перекос часов, отзыв, смена
+            // ключа на ходу). Сбрасываем кеш, иначе экземпляр тащил бы его до конца прогона.
+            if ($http_code === 401) {
+                $this->invalidate_gigachat_token();
+            }
             throw new \moodle_exception('GigaChat HTTP ' . $http_code . ': ' . mb_substr($response, 0, 300));
         }
 
@@ -847,6 +877,9 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             throw new \moodle_exception('GigaChat image cURL ошибка: ' . $curl_err);
         }
         if ($http_code !== 200) {
+            if ($http_code === 401) {
+                $this->invalidate_gigachat_token();
+            }
             throw new \moodle_exception('GigaChat image HTTP ' . $http_code . ': ' . mb_substr($response, 0, 200));
         }
 
@@ -881,15 +914,34 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
     }
 
     /**
-     * Скачать готовую картинку по UUID. protected - шов для тестов.
+     * Скачать готовую картинку по UUID и проверить, что это вообще данные.
      *
-     * Повтор сюда НЕ распространяется: за все живые прогоны скачивание не сбоило ни разу,
-     * виснет всегда запрос за UUID (в ошибке «0 bytes received»).
+     * Повтор сюда НЕ распространяется - и это теперь правда, а не только обещание в
+     * докблоке: скачивание вынесено ЗА цикл повтора в generate_image(). Иначе сбой на
+     * скачивании выбрасывал бы уже готовое изображение, чтобы заплатить за новое.
+     *
+     * Проверка размера обязательна: HTTP 200 с пустым телом возвращался как успех, воркер
+     * молча клал пустой файл, и в логе не оставалось ни следа. У озвучки такая проверка
+     * есть с самого начала.
+     */
+    protected function download_image(string $uuid): string {
+        $data = $this->raw_download_image($uuid);
+
+        if (strlen($data) < 1000) {
+            throw new \moodle_exception('GigaChat image download: пустой ответ ('
+                . strlen($data) . ' байт)');
+        }
+
+        return $data;
+    }
+
+    /**
+     * Сам HTTP скачивания. protected - шов для тестов.
      *
      * Токен берется ВНУТРИ метода, а не аргументом: иначе подменивший этот шов тест все
      * равно уходил бы в реальный OAuth, потому что аргумент вычисляется до вызова.
      */
-    protected function download_image(string $uuid): string {
+    protected function raw_download_image(string $uuid): string {
         $ch = curl_init('https://gigachat.devices.sberbank.ru/api/v1/files/' . $uuid . '/content');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -910,6 +962,9 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             throw new \moodle_exception('GigaChat image download cURL ошибка: ' . $curl_err);
         }
         if ($http_code !== 200) {
+            if ($http_code === 401) {
+                $this->invalidate_gigachat_token();
+            }
             throw new \moodle_exception('GigaChat image download HTTP ' . $http_code);
         }
 
@@ -921,15 +976,24 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
         }
 
-        // Один повтор. Арифметика лучше по обеим веткам: зависание сегодня стоит 90 секунд
-        // и потерянную картинку, а станет 30 + 14 = 44 секунды с картинкой либо 60 секунд
-        // без нее - то есть даже неудачный повтор быстрее нынешнего одиночного провала.
-        // Причина неудачи не разбирается намеренно: устойчивая ошибка провалится второй раз
-        // быстро, и лишний быстрый запрос дешевле пропущенной классификации.
+        // Один повтор ТОЛЬКО на запрос за UUID: именно он виснет (в ошибке «0 bytes
+        // received»), и именно он стоил 90 секунд простоя. Скачивание вынесено за цикл -
+        // иначе сбой на нем выбрасывал бы уже готовое изображение ради нового.
+        //
+        // Арифметика зависания: было 90 секунд и потерянная картинка, стало 30 + 14 = 44
+        // секунды с картинкой либо 60 секунд без нее.
+        //
+        // Причина неудачи не разбирается. Честная оговорка: устойчивый отказ рисовать
+        // возвращается не мгновенно, так что вторая попытка на нем стоит полных секунд, а
+        // не «проваливается быстро». Классификатор сюда не добавлен намеренно - потолок
+        // потерь ограничен (девять картинок на комплект), а угадывать вид ошибки по тексту
+        // значит завести вторую эвристику там, где хватает верхней границы.
+        $uuid = null;
         $last = null;
         for ($attempt = 1; $attempt <= 2; $attempt++) {
             try {
-                return $this->download_image($this->fetch_image_uuid($prompt));
+                $uuid = $this->fetch_image_uuid($prompt);
+                break;
             } catch (\Throwable $e) {
                 $last = $e;
                 if ($attempt === 1) {
@@ -939,7 +1003,11 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             }
         }
 
-        throw $last;
+        if ($uuid === null) {
+            throw $last;
+        }
+
+        return $this->download_image($uuid);
     }
 
     // ----------------------------------------------------------------

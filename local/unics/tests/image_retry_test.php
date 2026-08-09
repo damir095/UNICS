@@ -70,6 +70,63 @@ final class image_retry_test extends \advanced_testcase {
         $this->assertDebuggingCalledCount(1);
     }
 
+    /**
+     * Пустое тело при HTTP 200 - это НЕ картинка.
+     *
+     * Найдено ревью: скачивание не проверяло размер, и пустой ответ возвращался как
+     * успех. Воркер молча клал пустой файл, и в логе не было ни следа. У озвучки такая
+     * проверка есть (`SaluteSpeech вернул некорректные аудиоданные`), у картинок не было.
+     */
+    public function test_empty_download_is_rejected(): void {
+        $this->resetAfterTest();
+        set_config('ai_api_key', 'FAKE_KEY', 'local_unics');
+
+        $gen = new class extends ai_generator {
+            protected function fetch_image_uuid(string $prompt): string {
+                return image_retry_test::uuid();
+            }
+            protected function raw_download_image(string $uuid): string {
+                return ''; // HTTP 200, но тело пустое
+            }
+        };
+
+        $this->expectException(\moodle_exception::class);
+        $gen->generate_image('нарисуй воду');
+    }
+
+    /**
+     * Сбой скачивания НЕ перегенерирует картинку заново.
+     *
+     * Найдено ревью: докблок обещал, что повтор не покрывает скачивание, а на деле
+     * generate_image оборачивал всю цепочку - и сбой на скачивании выбрасывал уже
+     * готовое изображение, чтобы заплатить за новое.
+     */
+    public function test_download_failure_does_not_regenerate(): void {
+        $this->resetAfterTest();
+        set_config('ai_api_key', 'FAKE_KEY', 'local_unics');
+
+        $gen = new class extends ai_generator {
+            public int $uuid_calls = 0;
+            protected function fetch_image_uuid(string $prompt): string {
+                $this->uuid_calls++;
+                return image_retry_test::uuid();
+            }
+            protected function raw_download_image(string $uuid): string {
+                throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                    'GigaChat image download HTTP 500');
+            }
+        };
+
+        try {
+            $gen->generate_image('нарисуй воду');
+            $this->fail('Ожидалось исключение при сбое скачивания');
+        } catch (\moodle_exception $e) {
+            $this->assertStringContainsString('download', $e->getMessage());
+        }
+
+        $this->assertSame(1, $gen->uuid_calls);
+    }
+
     /** Два сбоя подряд - исключение, третьей попытки нет. */
     public function test_two_failures_throw_without_third_attempt(): void {
         $this->resetAfterTest();

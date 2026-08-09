@@ -33,6 +33,9 @@ final class ai_token_cache_test extends \advanced_testcase {
             public function public_token(): string {
                 return $this->get_gigachat_token();
             }
+            public function public_invalidate(): void {
+                $this->invalidate_gigachat_token();
+            }
         };
     }
 
@@ -81,6 +84,51 @@ final class ai_token_cache_test extends \advanced_testcase {
         $gen->public_token();
 
         $this->assertSame(2, $gen->auth_calls);
+    }
+
+    /**
+     * 401 сбрасывает кеш, иначе один протухший токен убивал бы ВЕСЬ прогон.
+     *
+     * Найдено ревью: до кеша каждый вызов брал свежий токен и такая беда лечилась сама.
+     * С кешем экземпляр держит негодный токен до конца комплекта - это регресс, внесенный
+     * ради экономии авторизаций.
+     */
+    public function test_401_invalidates_cache(): void {
+        $this->resetAfterTest();
+        set_config('ai_api_key', 'FAKE_KEY', 'local_unics');
+        $gen = $this->generator(1800);
+
+        $first = $gen->public_token();
+        $this->assertSame(1, $gen->auth_calls);
+
+        $gen->public_invalidate();
+        $second = $gen->public_token();
+
+        $this->assertSame(2, $gen->auth_calls);
+        $this->assertNotSame($first, $second);
+    }
+
+    /** Сбер отдает expires_at в миллисекундах - разбор обязан переводить в секунды. */
+    public function test_parse_converts_milliseconds_to_seconds(): void {
+        $this->resetAfterTest();
+        $parsed = ai_generator::parse_token_response(
+            '{"access_token":"abc","expires_at":1786308715480}');
+
+        $this->assertSame('abc', $parsed['token']);
+        $this->assertSame(1786308715, $parsed['expires_at']);
+    }
+
+    /**
+     * Пропавшее expires_at не должно тихо возвращать нас к авторизации на каждый вызов:
+     * берем осторожный запас в 25 минут при заявленных Сбером тридцати.
+     */
+    public function test_parse_falls_back_when_expires_missing(): void {
+        $this->resetAfterTest();
+        $parsed = ai_generator::parse_token_response('{"access_token":"abc"}');
+
+        $this->assertSame('abc', $parsed['token']);
+        $this->assertGreaterThan(time() + 1400, $parsed['expires_at']);
+        $this->assertLessThan(time() + 1600, $parsed['expires_at']);
     }
 
     /** Запас чуть больше минуты - токен еще годен. */
