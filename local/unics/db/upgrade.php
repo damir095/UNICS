@@ -1558,5 +1558,30 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026080601, 'local', 'unics');
     }
 
+    if ($oldversion < 2026080901) {
+        // Иллюстрации учебного текста ([[ai-lecture-images-design]]).
+        // Флаг генерации - в очередь; DEFAULT 0 = «не запрашивалось», галочка на форме
+        // при этом включена по умолчанию (цену педагог видит на превью до запуска).
+        $table = new xmldb_table('unics_ai_queue');
+        $field = new xmldb_field('generate_images', XMLDB_TYPE_INTEGER, '2', null, null, null,
+            '0', 'generate_video');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Счетчики картинок - в УМК. NULL у всех существующих строк и означает
+        // «картинки не запрашивались»: до этой версии они не создавались вообще
+        // (0 штук на стенде, замерено 2026-08-09), поэтому проставлять нули нечестно.
+        $table = new xmldb_table('unics_umk');
+        foreach (['images_made' => 'profile_key', 'images_total' => 'images_made'] as $name => $after) {
+            $field = new xmldb_field($name, XMLDB_TYPE_INTEGER, '10', null, null, null, null, $after);
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026080901, 'local', 'unics');
+    }
+
     return true;
 }

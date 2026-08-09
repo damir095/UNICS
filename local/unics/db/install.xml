@@ -284,6 +284,8 @@
         <FIELD NAME="generated_at"     TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="published_at"     TYPE="int" LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="NULL = на проверке (черновик), задано = опубликован педагогом"/>
         <FIELD NAME="profile_key"      TYPE="char" LENGTH="40"  NOTNULL="false" SEQUENCE="false" COMMENT="sha1 отпечатка профиля; NULL = старый уровневый регламент"/>
+        <FIELD NAME="images_made"      TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="сколько иллюстраций ИИ реально создано"/>
+        <FIELD NAME="images_total"     TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="сколько запрашивалось; NULL - не запрашивались"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -370,6 +372,7 @@
         <FIELD NAME="generate_quiz"       TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="1" SEQUENCE="false" COMMENT="1 - генерировать тест"/>
         <FIELD NAME="generate_assignment" TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 - генерировать задание"/>
         <FIELD NAME="generate_video"      TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 - генерировать видеопрезентацию"/>
+        <FIELD NAME="generate_images"     TYPE="int"  LENGTH="2"  NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="1 - иллюстрации в учебном тексте"/>
         <FIELD NAME="status"              TYPE="int"  LENGTH="2"  NOTNULL="true"  DEFAULT="1" SEQUENCE="false"/>
         <FIELD NAME="error_message"       TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="created_at"          TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
