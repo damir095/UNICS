@@ -39,11 +39,31 @@ if ($is_methodist) {
     $methodist_org_id = 0;
 }
 
-// Курсы, доступные пользователю по делегированию. null = без ограничения (админ, региональные
-// роли, педагог-создатель); массив (возможно пустой) - для методистов организации и
-// муниципалитета. Резолвится ОДИН раз и питает и выпадающий список, и проверку POST: раздвоение
-// этих двух путей и породило утечку по ученической оси (см. запись в журнале за 2026-08-09).
-$deleg_course_ids = \local_unics\identity\delegation_manager::get_delegated_course_ids_for_user((int)$USER->id);
+/**
+ * Может ли текущий пользователь создавать материал В ЭТОМ курсе.
+ *
+ * Условие дословно то же, что у остальных страниц семьи, работающих внутри курса:
+ * course_diagnostic, course_final_exam, course_milestones, course_students, codifier_tag
+ * (в первой из них так и написано - «Гейт как у Сгенерировать УМК»). Раньше здесь не было
+ * НИКАКОЙ проверки: course_id принимался из POST как есть.
+ *
+ * Делегирование (`delegation_manager`) сюда НЕ годится, хотя и выглядит похоже: во-первых оно
+ * про запись на курс, а не про создание содержимого; во-вторых оно обходится - методист,
+ * записанный на любой курс, получает Moodle-роль `editingteacher` (enrol_teachers.php),
+ * а `access::user_has_role()` ищет роль БЕЗ фильтра контекста, поэтому резолвер делегирования
+ * считает такого методиста педагогом-создателем и снимает ограничение вовсе.
+ *
+ * Вопрос «должен ли методист иметь власть над ЛЮБЫМ курсом» здесь сознательно не решается:
+ * это политика, одинаково зашитая в шесть страниц, и менять ее в одной - значит разъехаться.
+ */
+$can_build_in_course = function (int $course_id): bool {
+    if ($course_id <= 1) {
+        return false; // курс 1 - главная страница сайта, материалы туда не кладем
+    }
+    return has_capability('local/unics:manage', context_system::instance())
+        || has_capability('moodle/course:manageactivities', context_course::instance($course_id))
+        || local_unics_is_methodist();
+};
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/generate_umk.php'));
@@ -90,14 +110,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
-    // Ось КУРСА: методист может засевать материалом только делегированные ему курсы. Без этой
-    // проверки он мог создать активности в ЛЮБОМ курсе сайта. Прием и текст - как в
-    // enrol_students.php; предусловий по правам у get_delegated_course_ids_for_user() нет,
-    // педагогу-создателю она возвращает null, поэтому его это не затрагивает.
-    if ($deleg_course_ids !== null && !in_array((int)$course_id, $deleg_course_ids, true)) {
+    // Ось КУРСА: без этой проверки любой, кто дошел до страницы, мог создать активности в ЛЮБОМ
+    // курсе сайта - course_id принимался из POST как есть. Заодно отсекается курс 1 (главная
+    // страница сайта), которого нет и в выпадающем списке.
+    if (!$can_build_in_course((int)$course_id)) {
         redirect(
             new moodle_url('/local/unics/pages/generate_umk.php'),
-            'Этот курс вам не делегирован.',
+            'У вас нет прав создавать материалы в этом курсе.',
             null, \core\output\notification::NOTIFY_WARNING
         );
     }
@@ -393,13 +412,11 @@ for ($i = 1; $i <= 11; $i++) { $classes_menu[$i] = "{$i} класс"; }
 $letters_menu = ['' => '- все буквы -', 'А' => 'А', 'Б' => 'Б', 'В' => 'В',
                  'Г' => 'Г', 'Д' => 'Д', 'Е' => 'Е', 'Ж' => 'Ж'];
 
-// Курсы. Список фильтруется тем же $deleg_course_ids, что проверяет POST, - страница не должна
-// предлагать то, что потом отвергнет.
+// Курсы. Список фильтруется ТЕМ ЖЕ предикатом, что проверяет POST: страница не должна предлагать
+// то, что потом отвергнет, и оба пути обязаны спрашивать одно правило - раздвоение GET и POST
+// уже дало одну утечку (см. журнал за 2026-08-09).
 $courses = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
-if ($deleg_course_ids !== null) {
-    $allowed_courses = array_fill_keys($deleg_course_ids, true);
-    $courses = array_filter($courses, fn($c) => isset($allowed_courses[(int)$c->id]));
-}
+$courses = array_filter($courses, fn($c) => $can_build_in_course((int)$c->id));
 
 // Предвыбор курса при переходе из шаблонов (course_templates.php)
 $preselect_course = optional_param('course_id', 0, PARAM_INT);
