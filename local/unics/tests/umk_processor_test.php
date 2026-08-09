@@ -263,6 +263,46 @@ final class umk_processor_test extends \advanced_testcase {
         $this->assertStringContainsString('Вода испаряется', $seen->tts);
     }
 
+    /**
+     * Отказ озвучки не должен валить комплект.
+     *
+     * Блок аудио был ЕДИНСТВЕННЫМ вторичным материалом без try/catch: у теста, задания,
+     * видео и озвучки слайдов защита есть. Из-за этого галочка «Аудиоматериал» при
+     * неоплаченном SmartSpeech гарантированно убивала весь УМК вместе с уже созданным
+     * учебным текстом ([[tts-honest-availability-design]], раздел 2).
+     */
+    public function test_audio_failure_does_not_kill_the_kit(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, , , $umkid, $queueid] = $this->make_fixture();
+        $DB->set_field('unics_ai_queue', 'generate_audio', 1, ['id' => $queueid]);
+
+        $generator = new class extends ai_generator {
+            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+                return 'Учебный текст про воду длиной более пятидесяти символов для проверки.';
+            }
+            public function generate_audio(string $text): string {
+                throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                    'SaluteSpeech HTTP 402: Payment Required');
+            }
+            public function get_avg_score(int $mdl_user_id): float {
+                return 75.0;
+            }
+        };
+
+        $this->expectOutputRegex('~готов~');
+        (new umk_processor($generator))->process(ai_queue::claim($queueid));
+
+        // Комплект вышел, а не умер.
+        $this->assertSame(3, (int)$DB->get_field('unics_umk', 'status', ['id' => $umkid]));
+        // Учебный текст на месте.
+        $this->assertTrue($DB->record_exists('unics_umk_materials',
+            ['umk_id' => $umkid, 'material_type' => 1]));
+        // Аудиоматериала нет.
+        $this->assertFalse($DB->record_exists('unics_umk_materials',
+            ['umk_id' => $umkid, 'material_type' => 3]));
+    }
+
     /** Флаг снят - ни одного обращения за картинкой, счетчики остаются NULL. */
     public function test_without_flag_no_images_and_counters_stay_null(): void {
         global $DB;

@@ -182,26 +182,34 @@ class umk_processor {
                 'sort_order'           => 1,
             ]);
 
-            // --- 2. Аудио ---
+            // --- 2. Аудио (нефатальный) ---
+            // Оборачивается ровно как тест, задание и видео. Раньше это был единственный
+            // вторичный материал без защиты, и неоплаченный SmartSpeech убивал весь
+            // комплект вместе с уже созданным учебным текстом.
             if ($task->generate_audio) {
-                $audio = $generator->generate_audio($text);
-                $audio_cmid = $builder->add_audio_resource(
-                    (int)$umk->mdl_course_id,
-                    $section,
-                    $umk->title,
-                    $audio,
-                    $generator->get_audio_ext()
-                );
-                $builder->restrict_activity_to_group($audio_cmid, $group_id);
-                $builder->set_view_completion($audio_cmid); // B1/B8
-                $material_cmids[] = $audio_cmid;
+                try {
+                    $audio = $generator->generate_audio($text);
+                    $audio_cmid = $builder->add_audio_resource(
+                        (int)$umk->mdl_course_id,
+                        $section,
+                        $umk->title,
+                        $audio,
+                        $generator->get_audio_ext()
+                    );
+                    $builder->restrict_activity_to_group($audio_cmid, $group_id);
+                    $builder->set_view_completion($audio_cmid); // B1/B8
+                    $material_cmids[] = $audio_cmid;
 
-                $DB->insert_record('unics_umk_materials', (object)[
-                    'umk_id'               => $umk->id,
-                    'mdl_course_module_id' => $audio_cmid,
-                    'material_type'        => 3,
-                    'sort_order'           => 2,
-                ]);
+                    $DB->insert_record('unics_umk_materials', (object)[
+                        'umk_id'               => $umk->id,
+                        'mdl_course_module_id' => $audio_cmid,
+                        'material_type'        => 3,
+                        'sort_order'           => 2,
+                    ]);
+                    mtrace('  Аудиоматериал создан');
+                } catch (\Throwable $ea) {
+                    mtrace('  [warn] Аудио не создано: ' . $ea->getMessage());
+                }
             }
 
             // --- 3. Тест (нефатальный) ---
