@@ -44,6 +44,38 @@ final class scope_checker_test extends \advanced_testcase {
         return (int)$user->id;
     }
 
+    /** Ученик, привязанный к организации. Возвращает mdl_user_id. */
+    private function student_in_org(int $org): int {
+        global $DB;
+        $user = $this->getDataGenerator()->create_user();
+        $DB->insert_record('unics_students', (object)[
+            'mdl_user_id'      => $user->id,
+            'organization_id'  => $org,
+            'difficulty_level' => 2,
+        ]);
+        return (int)$user->id;
+    }
+
+    /**
+     * Контракт, на который опирается защита generate_umk.php: методист организации НЕ
+     * дотягивается до ученика чужой организации.
+     *
+     * До 2026-08-09 страница генерации УМК этот контракт на POST не проверяла - фильтр по
+     * организации стоял только на GET-списке, и методист прямым запросом получал ФИО, класс и
+     * средний балл чужого ребенка (воспроизведено живьем). Предикат при этом работал всегда:
+     * дефект был в том, что страница его не звала.
+     */
+    public function test_methodist_cannot_reach_student_of_foreign_org(): void {
+        $methodist = $this->user_with_scope(null, null, $this->h['o1'], 4);
+
+        $mine  = $this->student_in_org($this->h['o1']);
+        $alien = $this->student_in_org($this->h['o2']);
+
+        $this->assertTrue(scope_checker::user_can_access_user($methodist, $mine));
+        $this->assertFalse(scope_checker::user_can_access_user($methodist, $alien),
+            'Ученик чужой организации недоступен методисту');
+    }
+
     public function test_region_scope_covers_own_branch_only(): void {
         $uid = $this->user_with_scope($this->h['r1'], null, null, 1);
 

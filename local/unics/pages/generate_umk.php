@@ -84,6 +84,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
+    // Scope-check: каждый учащийся должен входить в скоуп текущего пользователя. Без этого
+    // методист прямым POST получал ФИО, класс и средний балл ребенка ЧУЖОЙ организации:
+    // фильтр по организации применялся только к GET-списку, а обработчик POST решал «кого мне
+    // можно» своим кодом. Воспроизведено живьем 2026-08-09. Прием тот же, что в
+    // enrol_students.php и assign.php - страница не должна изобретать свой.
+    if (!$is_admin) {
+        foreach ($student_ids as $sid) {
+            $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => (int)$sid]);
+            if ($s_uid) {
+                local_unics_require_manage_or_scope_user($s_uid);
+            }
+        }
+    }
+
     // Отсев по правам: педагог ставит генерацию только своим привязанным учащимся.
     $allowed = [];
     foreach ($student_ids as $student_id) {
