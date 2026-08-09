@@ -39,9 +39,15 @@ class course_builder {
 
     /**
      * Добавить текстовую страницу (mod_page) в секцию курса.
-     * Возвращает cmid.
+     *
+     * @param array $images ['имя файла' => бинарник] - иллюстрации лекции. В $content
+     *        на них ссылаются через @@PLUGINFILE@@/<имя файла>; подстановку реального
+     *        URL делает mod_page на выводе. Пустой бинарник пропускается: картинка не
+     *        создалась, а материал важнее картинки ([[ai-lecture-images-design]]).
+     * @return int cmid
      */
-    public function add_text_page(int $course_id, int $section_num, string $title, string $content): int {
+    public function add_text_page(int $course_id, int $section_num, string $title,
+                                  string $content, array $images = []): int {
         global $DB, $CFG;
         require_once($CFG->dirroot . '/course/lib.php');
 
@@ -56,7 +62,29 @@ class course_builder {
         $page->timemodified  = time();
         $page->id = $DB->insert_record('page', $page);
 
-        return $this->attach_to_section($course_id, $section_num, 'page', $page->id);
+        $cmid = $this->attach_to_section($course_id, $section_num, 'page', $page->id);
+
+        if (!empty($images)) {
+            $ctx = \context_module::instance($cmid);
+            $fs  = get_file_storage();
+            foreach ($images as $filename => $binary) {
+                if ((string)$binary === '') {
+                    continue;
+                }
+                $fs->create_file_from_string([
+                    'contextid'    => $ctx->id,
+                    'component'    => 'mod_page',
+                    'filearea'     => 'content',
+                    'itemid'       => 0, // mod_page_pluginfile() читает область жестко с itemid 0.
+                    'filepath'     => '/',
+                    'filename'     => $filename,
+                    'timecreated'  => time(),
+                    'timemodified' => time(),
+                ], $binary);
+            }
+        }
+
+        return $cmid;
     }
 
     /**
