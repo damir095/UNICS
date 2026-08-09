@@ -1,0 +1,164 @@
+<?php
+namespace local_unics\ai;
+
+defined('MOODLE_INTERNAL') || die();
+
+/**
+ * Иллюстрации учебного текста УМК ([[ai-lecture-images-design]]).
+ *
+ * Класс намеренно чистый: ни сети, ни БД. Сама генерация картинки живет в
+ * ai_generator::generate_image(), сюда приходят только имена уже сохраненных файлов.
+ * Так разбор текста, промт и вставка разметки покрываются юнит-тестами целиком, а
+ * воркер остается тонким.
+ *
+ * Визуальная опора на КАЖДЫЙ смысловой блок - это дипломный тезис про ОВЗ, а не
+ * украшение: при ЗПР и РАС картинка держит понимание текста.
+ *
+ * @package local_unics
+ */
+class lecture_illustrator {
+
+    /**
+     * Потолок картинок на одну лекцию. Живет ВНУТРИ класса и применяется в
+     * split_sections(): вынеси его к вызывающему - и проверять потолок пришлось бы
+     * тестом воркера, который ходит в сеть.
+     */
+    public const MAX_IMAGES = 4;
+
+    /** Заголовок раздела после output_style::shift_headings(). Общий для разбора и вставки. */
+    private const HEADING_RE = '/^####[ \t]*(.+?)[ \t]*$/mu';
+
+    /** Сколько символов раздела уходит в промт картинки. */
+    private const LEAD_LEN = 200;
+
+    /**
+     * Указания по рисованию для типов ОВЗ. Ключи те же, что у ovz_type_ids в
+     * build_criteria(). Карта ОТДЕЛЬНАЯ от текстовой $ovz_instructions: те написаны про
+     * абзацы и предложения и в директиве рисования бессмысленны. Типы 2, 3 и 6
+     * (слабослышащий, НОДА, иное) добавки не получают сознательно - специфики
+     * изображения у них нет.
+     */
+    private const VISUAL_INSTRUCTIONS = [
+        1 => 'Крупные контрастные объекты, никаких мелких деталей.',
+        4 => 'Один узнаваемый объект в центре, простой однотонный фон, без мелких деталей.',
+        5 => 'Буквальное изображение без метафор и иносказаний, спокойные неяркие цвета.',
+    ];
+
+    /**
+     * Разделы текста, под которые нужны картинки.
+     *
+     * @param string $md учебный текст в markdown
+     * @param string $topic тема УМК - нужна для запасного пути без заголовков
+     * @param int $max потолок
+     * @return array<int, array{heading: string, lead: string}>
+     */
+    public static function split_sections(string $md, string $topic,
+                                          int $max = self::MAX_IMAGES): array {
+        if ($max < 1) {
+            return [];
+        }
+
+        $found = [];
+        if (preg_match_all(self::HEADING_RE, $md, $m, PREG_OFFSET_CAPTURE)) {
+            foreach ($m[0] as $i => $whole) {
+                $found[] = [
+                    'heading' => trim($m[1][$i][0]),
+                    'hstart'  => $whole[1],
+                    'bstart'  => $whole[1] + strlen($whole[0]),
+                ];
+            }
+        }
+
+        // Модель не разметила разделы - одна вводная картинка по теме УМК.
+        if (empty($found)) {
+            $lead = self::lead($md);
+            return $lead === '' ? [] : [['heading' => $topic, 'lead' => $lead]];
+        }
+
+        $out = [];
+        foreach ($found as $i => $sec) {
+            if (count($out) >= $max) {
+                break;
+            }
+            $end  = isset($found[$i + 1]) ? $found[$i + 1]['hstart'] : strlen($md);
+            $body = substr($md, $sec['bstart'], $end - $sec['bstart']);
+            $out[] = ['heading' => $sec['heading'], 'lead' => self::lead($body)];
+        }
+        return $out;
+    }
+
+    /**
+     * Промт рисования. Указания педагога (extra_prompt) сюда НЕ передаются
+     * ([[ai-lecture-images-design]], раздел 4.2) - поле пишется словами про текст.
+     *
+     * @param array $criteria результат ai_generator::build_criteria()
+     */
+    public static function build_image_prompt(array $criteria, string $topic,
+                                              string $heading, string $lead): string {
+        $prompt = 'Нарисуй образовательную иллюстрацию для школьного урока по теме «'
+            . $topic . '», к разделу «' . $heading . '».';
+
+        $lead = trim($lead);
+        if ($lead !== '') {
+            $prompt .= ' Содержание раздела: ' . $lead;
+        }
+
+        $prompt .= ' Стиль: чистый, минималистичный, яркий.'
+            . ' Без подписей и текста на изображении.';
+
+        foreach ((array)($criteria['ovz_type_ids'] ?? []) as $type) {
+            if (isset(self::VISUAL_INSTRUCTIONS[(int)$type])) {
+                $prompt .= ' ' . self::VISUAL_INSTRUCTIONS[(int)$type];
+            }
+        }
+
+        return $prompt;
+    }
+
+    /**
+     * Вставить разметку картинок в текст.
+     *
+     * @param array $sections результат split_sections() - оттуда берется alt
+     * @param array<int, string> $filenames индекс раздела => имя файла; отсутствующий
+     *        ключ означает, что картинка не создалась
+     */
+    public static function insert_images(string $md, array $sections, array $filenames): string {
+        if (empty($filenames) || empty($sections)) {
+            return $md;
+        }
+
+        // Заголовков нет - единственная картинка идет в начало текста.
+        if (!preg_match(self::HEADING_RE, $md)) {
+            return isset($filenames[0])
+                ? self::img_tag($filenames[0], $sections[0]['heading']) . "\n\n" . $md
+                : $md;
+        }
+
+        $idx = -1;
+        return preg_replace_callback(self::HEADING_RE,
+            static function (array $m) use (&$idx, $filenames): string {
+                $idx++;
+                if (!isset($filenames[$idx])) {
+                    return $m[0];
+                }
+                return $m[0] . "\n\n" . self::img_tag($filenames[$idx], trim($m[1]));
+            }, $md);
+    }
+
+    /** Разметка одной картинки. Класс - хук для стиля в _unics-pages.scss. */
+    private static function img_tag(string $filename, string $alt): string {
+        return '<p class="unics-lecture-img"><img src="@@PLUGINFILE@@/' . $filename
+            . '" alt="' . s($alt) . '"></p>';
+    }
+
+    /** Начало раздела для промта: пробелы схлопнуты, обрезка по границе слова. */
+    private static function lead(string $body): string {
+        $flat = trim((string)preg_replace('/\s+/u', ' ', $body));
+        if ($flat === '' || \core_text::strlen($flat) <= self::LEAD_LEN) {
+            return $flat;
+        }
+        $cut = \core_text::substr($flat, 0, self::LEAD_LEN);
+        $sp  = \core_text::strrpos($cut, ' ');
+        return $sp > 0 ? \core_text::substr($cut, 0, $sp) : $cut;
+    }
+}
