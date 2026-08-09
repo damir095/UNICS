@@ -84,16 +84,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         );
     }
 
-    // Scope-check: каждый учащийся должен входить в скоуп текущего пользователя. Без этого
-    // методист прямым POST получал ФИО, класс и средний балл ребенка ЧУЖОЙ организации:
-    // фильтр по организации применялся только к GET-списку, а обработчик POST решал «кого мне
-    // можно» своим кодом. Воспроизведено живьем 2026-08-09. Прием тот же, что в
-    // enrol_students.php и assign.php - страница не должна изобретать свой.
-    if (!$is_admin) {
+    // Scope-check: ученик должен входить в скоуп текущего пользователя. Без этого методист
+    // прямым POST получал ФИО, класс и средний балл ребенка ЧУЖОЙ организации: фильтр по
+    // организации стоял только на GET-списке (воспроизведено живьем 2026-08-09).
+    //
+    // Здесь НЕЛЬЗЯ звать local_unics_require_manage_or_scope_user(), как делают
+    // enrol_students.php и assign.php: этот гейт начинается с require_capability('manageorg'),
+    // а те страницы требуют manageorg на ВХОДЕ. Наша пускает по viewstudents, то есть
+    // педагогов, у которых manageorg нет, - и гейт закрыл бы им генерацию по СОБСТВЕННЫМ
+    // ученикам (проверено живьем: педагог получал «[[unics:manageorg]]»). Педагога
+    // ограничивают его привязки, проверяемые ниже, поэтому здесь только не-педагоги.
+    if (!$is_admin && !$teacher_record) {
         foreach ($student_ids as $sid) {
             $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => (int)$sid]);
-            if ($s_uid) {
-                local_unics_require_manage_or_scope_user($s_uid);
+            // Отказ и на несуществующем id: гейт обязан быть fail-closed, иначе будущий код,
+            // читающий сырой $student_ids, унаследует непроверенный набор.
+            if (!$s_uid || !\local_unics\identity\scope_checker::user_can_access_user(
+                    (int)$USER->id, $s_uid)) {
+                throw new \moodle_exception('nopermissions', 'error', '',
+                    'учащийся вне вашего скоупа');
             }
         }
     }
@@ -104,6 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         if ($teacher_record && !$DB->record_exists('unics_teacher_student', [
             'teacher_id' => $teacher_record->id, 'student_id' => $student_id,
         ])) continue;
+        // Заархивированный или выпустившийся в GET-списке не показывается - POST не должен
+        // давать к нему доступ в обход. Та же развилка GET/POST, что и со скоупом.
+        if (!$DB->record_exists_select('unics_students',
+                'id = :id AND archived_at IS NULL AND graduated_at IS NULL',
+                ['id' => (int)$student_id])) {
+            continue;
+        }
         $allowed[] = (int)$student_id;
     }
 
