@@ -67,7 +67,7 @@ final class image_retry_test extends \advanced_testcase {
 
         $this->assertSame(2, $gen->attempts);
         $this->assertStringContainsString(self::UUID, $image);
-        $this->assertDebuggingCalledCount(1);
+        $this->expectOutputRegex('~повтор~');
     }
 
     /**
@@ -141,6 +141,6 @@ final class image_retry_test extends \advanced_testcase {
         }
 
         $this->assertSame(2, $gen->attempts);
-        $this->assertDebuggingCalledCount(1);
+        $this->expectOutputRegex('~повтор~');
     }
 }

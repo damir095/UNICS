@@ -51,8 +51,9 @@ final class generate_text_refusal_test extends \advanced_testcase {
 
         $this->assertSame(2, $gen->calls);
         $this->assertStringContainsString('Круговорот воды', $out);
-        // След первого отказа обязателен: иначе удачный повтор неотличим от чистого прогона.
-        $this->assertDebuggingCalledCount(1);
+        // Под PHPUnit CLI_SCRIPT истинно, значит trace() идет в mtrace - тот самый вывод,
+        // который сохраняется в task_log.output и переживает пачку отказов.
+        $this->expectOutputRegex('~попытка 1 из 2~');
     }
 
     /** Два отказа подряд - исключение с внятным текстом, третьей попытки нет. */
@@ -77,7 +78,30 @@ final class generate_text_refusal_test extends \advanced_testcase {
 
         $this->assertSame(2, $gen->calls);
         // По следу на каждую неудачную попытку - видно, что повтор действительно был.
-        $this->assertDebuggingCalledCount(2);
+        $this->expectOutputRegex('~попытка 2 из 2~');
+    }
+
+    /**
+     * В следе должно быть видно, КАКОЙ сигнал сработал: без этого нельзя отличить
+     * блокировку темы от пачки ([[ai-refusal-trace-design]]).
+     */
+    public function test_trace_names_the_signal(): void {
+        $this->resetAfterTest();
+        set_config('ai_api_key', 'FAKE_KEY_FOR_TEST', 'local_unics');
+
+        $gen = new class extends ai_generator {
+            protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
+                return generate_text_refusal_test::refusal_text();
+            }
+        };
+
+        $this->expectOutputRegex('~не обладает собственным мнением~');
+
+        try {
+            $gen->generate_text('любой промт');
+        } catch (\moodle_exception $e) {
+            // Ожидаемо: два отказа подряд.
+        }
     }
 
     /** Нормальный ответ - ровно один запрос, лишнего обращения к ИИ нет. */

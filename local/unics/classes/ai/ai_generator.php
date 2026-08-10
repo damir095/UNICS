@@ -47,6 +47,25 @@ class ai_generator {
         $this->image_model = get_config('local_unics', 'ai_image_model') ?: 'GigaChat-2';
     }
 
+    /**
+     * Диагностический след.
+     *
+     * Под CLI - mtrace: вывод adhoc-задачи сохраняется в task_log.output и переживает
+     * сбой, поэтому пачку отказов можно разобрать через час, а не только поймать вживую.
+     * В вебе - debugging: generate_text() вызывается и из essay_check.php, а mtrace там
+     * печатает прямо в страницу и ломает верстку.
+     *
+     * Замерено 2026-08-10: debugging() из воркера не попадает в task_log вообще, и живой
+     * отказ не оставил ни одной строки следа ([[ai-refusal-trace-design]], раздел 1.2).
+     */
+    private function trace(string $message, int $level = DEBUG_NORMAL): void {
+        if (defined('CLI_SCRIPT') && CLI_SCRIPT) {
+            mtrace($message);
+            return;
+        }
+        debugging($message, $level);
+    }
+
     public function get_audio_ext(): string {
         return 'wav';
     }
@@ -275,13 +294,13 @@ class ai_generator {
             $this->last_finish_reason = '';
             $raw = $this->generate_text_gigachat($prompt, $max_tokens);
 
-            if (refusal_detector::is_refusal($raw, $this->last_finish_reason)) {
+            $reason = refusal_detector::reason_for($raw, $this->last_finish_reason);
+            if ($reason !== null) {
                 // След обязателен: без него удачный повтор неотличим от чистого прогона, и
                 // мы не узнаем ни частоту отказов, ни какой сигнал сработал. Эта задача и
                 // возникла из-за сбоя, который молчал.
-                debugging('local_unics: отказ ИИ, попытка ' . $attempt . ' из 2, finish_reason: ['
-                    . $this->last_finish_reason . '], ответ: '
-                    . mb_substr(trim($raw), 0, 120), DEBUG_NORMAL);
+                $this->trace('  [warn] Отказ ИИ, попытка ' . $attempt . ' из 2. Сигнал: '
+                    . $reason . '. Ответ: ' . mb_substr(trim($raw), 0, 120));
             } else {
                 // Единственное горлышко всех шести выходов ИИ ([[ai-output-style-design]]): чистка
                 // стоит здесь, чтобы ни один вызывающий не мог о ней забыть. Для JSON-выходов
@@ -997,8 +1016,8 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             } catch (\Throwable $e) {
                 $last = $e;
                 if ($attempt === 1) {
-                    debugging('local_unics: картинка не создана с первой попытки, повтор. '
-                        . $e->getMessage(), DEBUG_NORMAL);
+                    $this->trace('  [warn] Картинка не создана с первой попытки, повтор. '
+                        . $e->getMessage());
                 }
             }
         }
@@ -1053,7 +1072,8 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             $text = trim($this->generate_text($this->build_rationale_prompt($ctx), 256));
             return $text !== '' ? mb_substr($text, 0, 1000) : null;
         } catch (\Throwable $e) {
-            debugging('local_unics: генерация rationale не удалась: ' . $e->getMessage(), DEBUG_DEVELOPER);
+            $this->trace('  [warn] Генерация обоснования шага не удалась: ' . $e->getMessage(),
+                DEBUG_DEVELOPER);
             return null;
         }
     }
