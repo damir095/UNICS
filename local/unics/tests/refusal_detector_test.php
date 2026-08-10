@@ -94,6 +94,56 @@ final class refusal_detector_test extends \basic_testcase {
         $this->assertFalse(refusal_detector::is_refusal($lecture, 'stop'));
     }
 
+    /**
+     * Мало знать, что это отказ - надо знать, КАКОЙ сигнал сработал: иначе нельзя
+     * отличить блокировку темы от пачки ([[ai-refusal-trace-design]], раздел 1.2).
+     */
+    public function test_reason_names_blacklist_signal(): void {
+        $reason = refusal_detector::reason_for(self::BLACKLIST_TEXT, refusal_detector::BLACKLIST);
+
+        $this->assertNotNull($reason);
+        $this->assertStringContainsString('blacklist', $reason);
+    }
+
+    /** При совпадении фразы в след попадает сама фраза. */
+    public function test_reason_names_matched_marker(): void {
+        $reason = refusal_detector::reason_for(self::SOFT_TEXT, 'stop');
+
+        $this->assertNotNull($reason);
+        $this->assertStringContainsString('чувствительными темами', $reason);
+    }
+
+    public function test_reason_is_null_for_real_lecture(): void {
+        $this->assertNull(refusal_detector::reason_for(self::REAL_LECTURE, 'stop'));
+    }
+
+    /** Полноразмерный текст с фразой - не отказ, значит и причины нет. */
+    public function test_reason_is_null_for_long_text_with_marker(): void {
+        $long = str_repeat('Обычный учебный текст про машинное обучение. ', 30)
+            . 'программа не обладает собственным мнением. '
+            . str_repeat('Продолжение урока. ', 30);
+
+        $this->assertNull(refusal_detector::reason_for($long, 'stop'));
+    }
+
+    /** is_refusal остается прежним по поведению - он теперь обертка над reason_for. */
+    public function test_is_refusal_agrees_with_reason_for(): void {
+        $cases = [
+            [self::BLACKLIST_TEXT, refusal_detector::BLACKLIST],
+            [self::SOFT_TEXT, 'stop'],
+            [self::REAL_LECTURE, 'stop'],
+            ['', 'stop'],
+        ];
+
+        foreach ($cases as [$text, $finish]) {
+            $this->assertSame(
+                refusal_detector::reason_for($text, $finish) !== null,
+                refusal_detector::is_refusal($text, $finish),
+                'Расхождение на тексте: ' . mb_substr($text, 0, 40)
+            );
+        }
+    }
+
     /** Но blacklist перевешивает любую длину: это прямой сигнал сервера. */
     public function test_blacklist_wins_over_full_length_text(): void {
         $long = str_repeat('Совершенно обычный учебный текст. ', 100);

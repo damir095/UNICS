@@ -53,32 +53,43 @@ class refusal_detector {
     ];
 
     /**
+     * Какой сигнал опознал отказ, или null если это не отказ.
+     *
+     * Отдельно от is_refusal(), потому что для разбора мало факта: пачка отказов и
+     * блокировка конкретной темы выглядят одинаково, пока не видно, сработало поле
+     * finish_reason или совпадение фразы ([[ai-refusal-trace-design]], раздел 1.2).
+     *
      * @param string $text сырой ответ модели, ДО output_style::clean()
      * @param string $finish_reason поле ответа; пустая строка = неизвестен
      */
-    public static function is_refusal(string $text, string $finish_reason): bool {
+    public static function reason_for(string $text, string $finish_reason): ?string {
         if ($finish_reason === self::BLACKLIST) {
-            return true;
+            return 'finish_reason=' . self::BLACKLIST;
         }
 
         // Пустой ответ ловит проверка длины в generate_text_gigachat() - не дублируем.
         $trimmed = trim($text);
         if ($trimmed === '') {
-            return false;
+            return null;
         }
 
         // Полноразмерный материал болванкой быть не может: искать в нем фразы - значит
         // убивать законные уроки, где фраза встречается по делу.
         if (\core_text::strlen($trimmed) > self::MAX_REFUSAL_LEN) {
-            return false;
+            return null;
         }
 
         foreach (self::MARKERS as $marker) {
             if (mb_stripos($text, $marker) !== false) {
-                return true;
+                return 'фраза «' . $marker . '»';
             }
         }
 
-        return false;
+        return null;
+    }
+
+    /** Факт отказа. Тонкая обертка: вся логика живет в reason_for(). */
+    public static function is_refusal(string $text, string $finish_reason): bool {
+        return self::reason_for($text, $finish_reason) !== null;
     }
 }
