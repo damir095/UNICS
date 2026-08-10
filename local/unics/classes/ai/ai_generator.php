@@ -59,7 +59,17 @@ class ai_generator {
      * отказ не оставил ни одной строки следа ([[ai-refusal-trace-design]], раздел 1.2).
      */
     private function trace(string $message, int $level = DEBUG_NORMAL): void {
+        global $CFG;
+
+        // Веб-cron сюда тоже попадает: admin/cron.php объявляет CLI_SCRIPT = true
+        // («фальшивый CLI-скрипт, эмулирующий CLI через веб»), так что след не теряется.
         if (defined('CLI_SCRIPT') && CLI_SCRIPT) {
+            // Уровень уважаем и здесь. У generate_rationale он DEBUG_DEVELOPER: при
+            // недоступности ИИ иначе в журнал задачи сыпалась бы строка на КАЖДУЮ
+            // подсказку, и полезный след утонул бы в шуме (найдено ревью).
+            if ($level === DEBUG_DEVELOPER && empty($CFG->debugdeveloper)) {
+                return;
+            }
             mtrace($message);
             return;
         }

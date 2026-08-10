@@ -47,13 +47,18 @@ final class generate_text_refusal_test extends \advanced_testcase {
             }
         };
 
+        // Под PHPUnit CLI_SCRIPT истинно, значит trace() идет в mtrace - тот самый вывод,
+        // который сохраняется в task_log.output и переживает пачку отказов.
+        // Ловим вывод, а не expectOutputRegex: нужна ТОЧНАЯ кратность, иначе снятие гейта
+        // «if ($attempt === 1)» тест бы не уронило (найдено ревью).
+        ob_start();
         $out = $gen->generate_text('любой промт');
+        $trace = (string)ob_get_clean();
 
         $this->assertSame(2, $gen->calls);
         $this->assertStringContainsString('Круговорот воды', $out);
-        // Под PHPUnit CLI_SCRIPT истинно, значит trace() идет в mtrace - тот самый вывод,
-        // который сохраняется в task_log.output и переживает пачку отказов.
-        $this->expectOutputRegex('~попытка 1 из 2~');
+        $this->assertSame(1, substr_count($trace, 'Отказ ИИ, попытка'));
+        $this->assertStringContainsString('попытка 1 из 2', $trace);
     }
 
     /** Два отказа подряд - исключение с внятным текстом, третьей попытки нет. */
@@ -69,16 +74,20 @@ final class generate_text_refusal_test extends \advanced_testcase {
             }
         };
 
+        ob_start();
         try {
             $gen->generate_text('любой промт');
             $this->fail('Ожидалось исключение при двойном отказе');
         } catch (\moodle_exception $e) {
             $this->assertStringContainsString('фильтр модели', $e->getMessage());
+        } finally {
+            $trace = (string)ob_get_clean();
         }
 
         $this->assertSame(2, $gen->calls);
-        // По следу на каждую неудачную попытку - видно, что повтор действительно был.
-        $this->expectOutputRegex('~попытка 2 из 2~');
+        // По следу на КАЖДУЮ неудачную попытку - видно, что повтор действительно был.
+        $this->assertSame(2, substr_count($trace, 'Отказ ИИ, попытка'));
+        $this->assertStringContainsString('попытка 2 из 2', $trace);
     }
 
     /**
@@ -95,13 +104,19 @@ final class generate_text_refusal_test extends \advanced_testcase {
             }
         };
 
-        $this->expectOutputRegex('~не обладает собственным мнением~');
-
+        // Проверяем ИМЕННО поле «Сигнал», а не текст ответа: болванка короче вырезки в
+        // 120 символов и попадает в след целиком, поэтому проверка по ней проходила бы
+        // при любом сигнале. Найдено ревью мутацией - подмена строки сигнала тест не
+        // роняла.
+        ob_start();
         try {
             $gen->generate_text('любой промт');
         } catch (\moodle_exception $e) {
             // Ожидаемо: два отказа подряд.
         }
+        $out = (string)ob_get_clean();
+
+        $this->assertStringContainsString('Сигнал: фраза «не обладает собственным мнением»', $out);
     }
 
     /** Нормальный ответ - ровно один запрос, лишнего обращения к ИИ нет. */

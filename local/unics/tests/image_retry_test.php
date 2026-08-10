@@ -63,11 +63,15 @@ final class image_retry_test extends \advanced_testcase {
         set_config('ai_api_key', 'FAKE_KEY', 'local_unics');
         $gen = $this->generator(1);
 
+        // Ловим вывод, а не expectOutputRegex: нужна ТОЧНАЯ кратность следа, иначе снятие
+        // гейта «if ($attempt === 1)» тест бы не уронило (найдено ревью).
+        ob_start();
         $image = $gen->generate_image('нарисуй воду');
+        $trace = (string)ob_get_clean();
 
         $this->assertSame(2, $gen->attempts);
         $this->assertStringContainsString(self::UUID, $image);
-        $this->expectOutputRegex('~повтор~');
+        $this->assertSame(1, substr_count($trace, 'повтор'));
     }
 
     /**
@@ -133,14 +137,18 @@ final class image_retry_test extends \advanced_testcase {
         set_config('ai_api_key', 'FAKE_KEY', 'local_unics');
         $gen = $this->generator(2);
 
+        ob_start();
         try {
             $gen->generate_image('нарисуй воду');
             $this->fail('Ожидалось исключение после двух сбоев');
         } catch (\moodle_exception $e) {
             $this->assertStringContainsString('timed out', $e->getMessage());
+        } finally {
+            $trace = (string)ob_get_clean();
         }
 
         $this->assertSame(2, $gen->attempts);
-        $this->expectOutputRegex('~повтор~');
+        // След пишется только на первой попытке: вторая уже бросает наружу.
+        $this->assertSame(1, substr_count($trace, 'повтор'));
     }
 }
