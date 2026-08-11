@@ -164,10 +164,19 @@ html.unics-a11y-dark {
     .popover,
     .popover-body,
     .toast,
-    .bg-white,
-    .bg-light,
     .secondary-navigation .navigation {
         background-color: var(--unics-surface);
+        color: var(--unics-text);
+        border-color: var(--unics-border);
+    }
+
+    // Утилиты фона Bootstrap объявлены с !important, поэтому правило выше их НЕ
+    // перебивало: .bg-light сохранял светлый #f8f9fa и в темной схеме. На заголовке
+    // карточки это давало нашему светлому тексту 1.14:1 при пороге 4.5 - замерено
+    // аудитом детских страниц 2026-08-11 на student_report, подтверждено axe.
+    .bg-white,
+    .bg-light {
+        background-color: var(--unics-surface) !important;
         color: var(--unics-text);
         border-color: var(--unics-border);
     }
