@@ -210,7 +210,10 @@ if (!empty($class_convs)) {
         echo '<a href="' . $chref . '" class="unics-contact unics-contact--class'
            . ($cactive ? ' unics-contact--active' : '') . '" data-convid="' . (int)$cc->convid . '"'
            . ($cactive ? ' aria-current="true"' : '') . '>';
-        echo '<span class="unics-contact__avatar" aria-hidden="true">&#128101;</span>';
+        // Значок беседы: ядровая иконка вместо эмодзи (в UI эмодзи не держим). Наследует
+        // color от .unics-contact__avatar, поэтому правки контраста на нем работают как есть.
+        echo '<span class="unics-contact__avatar" aria-hidden="true">'
+           . $OUTPUT->pix_icon('i/cohort', '') . '</span>';
         echo '<span class="unics-contact__name">' . s($cc->name)
            . ' <span class="text-muted">(' . (int)$cc->count . ')</span></span>';
         // Бейдж непрочитанного (M2.2) - наполняется JS из get_conversations.
@@ -294,7 +297,7 @@ if ($active_convid || $active_userid) {
     echo '<div class="unics-messenger__thread-header">';
     if ($active_isgroup) {
         echo '<span class="unics-contact__avatar unics-contact__avatar--group" '
-           . 'aria-hidden="true">&#128101;</span>';
+           . 'aria-hidden="true">' . $OUTPUT->pix_icon('i/cohort', '') . '</span>';
     } else {
         echo '<span class="unics-contact__avatar">' . s($active_initials) . '</span>';
     }

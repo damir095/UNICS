@@ -758,9 +758,10 @@ if (empty($students)) {
         ['class' => 'text-muted d-block mb-1']
     );
 
+    // Фон - классом (см. codifier.php): инлайновый цвет темная схема не перебивает.
     echo html_writer::start_tag('div', [
-        'class' => 'border rounded p-2',
-        'style' => 'max-height:360px;overflow-y:auto;background:#fff',
+        'class' => 'border rounded p-2 bg-white',
+        'style' => 'max-height:360px;overflow-y:auto',
     ]);
 
     foreach ($by_level as $lvl => $group_students) {

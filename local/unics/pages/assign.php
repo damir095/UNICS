@@ -375,9 +375,11 @@ if (empty($students)) {
         'class'   => 'btn btn-link btn-sm p-0',
     ]);
 
+    // Фон - классом `bg-white` (тема ремапит его в темной схеме); инлайновый цвет она
+    // перебить не может, и список оставался белым под светлым текстом.
     echo html_writer::start_tag('div', [
-        'class' => 'border rounded p-2 mt-1',
-        'style' => 'max-height:280px;overflow-y:auto;background:#fff',
+        'class' => 'border rounded p-2 mt-1 bg-white',
+        'style' => 'max-height:280px;overflow-y:auto',
     ]);
 
     foreach ($students as $s) {

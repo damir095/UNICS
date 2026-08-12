@@ -150,7 +150,35 @@ class codifier_manager {
         $DB->set_field('unics_codifier_element', 'ordinal', $el->ordinal, ['id' => $neighbour->id]);
     }
 
-    /** Удаление элемента каскадом по поддереву (вместе со связями). */
+    /**
+     * Удаление элемента каскадом по поддереву - вместе со ВСЕМИ ссылками на него.
+     *
+     * На `unics_codifier_element.id` ссылаются семь таблиц, и раньше чистилась одна
+     * (`unics_codifier_link`). Остальные накапливали строки про несуществующий навык, а
+     * читатели деградировали молча: `get_field('unics_codifier_element','title',...)`
+     * возвращал false, и подпись навыка в очереди педагога становилась пустой строкой.
+     *
+     * Политика разная, потому что смысл ссылки разный:
+     *
+     * | Таблица | Что делаем | Почему |
+     * |---|---|---|
+     * | `unics_codifier_link`      | удалить  | чистая m2m «элемент-контент», без элемента пуста |
+     * | `unics_skill_mastery`      | удалить  | «владение навыком» без навыка бессмысленно |
+     * | `unics_mastery_history`    | удалить  | лог смен владения тем же навыком |
+     * | `unics_adaptive_suggestion`| удалить  | предложение «дай ремедиацию по навыку» невыполнимо |
+     * | `unics_cat_session` + `_step` | удалить | сессия проверки по несуществующему навыку |
+     * | `unics_item_irt`           | ОБНУЛИТЬ | параметры принадлежат ЗАДАНИЮ, навык тут пометка |
+     * | `unics_path_step`          | ОБНУЛИТЬ | шаг ИОМ - реальная работа ребёнка |
+     *
+     * Два замечания, из-за которых политика не «обнулить везде, где NULL разрешён»:
+     *
+     * 1. У `unics_adaptive_suggestion.element_id` NULL ЗНАЧИТ «предложение о смене уровня,
+     *    глобальное» (см. install.xml). Обнуление превратило бы ремедиацию по навыку в
+     *    другой вид предложения - поэтому строка удаляется.
+     * 2. Шаг ИОМ удалять нельзя: у него свои заголовок, курс и статус, ребёнок мог его уже
+     *    начать. Правка кодификатора методистом не должна стирать маршрут ребёнка.
+     *    `step_material_url()` на шаге без навыка корректно откатывается на ссылку курса.
+     */
     public static function delete_element(int $element_id): void {
         global $DB;
         $el = $DB->get_record('unics_codifier_element', ['id' => $element_id], '*', MUST_EXIST);
@@ -165,7 +193,23 @@ class codifier_manager {
             $subtree = [$element_id];
         }
         list($insql, $params) = $DB->get_in_or_equal($subtree, SQL_PARAMS_NAMED);
-        $DB->delete_records_select('unics_codifier_link', "element_id $insql", $params);
+
+        // Шаги CAT висят на сессии, а не на элементе: собираем сессии до их удаления.
+        $sessions = $DB->get_fieldset_select('unics_cat_session', 'id', "element_id $insql", $params);
+        if ($sessions) {
+            list($ssql, $sparams) = $DB->get_in_or_equal($sessions, SQL_PARAMS_NAMED);
+            $DB->delete_records_select('unics_cat_step', "session_id $ssql", $sparams);
+        }
+
+        foreach (['unics_codifier_link', 'unics_skill_mastery', 'unics_mastery_history',
+                  'unics_adaptive_suggestion', 'unics_cat_session'] as $table) {
+            $DB->delete_records_select($table, "element_id $insql", $params);
+        }
+
+        foreach (['unics_item_irt', 'unics_path_step'] as $table) {
+            $DB->set_field_select($table, 'element_id', null, "element_id $insql", $params);
+        }
+
         $DB->delete_records_select('unics_codifier_element', "id $insql", $params);
     }
 

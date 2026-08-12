@@ -312,8 +312,9 @@ echo html_writer::empty_tag('input', ['type' => 'text', 'id' => 'course-filter',
 if (empty($courses)) {
     echo html_writer::tag('p', 'Курсов нет.', ['class' => 'text-muted']);
 } else {
+    // Фон - классом (см. codifier.php): инлайновый цвет темная схема не перебивает.
     echo html_writer::start_tag('div', ['id' => 'course-list',
-        'class' => 'border rounded p-2', 'style' => 'max-height:260px;overflow-y:auto;background:#fff']);
+        'class' => 'border rounded p-2 bg-white', 'style' => 'max-height:260px;overflow-y:auto']);
     foreach ($courses as $c) {
         $label = htmlspecialchars($c->fullname)
             . ((int)$c->visible === 0

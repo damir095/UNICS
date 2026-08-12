@@ -588,8 +588,9 @@ if ($selected_course > 0) {
     echo html_writer::empty_tag('input', ['type' => 'hidden',
         'name' => 'enrol_filter_letter', 'id' => 'esp_let_hidden', 'value' => '']);
 
-    echo html_writer::start_tag('div', ['id' => 'esp_list', 'class' => 'border rounded p-2',
-        'style' => 'max-height:280px;overflow-y:auto;background:#fff']);
+    // Фон - классом (см. codifier.php): инлайновый цвет темная схема не перебивает.
+    echo html_writer::start_tag('div', ['id' => 'esp_list', 'class' => 'border rounded p-2 bg-white',
+        'style' => 'max-height:280px;overflow-y:auto']);
     if (empty($student_picks)) {
         echo html_writer::tag('div', 'У педагогов на странице нет закреплённых учеников.',
             ['class' => 'text-muted']);

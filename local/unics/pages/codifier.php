@@ -155,8 +155,12 @@ if (!$codifier) {
 echo html_writer::tag('h4', s($codifier->name), ['class' => 'mt-3']);
 
 // Импорт.
+// Фон панели - КЛАССОМ, не инлайновым стилем. Инлайновый `background:#f5f6f8` тема перебить
+// не может в принципе (инлайн выше любого правила), и в темной схеме подпись получала
+// светлый цвет от текст-руля на светлой панели: замер 2026-08-12 дал 1.11:1. В CSS этого
+// цвета нет вообще, поэтому и `contrast_guard` его не видел.
 echo html_writer::start_tag('form', ['method' => 'post', 'enctype' => 'multipart/form-data',
-    'class' => 'form-inline mb-3 p-2', 'style' => 'background:#f5f6f8;border-radius:8px;']);
+    'class' => 'form-inline mb-3 p-2 bg-light rounded']);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'import']);
 echo html_writer::tag('label', 'Импорт (xlsx или csv: столбцы код, название, код родителя): ',

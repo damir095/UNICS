@@ -72,8 +72,10 @@ echo html_writer::tag('p',
     . 'Региональные роли и педагог-создатель видят все курсы.', ['class' => 'text-muted']);
 
 // --- Форма добавления ---
-echo html_writer::start_tag('form', ['method' => 'post', 'class' => 'form-inline mb-4 p-3',
-    'style' => 'background:#f5f6f8;border-radius:8px;gap:.5rem;']);
+// Фон - классом: инлайновый цвет тема не перебивает, и в темной схеме панель оставалась
+// светлой под светлым текстом (тот же дефект, что на codifier.php, замер 2026-08-12).
+echo html_writer::start_tag('form', ['method' => 'post', 'class' => 'form-inline mb-4 p-3 bg-light rounded',
+    'style' => 'gap:.5rem;']);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'add']);
 
