@@ -71,4 +71,65 @@ final class contrast_guard_test extends \advanced_testcase {
             implode("\n", $lines)
         ));
     }
+
+    /**
+     * Брендовая заливка обязана закреплять цвет текста В ТОМ ЖЕ правиле.
+     *
+     * Правило контраста выше судит ПАРУ цветов и потому слепо к правилу, которое
+     * задает только фон: цвет там приходит по наследованию или из другого правила,
+     * и в темной схеме его перебивает общий текст-руль `_accessibility.scss`
+     * (h1..., p, span, div, ...) значением --unics-text. На брендовом #C44A2F это
+     * дает 3.99:1 при пороге 4.5.
+     *
+     * Дефект такого вида ловился рантайм-аудитом ТРИЖДЫ за два дня (аватарка
+     * контакта и групповая аватарка 2026-08-12, текст своего пузыря сообщения
+     * 2026-08-12), каждый раз уже на живом стенде. Проверка статическая: заливка
+     * одним из брендовых токенов без `color` в том же блоке роняет сьют.
+     *
+     * Обратный случай (правило перекрывает ФОН у элемента, чей цвет закреплен
+     * ДРУГИМ правилом, - так сломалась аватарка выбранной беседы класса) этой
+     * проверкой НЕ накрыт: в статике не видно, какое правило выиграет каскад.
+     */
+    public function test_brand_fill_always_pins_text_colour(): void {
+        // Токены-заливки, у которых парный текст - --unics-on-primary, а не
+        // унаследованный цвет. --unics-primary-deep включен намеренно: в темной
+        // схеме он ТЕКСТОВЫЙ (светлый), и заливка им - отдельная ошибка.
+        $fills = ['--unics-primary-btn', '--unics-primary-hover', '--unics-primary-deep', '--unics-primary'];
+
+        // Заливки без текста внутри: у полос прогресса контент - сама заливка.
+        $allowed = [
+            '.unics-child-course .unics-course-progress-bar' => 'Полоса прогресса курса: градиент без текста внутри.',
+            '.unics-child-course .unics-sec-progress-bar'    => 'Полоса прогресса раздела: градиент без текста внутри.',
+            '.unics-staff-course .unics-staff-sec-bar'       => 'Полоса прогресса раздела (педагог): градиент без текста внутри.',
+        ];
+
+        $bysel = [];
+        foreach (contrast_analyzer::declarations(contrast_analyzer::css()) as $d) {
+            $bysel[$d['sel']][$d['prop']] = $d['val'];
+        }
+
+        $lines = [];
+        foreach ($bysel as $sel => $props) {
+            if (!contrast_analyzer::is_ours($sel) || isset($allowed[$sel]) || isset($props['color'])) {
+                continue;
+            }
+            foreach (['background', 'background-color'] as $prop) {
+                if (!isset($props[$prop])) {
+                    continue;
+                }
+                foreach ($fills as $fill) {
+                    if (strpos($props[$prop], $fill) !== false) {
+                        $lines[] = sprintf('  %s { %s: %s }  - нет color в том же правиле', $sel, $prop, $props[$prop]);
+                        continue 3;
+                    }
+                }
+            }
+        }
+
+        $this->assertSame([], $lines, sprintf(
+            "Брендовая заливка без закрепленного цвета текста: %d\n%s",
+            count($lines),
+            implode("\n", $lines)
+        ));
+    }
 }
