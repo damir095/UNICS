@@ -1,0 +1,8 @@
+{
+    "subplugintypes": {
+        "unicsest": "estimator"
+    },
+    "plugintypes": {
+        "unicsest": "local/unics/estimator"
+    }
+}
