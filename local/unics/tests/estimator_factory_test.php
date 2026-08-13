@@ -23,15 +23,27 @@ final class estimator_factory_test extends \advanced_testcase {
     public function test_default_is_builtin(): void {
         $this->resetAfterTest();
         set_config('mastery_estimator', '', 'local_unics');
-        set_config('adaptive_irt_enabled', 0, 'local_unics');
         $this->assertInstanceOf(rolling_avg_estimator::class, estimator_factory::make());
     }
 
-    public function test_legacy_flag_selects_irt_until_phase_two(): void {
+    /** Настоящий подплагин на диске, а не заглушка: точка расширения рабочая. */
+    public function test_real_subplugin_is_installed_and_selectable(): void {
+        $this->resetAfterTest();
+        $this->assertArrayHasKey('unicsest_irt', estimator_factory::installed());
+
+        set_config('mastery_estimator', 'unicsest_irt', 'local_unics');
+        $e = estimator_factory::make();
+        $this->assertInstanceOf(\unicsest_irt\estimator::class, $e);
+        // Маркер: ядро по нему решает, собирать ли ответы по заданиям.
+        $this->assertInstanceOf(\local_unics\adaptive\item_response_consumer::class, $e);
+    }
+
+    /** Встроенный оценщик маркер НЕ несет - лишний запрос на попытку не делается. */
+    public function test_builtin_does_not_consume_item_responses(): void {
         $this->resetAfterTest();
         set_config('mastery_estimator', '', 'local_unics');
-        set_config('adaptive_irt_enabled', 1, 'local_unics');
-        $this->assertInstanceOf(\local_unics\adaptive\irt_estimator::class, estimator_factory::make());
+        $this->assertNotInstanceOf(\local_unics\adaptive\item_response_consumer::class,
+            estimator_factory::make());
     }
 
     public function test_unknown_component_falls_back_to_builtin(): void {

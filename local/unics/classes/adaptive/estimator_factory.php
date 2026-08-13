@@ -8,8 +8,7 @@ defined('MOODLE_INTERNAL') || die();
  * unicsest находятся через core_component, встроенный расчет - запасной вариант.
  * [[estimator-subplugin-design]]
  *
- * Порядок разрешения: явный аргумент -> настройка mastery_estimator -> legacy-флаг
- * adaptive_irt_enabled (живет до фазы 2, пока IRT не переехал в подплагин) -> встроенный.
+ * Порядок разрешения: явный аргумент -> настройка mastery_estimator -> встроенный.
  *
  * Отказ подплагина НИКОГДА не роняет адаптивный цикл: нет класса, класс не реализует
  * контракт, конструктор бросил - берем встроенный оценщик.
@@ -41,10 +40,6 @@ class estimator_factory {
     public static function make(?string $component = null): mastery_estimator {
         if ($component === null) {
             $component = (string)get_config('local_unics', 'mastery_estimator');
-            if ($component === '' && (int)get_config('local_unics', 'adaptive_irt_enabled') === 1) {
-                // Фаза 1: IRT еще внутри ядра, выбирается старым флагом.
-                return new irt_estimator();
-            }
         }
         if ($component === '') {
             return new rolling_avg_estimator();

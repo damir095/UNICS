@@ -1583,5 +1583,20 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026080901, 'local', 'unics');
     }
 
+    if ($oldversion < 2026081401) {
+        // IRT-оценщик переехал в подплагин unicsest_irt, флаг adaptive_irt_enabled снят.
+        // Кто держал флаг включенным - должен получить тот же режим работы, поэтому
+        // переносим значение в настройку выбора оценщика. Флаг после переноса удаляем,
+        // чтобы он не остался мусором в config_plugins и не сбивал с толку при отладке.
+        // [[estimator-subplugin-design]]
+        if ((int)get_config('local_unics', 'adaptive_irt_enabled') === 1
+                && (string)get_config('local_unics', 'mastery_estimator') === '') {
+            set_config('mastery_estimator', 'unicsest_irt', 'local_unics');
+        }
+        unset_config('adaptive_irt_enabled', 'local_unics');
+
+        upgrade_plugin_savepoint(true, 2026081401, 'local', 'unics');
+    }
+
     return true;
 }

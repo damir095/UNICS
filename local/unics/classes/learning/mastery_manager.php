@@ -48,9 +48,11 @@ class mastery_manager {
         }
         $sid = (int)$student->id;
 
-        // IRT-режим: per-element векторы ответов {b,correct} по вопросам с параметрами.
+        // Ответы по отдельным заданиям {a,b,correct} собираем, ТОЛЬКО если активный оценщик
+        // их потребляет (маркер item_response_consumer). Ядро не знает имен реализаций, а
+        // лишний запрос на каждую оцененную попытку не делается зря.
         $irtmap = [];
-        if ($attemptid && (int)get_config('local_unics', 'adaptive_irt_enabled') === 1) {
+        if ($attemptid && self::estimator() instanceof \local_unics\adaptive\item_response_consumer) {
             $irtmap = \local_unics\irt_attribution::element_responses_for_attempt((int)$attemptid);
         }
 
@@ -123,7 +125,7 @@ class mastery_manager {
     public static function record_cat_mastery(int $student_id, int $element_id, float $theta,
                                               float $se, int $items): void {
         global $DB;
-        $score = \local_unics\adaptive\irt_estimator::project($theta);
+        $score = \local_unics\adaptive\theta_scale::project($theta);
         $band = \local_unics\adaptive\mastery_bands::band_for($score, max(1, $items));
         $now = time();
         $row = self::current_mastery($student_id, $element_id);

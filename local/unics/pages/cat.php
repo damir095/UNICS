@@ -123,7 +123,7 @@ if ($slot !== null) {
 } else {
     // Экран результата.
     $score = $session->theta !== null
-        ? \local_unics\adaptive\irt_estimator::project((float)$session->theta) : null;
+        ? \local_unics\adaptive\theta_scale::project((float)$session->theta) : null;
     $band = $score !== null
         ? \local_unics\adaptive\mastery_bands::band_for($score,
             (int)$session->items_administered) : 0;

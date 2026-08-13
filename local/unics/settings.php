@@ -236,17 +236,11 @@ if ($hassiteconfig) {
         $estimatoroptions
     ));
 
+    // Флаг adaptive_irt_enabled снят: IRT-оценщик переехал в подплагин unicsest_irt и
+    // выбирается настройкой выше. Адреса сервиса остались здесь - их используют не только
+    // оценщик, но и адаптивная проверка CAT и ночная калибровка, то есть ядро.
     $adaptive->add(new admin_setting_heading(
-        'local_unics/irt_heading', 'ML-микросервис (IRT)', ''
-    ));
-    $adaptive->add(new admin_setting_configcheckbox(
-        'local_unics/adaptive_irt_enabled',
-        'Включить IRT-оценщик (Python-сервис)',
-        'Если включено, владение навыком оценивается внешним Python-микросервисом (модель Раша) по '
-        . 'ответам на привязанные к кодификатору вопросы. По сети уходят только числовые признаки (без '
-        . 'персональных данных). При недоступности сервиса система откатывается на встроенный расчет. '
-        . 'По умолчанию выключено.',
-        0
+        'local_unics/irt_heading', 'Python-сервис IRT (оценщик, CAT, калибровка)', ''
     ));
     $adaptive->add(new admin_setting_configtext(
         'local_unics/irt_service_url',
