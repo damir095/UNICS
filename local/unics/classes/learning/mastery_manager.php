@@ -125,7 +125,7 @@ class mastery_manager {
                                               float $se, int $items): void {
         global $DB;
         $score = \local_unics\adaptive\irt_estimator::project($theta);
-        $band = \local_unics\adaptive\rolling_avg_estimator::band_for($score, max(1, $items));
+        $band = \local_unics\adaptive\mastery_bands::band_for($score, max(1, $items));
         $now = time();
         $row = self::current_mastery($student_id, $element_id);
         if ($row) {
@@ -197,25 +197,19 @@ class mastery_manager {
                JOIN {unics_codifier_element} e ON e.id = sm.element_id
               WHERE sm.student_id = :sid AND sm.band = :gap
            ORDER BY sm.score ASC",
-            ['sid' => $student_id, 'gap' => \local_unics\adaptive\rolling_avg_estimator::BAND_GAP],
+            ['sid' => $student_id, 'gap' => \local_unics\adaptive\mastery_bands::BAND_GAP],
             0, $limit));
     }
 
     /**
      * Подпись полосы владения: [текст, bootstrap-класс]. $child - детский вид (слова).
-     * Единый источник для отчета и виджета. Полосы - из rolling_avg_estimator.
+     * Делегат к mastery_bands - единственному источнику правды о полосах. Метод оставлен,
+     * потому что на него завязаны отчет, виджет и сьют.
+     *
+     * @return array{0:string,1:string}
      */
     public static function band_label(int $band, bool $child = false): array {
-        switch ($band) {
-            case \local_unics\adaptive\rolling_avg_estimator::BAND_MASTERED:
-                return [$child ? 'отлично' : 'освоено', 'success'];
-            case \local_unics\adaptive\rolling_avg_estimator::BAND_MID:
-                return [$child ? 'почти' : 'в процессе', 'warning'];
-            case \local_unics\adaptive\rolling_avg_estimator::BAND_GAP:
-                return [$child ? 'нужно повторить' : 'пробел', 'danger'];
-            default: // BAND_INSUFFICIENT
-                return ['мало попыток', 'secondary'];
-        }
+        return \local_unics\adaptive\mastery_bands::label($band, $child);
     }
 
     /**

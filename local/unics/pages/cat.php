@@ -125,7 +125,7 @@ if ($slot !== null) {
     $score = $session->theta !== null
         ? \local_unics\adaptive\irt_estimator::project((float)$session->theta) : null;
     $band = $score !== null
-        ? \local_unics\adaptive\rolling_avg_estimator::band_for($score,
+        ? \local_unics\adaptive\mastery_bands::band_for($score,
             (int)$session->items_administered) : 0;
     [$label, $cls] = mastery_manager::band_label($band, true);
     echo html_writer::tag('h3', 'Проверка завершена');

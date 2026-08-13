@@ -13,17 +13,17 @@ class rolling_avg_estimator implements mastery_estimator {
 
     /** Вес свежей попытки в EWMA (0..1). */
     const ALPHA = 0.5;
-    /** Меньше этого числа попыток - полоса «недостаточно данных». */
-    const MIN_ATTEMPTS = 2;
-    /** score >= этого - навык освоен. */
-    const THRESHOLD_MASTERED = 85;
-    /** score < этого - пробел. */
-    const THRESHOLD_GAP = 50;
 
-    const BAND_INSUFFICIENT = 0;
-    const BAND_GAP          = 1;
-    const BAND_MID          = 2;
-    const BAND_MASTERED     = 3;
+    // Полосы переехали в mastery_bands (политика ядра, общая для всех оценщиков).
+    // Константы и band_for остаются здесь ДЕЛЕГАТАМИ: их зовет irt_estimator, а также
+    // существующие тесты. Убирать их нельзя - сломается IRT-оценщик.
+    const MIN_ATTEMPTS       = mastery_bands::MIN_ATTEMPTS;
+    const THRESHOLD_MASTERED = mastery_bands::THRESHOLD_MASTERED;
+    const THRESHOLD_GAP      = mastery_bands::THRESHOLD_GAP;
+    const BAND_INSUFFICIENT  = mastery_bands::BAND_INSUFFICIENT;
+    const BAND_GAP           = mastery_bands::BAND_GAP;
+    const BAND_MID           = mastery_bands::BAND_MID;
+    const BAND_MASTERED      = mastery_bands::BAND_MASTERED;
 
     public function estimate(?mastery_state $prior, array $ctx): mastery_state {
         $pct = (float)($ctx['pct'] ?? 0);
@@ -38,20 +38,11 @@ class rolling_avg_estimator implements mastery_estimator {
         }
         $score = round($score, 2);
 
-        return new mastery_state($score, self::band_for($score, $n), $n);
+        return new mastery_state($score, mastery_bands::band_for($score, $n), $n);
     }
 
-    /** Полоса по score и числу попыток. */
+    /** Полоса по score и числу попыток. Делегат к mastery_bands. */
     public static function band_for(float $score, int $attempts_n): int {
-        if ($attempts_n < self::MIN_ATTEMPTS) {
-            return self::BAND_INSUFFICIENT;
-        }
-        if ($score >= self::THRESHOLD_MASTERED) {
-            return self::BAND_MASTERED;
-        }
-        if ($score < self::THRESHOLD_GAP) {
-            return self::BAND_GAP;
-        }
-        return self::BAND_MID;
+        return mastery_bands::band_for($score, $attempts_n);
     }
 }
