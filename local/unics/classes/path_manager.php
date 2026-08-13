@@ -183,11 +183,20 @@ class path_manager {
      * не в процессе удаления) -> прямая ссылка на активность; если несколько -> ссылка на курс;
      * иначе fallback на mdl_course_id шага. Удалённые/скрытые активности отфильтрованы (graceful).
      *
+     * Удалённый НАВЫК обрабатывается тем же откатом: `get_activities_for_element()` читает
+     * элемент с MUST_EXIST, и висячий `element_id` ронял бы детскую страницу «Мой маршрут»
+     * и родительский вид. Источник висячих ссылок закрыт (delete_element обнуляет
+     * `unics_path_step.element_id` с 2026-08-12), но детская страница не должна падать ни
+     * при каких данных - в том числе на базах, где чистки не было.
+     *
      * @return array{url:\moodle_url, kind:string}|null  kind = 'activity' | 'course'
      */
     public static function step_material_url(object $step): ?array {
         global $DB;
         $element_id = isset($step->element_id) ? (int)$step->element_id : 0;
+        if ($element_id > 0 && !$DB->record_exists('unics_codifier_element', ['id' => $element_id])) {
+            $element_id = 0;   // навык удалён - идём в откат на курс шага
+        }
         if ($element_id > 0) {
             $cmids = codifier_link_manager::get_activities_for_element($element_id, true);
             if ($cmids) {
