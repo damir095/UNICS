@@ -132,6 +132,95 @@ class path_manager {
     }
 
     /**
+     * Шаги маршрута, сгруппированные по курсу (для детского вида my_path).
+     * Порядок групп - по первому ordinal шага в группе; внутри группы - по ordinal.
+     * Шаги без курса -> группа course_id=0 «Общее».
+     *
+     * @return array<int, array{course_id:int, course_name:string, done:int, total:int, steps:object[]}>
+     */
+    public static function steps_grouped_by_course(int $path_id): array {
+        global $DB;
+        $steps = array_values(self::get_steps($path_id));
+        if (!$steps) {
+            return [];
+        }
+        // Имена курсов одним запросом.
+        $cids = array_filter(array_map(fn($s) => (int)($s->mdl_course_id ?? 0), $steps));
+        $names = [];
+        if ($cids) {
+            [$insql, $params] = $DB->get_in_or_equal(array_unique($cids), SQL_PARAMS_NAMED, 'c');
+            foreach ($DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id $insql", $params) as $c) {
+                $names[(int)$c->id] = $c->fullname;
+            }
+        }
+        $index = [];   // course_id => позиция в $out
+        $out = [];
+        foreach ($steps as $s) {
+            $cid = (int)($s->mdl_course_id ?? 0);
+            if (!array_key_exists($cid, $index)) {
+                $index[$cid] = count($out);
+                $out[] = [
+                    'course_id'   => $cid,
+                    'course_name' => $cid === 0 ? 'Общее' : ($names[$cid] ?? 'Курс (недоступен)'),
+                    'done'        => 0,
+                    'total'       => 0,
+                    'steps'       => [],
+                ];
+            }
+            $pos = $index[$cid];
+            $out[$pos]['steps'][] = $s;
+            $out[$pos]['total']++;
+            if ((int)$s->status === self::STEP_DONE) {
+                $out[$pos]['done']++;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Ссылка «к материалу» для шага, выводимая из навыка (element_id), без хранения FK.
+     * Навык -> привязанные активности (codifier_link) -> если ровно одна валидная (видимая,
+     * не в процессе удаления) -> прямая ссылка на активность; если несколько -> ссылка на курс;
+     * иначе fallback на mdl_course_id шага. Удалённые/скрытые активности отфильтрованы (graceful).
+     *
+     * @return array{url:\moodle_url, kind:string}|null  kind = 'activity' | 'course'
+     */
+    public static function step_material_url(object $step): ?array {
+        global $DB;
+        $element_id = isset($step->element_id) ? (int)$step->element_id : 0;
+        if ($element_id > 0) {
+            $cmids = codifier_link_manager::get_activities_for_element($element_id, true);
+            if ($cmids) {
+                [$insql, $params] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED);
+                $rows = $DB->get_records_sql(
+                    "SELECT cm.id, cm.course, m.name AS modname
+                       FROM {course_modules} cm
+                       JOIN {modules} m ON m.id = cm.module
+                      WHERE cm.id $insql AND cm.visible = 1 AND cm.deletioninprogress = 0",
+                    $params);
+                if (count($rows) === 1) {
+                    $cm = reset($rows);
+                    return ['url' => new \moodle_url("/mod/{$cm->modname}/view.php", ['id' => (int)$cm->id]),
+                            'kind' => 'activity'];
+                }
+                if (count($rows) > 1) {
+                    $courseid = !empty($step->mdl_course_id)
+                        ? (int)$step->mdl_course_id : (int)reset($rows)->course;
+                    if ($courseid > 0) {
+                        return ['url' => new \moodle_url('/course/view.php', ['id' => $courseid]),
+                                'kind' => 'course'];
+                    }
+                }
+            }
+        }
+        if (!empty($step->mdl_course_id)) {
+            return ['url' => new \moodle_url('/course/view.php', ['id' => (int)$step->mdl_course_id]),
+                    'kind' => 'course'];
+        }
+        return null;
+    }
+
+    /**
      * Прогресс маршрута.
      *
      * @return array{done:int, total:int, current:?object}

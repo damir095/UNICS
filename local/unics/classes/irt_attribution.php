@@ -10,7 +10,7 @@ defined('MOODLE_INTERNAL') || die();
  */
 class irt_attribution {
 
-    /** @return array<int, array<int, array{b: float, correct: int}>> [element_id => [{b,correct}]] */
+    /** @return array<int, array<int, array{a: float, b: float, correct: int}>> [element_id => [{a,b,correct}]] */
     public static function element_responses_for_attempt(int $attemptid): array {
         global $DB;
         $attempt = $DB->get_record('quiz_attempts', ['id' => $attemptid], 'id, uniqueid');
@@ -18,7 +18,7 @@ class irt_attribution {
             return [];
         }
         $rows = $DB->get_recordset_sql(
-            "SELECT qa.id AS qaid, l.element_id, p.b, qas.fraction
+            "SELECT qa.id AS qaid, l.element_id, p.a, p.b, qas.fraction
                FROM {question_attempts} qa
                JOIN {question_versions} qv ON qv.questionid = qa.questionid
                JOIN {unics_codifier_link} l
@@ -33,7 +33,8 @@ class irt_attribution {
         $out = [];
         foreach ($rows as $r) {
             $eid = (int)$r->element_id;
-            $out[$eid][] = ['b' => (float)$r->b, 'correct' => ((float)$r->fraction) >= 0.5 ? 1 : 0];
+            $out[$eid][] = ['a' => (float)$r->a, 'b' => (float)$r->b,
+                'correct' => ((float)$r->fraction) >= 0.5 ? 1 : 0];
         }
         $rows->close();
         return $out;

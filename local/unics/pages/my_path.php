@@ -48,17 +48,6 @@ $levels = [1 => 'Базовый', 2 => 'Стандартный', 3 => 'Прод�
 $path  = path_manager::get_active_path($student_id);
 $steps = $path ? array_values(path_manager::get_steps((int)$path->id)) : [];
 
-// Названия курсов шагов одним запросом.
-$course_names = [];
-$cids = array_filter(array_map(fn($s) => (int)($s->mdl_course_id ?? 0), $steps));
-if ($cids) {
-    [$in, $params] = $DB->get_in_or_equal(array_unique($cids), SQL_PARAMS_NAMED, 'c');
-    foreach ($DB->get_records_sql(
-        "SELECT id, fullname FROM {course} WHERE id {$in}", $params) as $c) {
-        $course_names[(int)$c->id] = $c->fullname;
-    }
-}
-
 echo $OUTPUT->header();
 echo local_unics_dashboard_button();
 
@@ -104,52 +93,63 @@ echo '<h2 class="unics-section-title">Прогресс</h2>';
 echo '<p style="font-size:1.15rem;">Пройдено <strong>' . $progress['done'] . '</strong> из <strong>'
    . $progress['total'] . '</strong> шагов.</p>';
 echo '<div class="progress mb-4" style="height:24px;">';
-echo '<div class="progress-bar bg-success" role="progressbar" style="width:' . $pct . '%;" '
+echo '<div class="progress-bar bg-success" role="progressbar" aria-label="Прогресс маршрута" '
+   . 'style="width:' . $pct . '%;" '
    . 'aria-valuenow="' . $pct . '" aria-valuemin="0" aria-valuemax="100">' . $pct . '%</div>';
 echo '</div>';
 
-// --- Шаги ---
+// --- Шаги (сгруппированы по курсу) ---
 echo '<h2 class="unics-section-title">Шаги маршрута</h2>';
-foreach ($steps as $i => $s) {
-    $is_current = ((int)$s->id === $current_id);
-    $is_done    = ((int)$s->status === path_manager::STEP_DONE);
 
-    $border = $is_current ? ' border-primary' : '';
-    echo '<div class="card mb-3' . $border . '">';
-    echo '<div class="card-body">';
+foreach (path_manager::steps_grouped_by_course((int)$path->id) as $group) {
+    // Заголовок группы (курс) + мини-прогресс.
+    echo '<h3 class="unics-section-title" style="font-size:1.25rem;margin-top:1.5rem;">'
+       . s($group['course_name'])
+       . ' <span class="badge badge-light" style="font-size:0.9rem;font-weight:normal;">'
+       . $group['done'] . ' из ' . $group['total'] . '</span></h3>';
 
-    echo '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2">';
-    echo '<h3 class="mt-0 mb-0" style="font-size:1.2rem;">';
-    echo '<span class="text-muted">' . ($i + 1) . '.</span> ' . s($s->title);
-    if ($is_current) {
-        echo ' <span class="badge badge-primary">текущий шаг</span>';
-    }
-    echo '</h3>';
-    echo '<span class="badge badge-' . path_manager::step_status_badge((int)$s->status) . '" '
-       . 'style="font-size:0.95rem;">' . path_manager::step_status_label((int)$s->status) . '</span>';
-    echo '</div>';
+    foreach ($group['steps'] as $gi => $s) {
+        $is_current = ((int)$s->id === $current_id);
+        $border = $is_current ? ' border-primary' : '';
 
-    $meta = [];
-    if (!empty($s->topic)) {
-        $meta[] = 'Тема: ' . s($s->topic);
-    }
-    if (!empty($s->mdl_course_id) && isset($course_names[(int)$s->mdl_course_id])) {
-        $meta[] = 'Курс: ' . html_writer::link(
-            new moodle_url('/course/view.php', ['id' => (int)$s->mdl_course_id]),
-            s($course_names[(int)$s->mdl_course_id]));
-    }
-    if (!empty($s->target_level)) {
-        $meta[] = ($is_own ? 'Уровень: ' : 'Цель уровня: ')
-            . s($levels[(int)$s->target_level] ?? '-');
-    }
-    if ($meta) {
-        echo '<p class="mt-2 mb-1 text-muted">' . implode(' · ', $meta) . '</p>';
-    }
-    if (!empty($s->note)) {
-        echo '<p class="mb-0" style="white-space:pre-wrap;">' . s($s->note) . '</p>';
-    }
+        echo '<div class="card mb-3' . $border . '">';
+        echo '<div class="card-body">';
 
-    echo '</div></div>';
+        echo '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2">';
+        echo '<h4 class="mt-0 mb-0" style="font-size:1.15rem;">';
+        echo '<span class="text-muted">' . ($gi + 1) . '.</span> ' . s($s->title);
+        if ($is_current) {
+            echo ' <span class="badge badge-primary">текущий шаг</span>';
+        }
+        echo '</h4>';
+        echo '<span class="badge badge-' . path_manager::step_status_badge((int)$s->status) . '" '
+           . 'style="font-size:0.95rem;">' . path_manager::step_status_label((int)$s->status) . '</span>';
+        echo '</div>';
+
+        $meta = [];
+        if (!empty($s->topic)) {
+            $meta[] = 'Тема: ' . s($s->topic);
+        }
+        if (!empty($s->target_level)) {
+            $meta[] = ($is_own ? 'Уровень: ' : 'Цель уровня: ')
+                . s($levels[(int)$s->target_level] ?? '-');
+        }
+        if ($meta) {
+            echo '<p class="mt-2 mb-1 text-muted">' . implode(' · ', $meta) . '</p>';
+        }
+        if (!empty($s->note)) {
+            echo '<p class="mb-2" style="white-space:pre-wrap;">' . s($s->note) . '</p>';
+        }
+
+        // Ссылка «к материалу» (выводимая из навыка/курса).
+        $mat = path_manager::step_material_url($s);
+        if ($mat !== null) {
+            $label = $mat['kind'] === 'activity' ? 'Перейти к материалу' : 'Открыть курс';
+            echo html_writer::link($mat['url'], $label, ['class' => 'unics-cta']);
+        }
+
+        echo '</div></div>';
+    }
 }
 
 echo $OUTPUT->footer();

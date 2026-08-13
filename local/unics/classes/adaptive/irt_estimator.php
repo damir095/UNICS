@@ -19,9 +19,10 @@ class irt_estimator implements mastery_estimator {
         }
         $prior_theta = $prior !== null ? $prior->theta : null;
         $prior_se = $prior !== null ? $prior->theta_se : null;
-        // Привести ответы {b,correct} к контракту клиента {difficulty,correct}.
+        // Привести ответы {a,b,correct} к контракту клиента {discrimination,difficulty,correct}.
         $payload = array_map(
-            fn($r) => ['difficulty' => (float)$r['b'], 'correct' => (int)$r['correct']],
+            fn($r) => ['discrimination' => (float)($r['a'] ?? 1.0), 'difficulty' => (float)$r['b'],
+                'correct' => (int)$r['correct']],
             $responses);
         $res = irt_client::estimate($payload, $prior_theta, $prior_se);
         if ($res === null) {
