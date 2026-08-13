@@ -3,7 +3,6 @@ namespace local_unics\learning;
 
 use local_unics\adaptive\mastery_state;
 use local_unics\adaptive\mastery_estimator;
-use local_unics\adaptive\rolling_avg_estimator;
 use local_unics\codifier_attribution;
 
 defined('MOODLE_INTERNAL') || die();
@@ -19,12 +18,12 @@ defined('MOODLE_INTERNAL') || die();
  */
 class mastery_manager {
 
-    /** Текущий оценщик (PHP-фаза). ML-фаза подменит реализацию шва здесь. */
+    /**
+     * Текущий оценщик. Имена реализаций живут в estimator_factory: ядро о них не знает,
+     * подплагины типа unicsest подключаются без правки этого файла.
+     */
     private static function estimator(): mastery_estimator {
-        if ((int)get_config('local_unics', 'adaptive_irt_enabled') === 1) {
-            return new \local_unics\adaptive\irt_estimator();
-        }
-        return new rolling_avg_estimator();
+        return \local_unics\adaptive\estimator_factory::make();
     }
 
     /** Текущий рекомендатель. ML-фаза подменяет реализацию шва здесь по флагу. */
