@@ -220,6 +220,22 @@ if ($hassiteconfig) {
         0
     ));
 
+    // Точка расширения: оценщик владения навыком. Пусто - встроенный расчет ядра (EWMA).
+    // Варианты набираются из установленных подплагинов типа unicsest, ядро имен не знает.
+    // [[estimator-subplugin-design]]
+    $estimatoroptions = ['' => 'Встроенный (скользящее среднее)']
+        + \local_unics\adaptive\estimator_factory::installed();
+    $adaptive->add(new admin_setting_configselect(
+        'local_unics/mastery_estimator',
+        'Оценщик владения навыком',
+        'Чем считается владение навыком по результатам попыток. Встроенный расчет работает '
+        . 'всегда и не требует внешних сервисов. Дополнительные оценщики устанавливаются как '
+        . 'подплагины в local/unics/estimator. При отказе выбранного оценщика система молча '
+        . 'возвращается на встроенный.',
+        '',
+        $estimatoroptions
+    ));
+
     $adaptive->add(new admin_setting_heading(
         'local_unics/irt_heading', 'ML-микросервис (IRT)', ''
     ));
