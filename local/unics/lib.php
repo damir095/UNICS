@@ -285,6 +285,16 @@ function local_unics_a11y_get_prefs(?int $userid = null): array {
 function local_unics_before_standard_html_head(): string {
     return \local_unics\accessibility::before_standard_html_head();
 }
+
+/**
+ * Полоса тревоги вверху страницы: сообщает администратору об аварии, не дожидаясь, пока он
+ * догадается открыть страницу здоровья. Тонкая обертка над {@see \local_unics\health\banner}.
+ *
+ * @return string HTML
+ */
+function local_unics_before_standard_top_of_body_html(): string {
+    return \local_unics\health\banner::render();
+}
 /**
  * Хук навбара: иконки УНИКС рядом с колокольчиком уведомлений.
  * Тонкая обёртка над {@see \local_unics\output\shell::render_navbar()}.
