@@ -61,9 +61,12 @@ if (!$element_id) {
         echo html_writer::start_tag('ul', ['class' => 'unics-cat-elements']);
         foreach ($els as $e) {
             $url = new moodle_url('/local/unics/pages/cat.php', ['element' => $e['element_id']]);
+            // .unics-cta - договоренность проекта для детских страниц: касание 60x60, а не 44x44
+            // обычной кнопки. Тут был голый текстовый список ссылок.
             echo html_writer::tag('li',
                 html_writer::link($url, s($e['code'] . ' ' . $e['title'])
-                    . ' (' . (int)$e['n'] . ' вопр.)'));
+                    . ' (' . (int)$e['n'] . ' вопр.)', ['class' => 'unics-cta']),
+                ['class' => 'mb-2']);
         }
         echo html_writer::end_tag('ul');
     }
@@ -138,10 +141,14 @@ if ($slot !== null) {
         'action' => (new moodle_url('/local/unics/pages/cat.php',
             ['element' => $element_id, 'action' => 'restart']))->out(false)]);
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
-    echo html_writer::tag('button', 'Пройти заново', ['type' => 'submit', 'class' => 'btn btn-primary mt-2']);
+    // Главное действие экрана - оно и есть CTA (правило темы: одна CTA на блок).
+    echo html_writer::tag('button', 'Пройти заново',
+        ['type' => 'submit', 'class' => 'btn btn-primary unics-cta mt-2']);
     echo html_writer::end_tag('form');
+    // ms-2: без отступа кнопки слипались в «Пройти зановоПройти другую тему» - на детской
+    // странице это читается как одна строка и промахнуться по нужной легко.
     echo html_writer::link(new moodle_url('/local/unics/pages/cat.php'),
-        'Пройти другую тему', ['class' => 'btn btn-secondary mt-2']);
+        'Пройти другую тему', ['class' => 'btn btn-secondary mt-2 ms-2']);
 }
 
 echo $OUTPUT->footer();

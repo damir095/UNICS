@@ -94,4 +94,30 @@ final class cat_readiness_test extends \advanced_testcase {
 
         $this->assertSame(1, (int)$rows[0]->ready_2pl_n);
     }
+
+    /**
+     * Калиброванным считается задание с ДОСТОВЕРНОЙ калибровкой, а не с любой строкой параметров.
+     *
+     * Иначе методист видит «5 калиброванных» и вердикт «готово», хотя пул этим же трудностям уже
+     * не верит: мерки достоверности расходились в трех местах (пул, CAT, индикатор).
+     */
+    public function test_untrusted_calibration_is_not_counted_as_calibrated(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.0, item_irt_manager::MIN_CALIBRATED_N - 1);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(1, (int)$rows[0]->tagged_n, 'привязка к элементу никуда не девается');
+        $this->assertSame(0, (int)$rows[0]->calibrated_n,
+            'калибровка по нескольким ответам не считается калибровкой');
+    }
+
+    /** Порог достоверности живет в ОДНОМ месте, а не копируется по классам. */
+    public function test_threshold_has_single_source(): void {
+        $this->resetAfterTest();
+
+        $this->assertSame(item_irt_manager::MIN_CALIBRATED_N, item_pool::MIN_CALIBRATED_N);
+    }
 }

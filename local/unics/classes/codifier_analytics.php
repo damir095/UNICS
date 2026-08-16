@@ -281,10 +281,12 @@ class codifier_analytics {
         // наблюдениях, отдавая a = 1.000 у всех заданий, - то есть 2PL вырождается в модель Раша,
         // а методисту при этом рисовалось «готово к CAT». Поэтому требуем и порог наблюдений
         // item_pool::MIN_CALIBRATED_N, и отличие a от единицы.
-        $params['mincal'] = \local_unics\learning\item_pool::MIN_CALIBRATED_N;
+        $params['mincal']  = item_irt_manager::MIN_CALIBRATED_N;
+        $params['mincal2'] = item_irt_manager::MIN_CALIBRATED_N;
         $rows = $DB->get_records_sql(
             "SELECT l.id AS linkid, l.element_id,
-                    CASE WHEN i.id IS NULL THEN 0 ELSE 1 END AS calibrated,
+                    CASE WHEN i.id IS NOT NULL AND i.calibrated_n >= :mincal2
+                         THEN 1 ELSE 0 END AS calibrated,
                     CASE WHEN i.model = '2pl' AND i.calibrated_n >= :mincal
                               AND ABS(i.a - 1) > 0.01 THEN 1 ELSE 0 END AS is2pl
                FROM {unics_codifier_link} l

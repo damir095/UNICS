@@ -33,8 +33,14 @@ class cat_session_manager {
         $out = [];
         foreach ($rows as $r) {
             $eid = (int)$r->element_id;
-            $out[] = ['element_id' => $eid, 'code' => $r->code,
-                'title' => $r->title, 'n' => count(self::bank($eid))];
+            // Считаем и отсеиваем ОДНОЙ меркой - самим банком: запрос выше знает лишь о наличии
+            // строки параметров, а годность решает достоверность калибровки. Без этого тема с
+            // недостоверными трудностями предлагалась ребенку и открывалась пустой.
+            $n = count(self::bank($eid));
+            if ($n === 0) {
+                continue;
+            }
+            $out[] = ['element_id' => $eid, 'code' => $r->code, 'title' => $r->title, 'n' => $n];
         }
         return $out;
     }
@@ -58,7 +64,10 @@ class cat_session_manager {
     /** Калиброванный банк элемента (+поддерево): [item_ref => ['a'=>,'b'=>]]. */
     private static function bank(int $element_id): array {
         $entries = \local_unics\codifier_link_manager::get_questions_for_element($element_id, true);
-        return $entries ? \local_unics\item_irt_manager::get_ab_for_entries($entries) : [];
+        // ТОЛЬКО достоверная калибровка: живой заход 2026-08-17 показал, что иначе ребенку
+        // достается задание с b = -3.892, снятой с шести ответов, а адаптация подбирает
+        // следующее задание под оценку, которой на деле нет.
+        return $entries ? \local_unics\item_irt_manager::get_ab_for_entries($entries, true) : [];
     }
 
     /** bankentryid -> последний questionid версии. */

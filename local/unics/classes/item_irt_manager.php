@@ -9,6 +9,17 @@ defined('MOODLE_INTERNAL') || die();
  */
 class item_irt_manager {
 
+    /**
+     * С какого числа наблюдений калибровка считается достоверной. ЕДИНСТВЕННЫЙ источник порога:
+     * им пользуются пул заданий, адаптивная проверка и индикатор готовности к CAT.
+     *
+     * Порог оплачен двумя живыми находками. Первая: при одном ответе калибровка отдает вырожденную
+     * b = ±3.892, и пул выбрасывал такое задание совсем. Вторая: адаптивная проверка вела ребенка
+     * по этой же вырожденной трудности, потому что брала все строки параметров подряд. Десять -
+     * школьный масштаб: один класс прошел тест.
+     */
+    const MIN_CALIBRATED_N = 10;
+
     /** Параметр b по списку bankentry-id: [item_ref => b]. */
     public static function get_b_for_entries(array $entryids): array {
         global $DB;
@@ -24,14 +35,25 @@ class item_irt_manager {
         return $out;
     }
 
-    /** Параметры a и b по списку bankentry-id: [item_ref => ['a'=>float,'b'=>float]]. */
-    public static function get_ab_for_entries(array $entryids): array {
+    /**
+     * Параметры a и b по списку bankentry-id: [item_ref => ['a'=>float,'b'=>float]].
+     *
+     * @param bool $trustedonly отдавать только достоверную калибровку (см. MIN_CALIBRATED_N).
+     *        Для адаптивной проверки это обязательно: подбирать задание под оценку по параметрам,
+     *        снятым с нескольких ответов, значит делать вид, что измерение было.
+     */
+    public static function get_ab_for_entries(array $entryids, bool $trustedonly = false): array {
         global $DB;
         if (!$entryids) {
             return [];
         }
         [$insql, $params] = $DB->get_in_or_equal($entryids, SQL_PARAMS_NAMED);
-        $rows = $DB->get_records_select('unics_item_irt', "item_ref $insql", $params, '',
+        $where = "item_ref $insql";
+        if ($trustedonly) {
+            $where .= ' AND calibrated_n >= :mincal';
+            $params['mincal'] = self::MIN_CALIBRATED_N;
+        }
+        $rows = $DB->get_records_select('unics_item_irt', $where, $params, '',
             'id, item_ref, a, b');
         $out = [];
         foreach ($rows as $r) {
