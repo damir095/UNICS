@@ -216,13 +216,58 @@ class umk_processor {
             $generate_quiz = isset($task->generate_quiz) ? (int)$task->generate_quiz : 1;
             if ($generate_quiz) {
                 try {
-                    $questions = $generator->generate_quiz($profile, $umk->topic, $text, 5, $extra_context);
+                    $element_id = isset($umk->element_id) ? (int)$umk->element_id : 0;
+                    $reuse  = [];
+                    $needed = 5;
+                    if ($element_id > 0) {
+                        // Общий измеритель: сначала берем то, что уже отвечали другие ученики.
+                        $pool   = \local_unics\learning\item_pool::take($element_id, $umk_level, 5);
+                        $reuse  = $pool['ids'];
+                        $needed = $pool['missing'];
+                    }
+
+                    $questions = [];
+                    if ($needed > 0) {
+                        $questions = $generator->generate_quiz(
+                            $profile, $umk->topic, $text, $needed, $extra_context);
+                    }
+
+                    if (!$questions && !$reuse) {
+                        // Ни пула, ни ответа ИИ: теста не будет, но комплект остается.
+                        throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                            'Ни одного задания: пул пуст и генерация не дала вопросов');
+                    }
+
                     $quiz_cmid = $builder->add_quiz_with_questions(
                         (int)$umk->mdl_course_id,
                         $section,
                         $umk->title,
-                        $questions
+                        $questions,
+                        $reuse
                     );
+
+                    // Новые задания попадают в пул элемента: со следующей генерации их получат
+                    // другие ученики, и у задания начнут копиться ответы.
+                    if ($element_id > 0) {
+                        $fresh = [];
+                        if ($questions) {
+                            // Автора у unics_umk нет (поля created_by_mdl_user_id в таблице не
+                            // существует), а привязка требует НЕ NULL пользователя. Задача идет
+                            // из cron, поэтому пишем администратора.
+                            $by = (int)get_admin()->id;
+                            $fresh = array_slice($this->slot_entries($quiz_cmid), count($reuse));
+                            foreach ($fresh as $ref) {
+                                \local_unics\codifier_link_manager::link_question($element_id, (int)$ref, $by);
+                                \local_unics\learning\item_pool::remember_level((int)$ref, $umk_level, $by);
+                            }
+                        }
+                        // Печатаем ВСЕГДА, в том числе когда создано ноль: именно этот случай -
+                        // пул покрыл тест целиком - и есть цель работы, и лог о нем молчать
+                        // не должен.
+                        mtrace('  Пул элемента #' . $element_id . ': взято ' . count($reuse)
+                            . ', создано ' . count($fresh));
+                    }
+
                     $builder->restrict_activity_to_group($quiz_cmid, $group_id);
                     $builder->set_view_completion($quiz_cmid); // B8 (тест входит в завершение курса)
                     $quiz_cmid_gate = $quiz_cmid;               // B1: гейт навесим после сборки материалов
@@ -232,7 +277,7 @@ class umk_processor {
                         'material_type'        => 4,
                         'sort_order'           => 3,
                     ]);
-                    mtrace("  Тест создан (" . count($questions) . " вопросов)");
+                    mtrace("  Тест создан (" . (count($questions) + count($reuse)) . " вопросов)");
                 } catch (\Throwable $eq) {
                     $dbg = property_exists($eq, 'debuginfo') ? ' | ' . $eq->debuginfo : '';
                     mtrace("  [warn] Тест не создан: " . $eq->getMessage() . $dbg);
@@ -535,5 +580,23 @@ class umk_processor {
             $enrol->enrol_user($instance, $mdl_user_id, $role_id);
             mtrace("  Учащийся #{$mdl_user_id} записан на курс #{$course_id}");
         }
+    }
+
+    /**
+     * Записи банка, на которые ссылаются слоты теста, в порядке слотов.
+     *
+     * Нужен, чтобы отличить только что созданные задания от взятых из пула: переиспользованные
+     * ставятся первыми, значит свежие - это хвост списка.
+     *
+     * @return int[] questionbankentryid
+     */
+    private function slot_entries(int $cmid): array {
+        global $DB;
+        $quizid = (int)$DB->get_field('course_modules', 'instance', ['id' => $cmid]);
+        return array_map('intval', $DB->get_fieldset_sql("
+            SELECT qr.questionbankentryid
+              FROM {quiz_slots} qs
+              JOIN {question_references} qr ON qr.itemid = qs.id AND qr.component = 'mod_quiz'
+             WHERE qs.quizid = ? ORDER BY qs.slot", [$quizid]));
     }
 }
