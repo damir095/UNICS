@@ -5,4 +5,4 @@ $plugin->component = 'local_unics';
 $plugin->version   = 2026081605;
 $plugin->requires  = 2024100700;
 $plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '0.7.34';
+$plugin->release   = '0.7.35';
