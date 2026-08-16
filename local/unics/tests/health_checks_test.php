@@ -115,6 +115,28 @@ final class health_checks_test extends \advanced_testcase {
         $this->assertStringContainsString('1', $r->summary);
     }
 
+    /** Озвучка: метка ставится реальной попыткой синтеза, зонда нет. */
+    public function test_tts_marked_unavailable_is_attention_with_payment_hint(): void {
+        $this->resetAfterTest();
+        set_config('salute_speech_api_key', 'ключ', 'local_unics');
+        \local_unics\ai\tts_status::mark_unavailable('HTTP 402 Payment Required');
+
+        $r = (new \local_unics\health\checks\salute_speech())->run();
+
+        // Не оплачено - это не поломка системы, а состояние договора.
+        $this->assertSame(check_result::ATTENTION, $r->level);
+        $this->assertStringContainsString('оплат', mb_strtolower($r->action));
+    }
+
+    public function test_tts_available_is_ok(): void {
+        $this->resetAfterTest();
+        set_config('salute_speech_api_key', 'ключ', 'local_unics');
+        \local_unics\ai\tts_status::mark_available();
+
+        $this->assertSame(check_result::OK,
+            (new \local_unics\health\checks\salute_speech())->run()->level);
+    }
+
     public function test_old_adhoc_task_is_alarm(): void {
         global $DB;
         $this->resetAfterTest();

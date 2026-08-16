@@ -423,6 +423,22 @@ class ai_generator {
         return $this->token_cache;
     }
 
+    /**
+     * Живая проверка доступности сервиса для страницы здоровья: только авторизация, без
+     * генерации. Отдельный публичный метод нужен потому, что получение токена защищено, а
+     * проверке нельзя ни лезть в защищенное, ни тратить токены на генерацию ради «пинга».
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function probe_auth(): array {
+        try {
+            $token = $this->get_gigachat_token();
+            return ['ok' => $token !== '', 'message' => $token !== '' ? 'ok' : 'токен не получен'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
+
     // ----------------------------------------------------------------
     // GigaChat (Sber) - OAuth 2.0 client_credentials
     // api_key здесь = Authorization key из личного кабинета (Base64)
