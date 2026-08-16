@@ -28,8 +28,15 @@ class item_pool {
     /** Целевая трудность IRT для заявленного уровня. Стартовые числа, шкала примерно [-3, 3]. */
     const TARGET_B = [1 => -1.0, 2 => 0.0, 3 => 1.0];
 
-    /** Насколько измеренная трудность может отстоять от целевой, чтобы задание считалось годным. */
-    const B_TOLERANCE = 0.75;
+    /**
+     * С какого числа наблюдений измеренной трудности можно верить.
+     *
+     * Живой зонд показал, зачем порог: при одном ответе калибровка отдает вырожденную b = -3.892
+     * (или +3.892), и такое «измерение» ничего не измеряет. Десять - компромисс школьного
+     * масштаба: один класс прошел тест, и трудности уже осмысленны. Пока наблюдений меньше,
+     * задание судится по заявленному уровню, как до всякой калибровки.
+     */
+    const MIN_CALIBRATED_N = 10;
 
     /**
      * Отобрать задания элемента под уровень.
@@ -45,10 +52,19 @@ class item_pool {
     /**
      * Годные задания в порядке выдачи.
      *
-     * Порядок: сначала подходящие точно (по измеренной b, если она есть, иначе по заявленному
-     * уровню), потом задания без уровня вообще. Внутри группы - реже отвеченные первыми: отбор по
-     * первым пяти закрепил бы неравенство навсегда, задания сверх пятерки никогда не набрали бы
-     * ответов и не откалибровались бы.
+     * Две разные обязанности разведены намеренно.
+     *
+     * ЗАЯВЛЕННЫЙ УРОВЕНЬ - жесткий фильтр: задание чужого уровня ребенку не показываем ни при
+     * какой измеренной трудности. Для детей с ОВЗ это важнее статистической выгоды.
+     *
+     * ИЗМЕРЕННАЯ ТРУДНОСТЬ - мягкое упорядочивание внутри уровня. Раньше она работала жестким
+     * допуском и ВЫБРАСЫВАЛА задания: живой зонд показал, что после первой же калибровки пул
+     * уровня 2 просел с пяти заданий до трех, то есть система принялась догенерировать новые
+     * вместо накопленных - против собственной цели.
+     *
+     * Порядок: сначала свой уровень, потом задания без уровня вообще. Внутри группы реже
+     * отвеченные идут первыми (отбор по первым пяти закрепил бы неравенство навсегда), при
+     * равенстве ответов ближе к целевой трудности.
      *
      * @return int[] questionbankentryid
      */
@@ -67,7 +83,7 @@ class item_pool {
         // Число ответов считается тем же запросом: раньше на каждое задание уходил свой COUNT.
         $rows = $DB->get_records_sql("
             SELECT l.target_id AS item_ref, il.level AS declared, i.b AS measured,
-                   COUNT(qa.id) AS answers
+                   i.calibrated_n AS calibrated_n, COUNT(qa.id) AS answers
               FROM {unics_codifier_link} l
               JOIN {question_bank_entries} qbe ON qbe.id = l.target_id
               JOIN {question_versions} qv ON qv.questionbankentryid = l.target_id
@@ -76,7 +92,7 @@ class item_pool {
          LEFT JOIN {unics_item_irt} i ON i.item_ref = l.target_id
          LEFT JOIN {question_attempts} qa ON qa.questionid = qv.questionid
              WHERE l.target_type = :tq AND l.element_id = :eid
-          GROUP BY l.target_id, il.level, i.b",
+          GROUP BY l.target_id, il.level, i.b, i.calibrated_n",
             [
                 'ready' => \core_question\local\bank\question_version_status::QUESTION_STATUS_READY,
                 'tq'    => codifier_link_manager::TYPE_QUESTION,
@@ -86,26 +102,39 @@ class item_pool {
         $exact = [];
         $unleveled = [];
         foreach ($rows as $r) {
-            $ref = (int)$r->item_ref;
+            $ref     = (int)$r->item_ref;
             $answers = (int)$r->answers;
-            if ($r->measured !== null) {
-                if (abs((float)$r->measured - $target) <= self::B_TOLERANCE) {
-                    $exact[$ref] = $answers;
-                }
-                continue;
-            }
+            // Трудности верим только при достаточном числе наблюдений; иначе расстояние до цели
+            // считаем нулевым, и задание упорядочивается по одному счетчику ответов.
+            $trusted = $r->measured !== null && (int)$r->calibrated_n >= self::MIN_CALIBRATED_N;
+            $distance = $trusted ? abs((float)$r->measured - $target) : 0.0;
+
             if ($r->declared === null) {
-                $unleveled[$ref] = $answers;
+                $unleveled[$ref] = ['answers' => $answers, 'distance' => $distance];
                 continue;
             }
             if ((int)$r->declared === $level) {
-                $exact[$ref] = $answers;
+                $exact[$ref] = ['answers' => $answers, 'distance' => $distance];
             }
         }
 
-        asort($exact);
-        asort($unleveled);
-        return array_merge(array_keys($exact), array_keys($unleveled));
+        return array_merge(self::ordered($exact), self::ordered($unleveled));
+    }
+
+    /**
+     * Упорядочить группу: реже отвеченные первыми, при равенстве - ближе к целевой трудности.
+     *
+     * @param array $group ref => ['answers' => int, 'distance' => float]
+     * @return int[] ref в порядке выдачи
+     */
+    private static function ordered(array $group): array {
+        uasort($group, function (array $a, array $b) {
+            if ($a['answers'] !== $b['answers']) {
+                return $a['answers'] <=> $b['answers'];
+            }
+            return $a['distance'] <=> $b['distance'];
+        });
+        return array_keys($group);
     }
 
     /**

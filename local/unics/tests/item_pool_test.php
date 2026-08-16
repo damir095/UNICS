@@ -203,22 +203,98 @@ final class item_pool_test extends \advanced_testcase {
         $this->assertSame([$exact, $nolevel], $ids);
     }
 
-    /** Появилась калибровка - трудность берется из нее, а не из заявленного уровня. */
-    public function test_calibrated_b_wins_over_declared_level(): void {
+    /** Записать калибровку заданию. */
+    private function calibrate(int $item_ref, int $element_id, float $b, int $n, float $a = 1.0): void {
         global $DB;
+        $DB->insert_record('unics_item_irt', (object)[
+            'item_ref' => $item_ref, 'element_id' => $element_id, 'model' => 'rasch',
+            'a' => $a, 'b' => $b, 'c' => 0, 'calibrated_n' => $n, 'updated_at' => time(),
+        ]);
+    }
+
+    /**
+     * Заявленный уровень - ЖЕСТКИЙ фильтр, измеренная трудность на него не влияет.
+     *
+     * Раньше поведение было обратным: откалиброванное задание судилось только по b, и ребенку
+     * уровня 1 могло достаться задание, заявленное как продвинутое. Для детей с ОВЗ это хуже
+     * любой статистической выгоды, поэтому уровень решает, а b лишь упорядочивает внутри него.
+     */
+    public function test_declared_level_beats_measured_difficulty(): void {
         $this->resetAfterTest();
         $this->setAdminUser();
         $element = $this->make_element();
-        // Заявлен уровень 3, но измеренная трудность - как у базового.
+        // Заявлен уровень 3, измеренная трудность - как у базового.
         [$measured, ] = $this->make_item($element, 3);
-        $DB->insert_record('unics_item_irt', (object)[
-            'item_ref' => $measured, 'element_id' => $element, 'model' => 'rasch',
-            'a' => 1, 'b' => -1.0, 'c' => 0, 'calibrated_n' => 30, 'updated_at' => time(),
-        ]);
+        $this->calibrate($measured, $element, -1.0, 30);
 
-        $ids = item_pool::take($element, 1, 5)['ids'];
+        $r = item_pool::take($element, 1, 5);
 
-        $this->assertSame([$measured], $ids,
-            'откалиброванное задание судится по b, заявленный уровень уходит в запас');
+        $this->assertSame([], $r['ids'],
+            'задание чужого уровня не идет ребенку, как бы ни легла измеренная трудность');
+    }
+
+    /**
+     * Калибровка по одному-двум ответам не считается измерением.
+     *
+     * Найдено живым зондом: задания с n=1 получали вырожденную b = -3.892, промахивались мимо
+     * любого уровня и ПРОПАДАЛИ из пула совсем. Пока наблюдений мало, b игнорируется и задание
+     * судится по заявленному уровню, как до калибровки.
+     */
+    public function test_low_confidence_calibration_is_ignored(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+
+        // У «шумного» измеренная трудность далеко от целевой, но наблюдение всего одно, значит
+        // верить ей нельзя. У «честного» трудность известна и чуть в стороне.
+        [$noisy, $noisyqid]     = $this->make_item($element, 2);
+        [$trusted, $trustedqid] = $this->make_item($element, 2);
+        $this->calibrate($noisy, $element, 2.5, 1);
+        $this->calibrate($trusted, $element, 0.5, 30);
+        // Ответов поровну, иначе порядок решал бы счетчик, а не доверие к трудности.
+        $this->answer($noisyqid, 1);
+        $this->answer($trustedqid, 1);
+
+        $ids = item_pool::take($element, 2, 5)['ids'];
+
+        $this->assertSame([$noisy, $trusted], $ids,
+            'трудность по одному наблюдению не учитывается, поэтому задание не уезжает в хвост');
+        $this->assertCount(2, $ids, 'и уж точно не пропадает из пула');
+    }
+
+    /**
+     * Задание своего уровня остается в выдаче, даже если измеренная трудность далеко.
+     *
+     * Регресс находки зонда: жесткий допуск выбрасывал такие задания, и пул уровня 2 просел с
+     * пяти до трех сразу после первой калибровки - против самой цели пула.
+     */
+    public function test_own_level_item_with_far_b_is_still_taken(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        [$far, ] = $this->make_item($element, 2);
+        $this->calibrate($far, $element, 2.5, 30);
+
+        $ids = item_pool::take($element, 2, 5)['ids'];
+
+        $this->assertSame([$far], $ids);
+    }
+
+    /** При равном числе ответов первым идет задание с трудностью ближе к целевой. */
+    public function test_closer_difficulty_goes_first_when_answers_equal(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        [$far, $farqid]     = $this->make_item($element, 2);
+        [$close, $closeqid] = $this->make_item($element, 2);
+        $this->calibrate($far, $element, 2.5, 30);
+        $this->calibrate($close, $element, 0.1, 30);
+        // Ответов поровну: иначе решал бы счетчик ответов, а не трудность.
+        $this->answer($farqid, 1);
+        $this->answer($closeqid, 1);
+
+        $ids = item_pool::take($element, 2, 2)['ids'];
+
+        $this->assertSame([$close, $far], $ids);
     }
 }
