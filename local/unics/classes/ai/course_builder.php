@@ -130,15 +130,44 @@ class course_builder {
     }
 
     /**
+     * Категория банка для пула заданий: контекст КАТЕГОРИИ КУРСОВ, а не курса.
+     *
+     * Раньше вопросы жили в контексте курса (а еще раньше - модуля теста), и удаление курса
+     * уносило их вместе с накопленной калибровкой: на стенде так осиротело 249 записей банка из
+     * 284. Пул должен переживать и тест, и курс, поэтому живет уровнем выше.
+     */
+    public function pool_category(int $course_id): int {
+        global $DB;
+        $catid = (int)$DB->get_field('course', 'category', ['id' => $course_id]);
+        $ctx   = \context_coursecat::instance($catid);
+        $qcat  = $DB->get_record('question_categories', ['contextid' => $ctx->id, 'parent' => 0]);
+        if ($qcat) {
+            return (int)$qcat->id;
+        }
+        return (int)$DB->insert_record('question_categories', (object)[
+            'name'       => 'УНИКС: пул заданий',
+            'info'       => 'Задания, привязанные к элементам кодификатора. [[umk-item-pool-design]]',
+            'infoformat' => FORMAT_PLAIN,
+            'contextid'  => $ctx->id,
+            'parent'     => 0,
+            'sortorder'  => 999,
+            'stamp'      => make_unique_id_code(),
+        ]);
+    }
+
+    /**
      * Создать тест с вопросами, сгенерированными ИИ (Moodle 4.x).
      * $questions - массив из ai_generator::generate_quiz().
+     * $reuse_ids - готовые questionbankentryid из общего пула элемента: они ставятся в слоты
+     * ПЕРЕД новыми и не создают ни одного вопроса заново ([[umk-item-pool-design]]).
      * Возвращает cmid теста.
      */
     public function add_quiz_with_questions(
         int    $course_id,
         int    $section_num,
         string $title,
-        array  $questions
+        array  $questions,
+        array  $reuse_ids = []
     ): int {
         global $DB;
 
@@ -161,34 +190,49 @@ class course_builder {
         $has_qref = $dbman->table_exists('question_references');
 
         // Moodle ищет question_references по контексту МОДУЛЯ теста, а не курса.
-        $quiz_ctx   = \context_module::instance($quiz_cmid);
-        $course_ctx = \context_course::instance($course_id);
+        $quiz_ctx = \context_module::instance($quiz_cmid);
 
-        // Категория вопросов для курса
-        $qcat = $DB->get_record('question_categories', ['contextid' => $course_ctx->id, 'parent' => 0]);
-        if (!$qcat) {
-            $qcat               = new \stdClass();
-            $qcat->name         = get_string('defaultfor', 'question', '');
-            $qcat->info         = '';
-            $qcat->infoformat   = FORMAT_PLAIN;
-            $qcat->contextid    = $course_ctx->id;
-            $qcat->parent       = 0;
-            $qcat->sortorder    = 999;
-            $qcat->stamp        = make_unique_id_code();
-            $qcat->id = $DB->insert_record('question_categories', $qcat);
-        }
+        $qcat_id = $this->pool_category($course_id);
 
         $slot_num  = 0;
         $sumgrades = 0;
 
-        foreach ($questions as $q) {
+        // Слот ссылается на запись банка, а не хранит копию вопроса, поэтому переиспользуемые и
+        // только что созданные задания ставятся в слоты одинаково.
+        $put_in_slot = function (int $qbe_id) use ($quiz_id, $quiz_ctx, $has_qref, &$slot_num, &$sumgrades) {
+            global $DB;
             $slot_num++;
+            $slot_id = (int)$DB->insert_record('quiz_slots', (object)[
+                'quizid'          => $quiz_id,
+                'slot'            => $slot_num,
+                'page'            => $slot_num,
+                'requireprevious' => 0,
+                'maxmark'         => 1.0,
+            ]);
+            if ($has_qref) {
+                $DB->insert_record('question_references', (object)[
+                    'usingcontextid'      => (int)$quiz_ctx->id,
+                    'component'           => 'mod_quiz',
+                    'questionarea'        => 'slot',
+                    'itemid'              => $slot_id,
+                    'questionbankentryid' => $qbe_id,
+                    'version'             => null,
+                ]);
+            }
+            $sumgrades++;
+        };
 
+        // Готовые задания идут первыми: они и есть общий измеритель.
+        foreach ($reuse_ids as $reused) {
+            $put_in_slot((int)$reused);
+        }
+
+        foreach ($questions as $q) {
             // question_bank_entries (Moodle 4.x)
             $qbe_id = null;
             if ($has_qbe) {
                 $qbe = new \stdClass();
-                $qbe->questioncategoryid = $qcat->id;
+                $qbe->questioncategoryid = $qcat_id;
                 $qbe->idnumber           = null;
                 $qbe->ownerid            = null;
                 $qbe->timecreated        = time();
@@ -201,7 +245,7 @@ class course_builder {
 
             // question
             $question                       = new \stdClass();
-            $question->category             = $qcat->id;
+            $question->category             = $qcat_id;
             $question->parent               = 0;
             $question->name                 = mb_substr($q['text'], 0, 255);
             $question->questiontext         = '<p>' . s($q['text']) . '</p>';
@@ -261,30 +305,12 @@ class course_builder {
                 ]
             );
 
-            // quiz_slots
-            $slot_id = (int)$DB->insert_record('quiz_slots', (object)[
-                'quizid'          => $quiz_id,
-                'slot'            => $slot_num,
-                'page'            => $slot_num,
-                'requireprevious' => 0,
-                'maxmark'         => 1.0,
-            ]);
-
-            // question_references (Moodle 4.x)
-            // usingcontextid must be the QUIZ MODULE context - qbank_helper.php
-            // filters by quizcontextid = context_module::instance(cmid)->id.
-            if ($has_qref && $qbe_id) {
-                $DB->insert_record('question_references', (object)[
-                    'usingcontextid'      => (int)$quiz_ctx->id,
-                    'component'           => 'mod_quiz',
-                    'questionarea'        => 'slot',
-                    'itemid'              => (int)$slot_id,
-                    'questionbankentryid' => (int)$qbe_id,
-                    'version'             => null,
-                ]);
+            // Слот и question_references ставит замыкание выше: путь у переиспользованных и
+            // только что созданных заданий обязан быть один, иначе они разъедутся.
+            // usingcontextid там - контекст МОДУЛЯ теста: qbank_helper.php фильтрует по нему.
+            if ($qbe_id) {
+                $put_in_slot((int)$qbe_id);
             }
-
-            $sumgrades++;
         }
 
         // sumgrades = сумма весов слотов; grade (макс. оценка теста) оставляем 10
