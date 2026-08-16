@@ -87,6 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $title          = required_param('title', PARAM_TEXT);
     $topic          = required_param('topic', PARAM_TEXT);
     $target_section = optional_param('target_section', -1, PARAM_INT);
+    // Элемент кодификатора: 0 = методист не выбрал, привязки и пула не будет.
+    $element_id     = optional_param('element_id', 0, PARAM_INT);
 
     if (empty($course_id) || empty($student_ids) || empty($title) || empty($topic)) {
         redirect(
@@ -177,6 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             'target_section' => (int)$target_section,
             'extra_prompt'   => $extra_prompt,
             'individual'     => (bool)$individual,
+            'element_id'     => $element_id,
             'flags'          => [
                 'generate_audio'      => (int)$generate_audio,
                 'generate_quiz'       => (int)$generate_quiz,
@@ -570,6 +573,32 @@ echo html_writer::empty_tag('input', [
 echo html_writer::end_tag('div');
 
 echo html_writer::end_tag('div'); // single-mode-fields (только title+topic)
+
+// Элемент кодификатора: точка, вокруг которой копится общий пул заданий и их калибровка.
+// Поле необязательное - без него генерация работает ровно как раньше.
+$element_opts = html_writer::tag('option', 'Не привязывать', ['value' => '0']);
+// list_subject_categories() отдает menu-массив id => name, а не записи.
+foreach (\local_unics\codifier_manager::list_subject_categories() as $catid => $catname) {
+    $codifier = \local_unics\codifier_manager::get_codifier_for_category((int)$catid);
+    if (!$codifier) {
+        continue;
+    }
+    $items = '';
+    foreach (\local_unics\codifier_manager::get_tree((int)$codifier->id) as $el) {
+        $items .= html_writer::tag('option', $el->code . ' ' . $el->title, ['value' => (int)$el->id]);
+    }
+    if ($items !== '') {
+        $element_opts .= html_writer::tag('optgroup', $items, ['label' => $codifier->name]);
+    }
+}
+echo html_writer::start_tag('div', ['class' => 'form-group']);
+echo html_writer::tag('label', 'Элемент кодификатора', ['for' => 'gen_element']);
+echo html_writer::tag('select', $element_opts,
+    ['name' => 'element_id', 'id' => 'gen_element', 'class' => 'form-control']);
+echo html_writer::tag('small',
+    'Задания теста будут копиться в общем пуле этого элемента. Без выбора тест собирается '
+    . 'из новых вопросов, как раньше.', ['class' => 'form-text text-muted']);
+echo html_writer::end_tag('div');
 
 echo html_writer::start_tag('div', ['class' => 'form-group']);
 echo html_writer::tag('label', 'Курс <span class="text-danger">*</span>', ['for' => 'course_id_select']);

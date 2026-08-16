@@ -77,6 +77,9 @@ class umk_launcher {
                 'status'           => 1,
                 'generated_at'     => time(),
                 'profile_key'      => $key,
+                // 0 и пустая строка означают «методист не выбрал»: в БД кладем NULL, чтобы
+                // отличать отсутствие выбора от элемента с несуществующим id.
+                'element_id'       => !empty($params['element_id']) ? (int)$params['element_id'] : null,
             ]);
 
             if ($individual) {
