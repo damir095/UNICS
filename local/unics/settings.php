@@ -101,6 +101,13 @@ if ($hassiteconfig) {
         'local/unics:manage'
     ));
 
+    $ADMIN->add('local_unics_cat', new admin_externalpage(
+        'local_unics_health',
+        'Здоровье системы',
+        new moodle_url('/local/unics/pages/health.php'),
+        'local/unics:manage'
+    ));
+
     // Настройки ИИ-генерации
     $settings = new admin_settingpage('local_unics_ai', 'Настройки ИИ');
     $ADMIN->add('local_unics_cat', $settings);

@@ -128,6 +128,23 @@ final class health_checks_test extends \advanced_testcase {
         $this->assertStringContainsString('оплат', mb_strtolower($r->action));
     }
 
+    /**
+     * Реальная метка со стенда: «Payment Required» БЕЗ кода.
+     *
+     * Метку пишет ai_generator из поля `message` ответа Сбера, а не из кода ответа, поэтому
+     * проверка по подстроке «402» промахивалась и советовала «проверьте ключ и интернет».
+     * Найдено живым заходом на страницу; тест выше кормил искусственную строку с числом.
+     */
+    public function test_tts_reason_without_code_still_gives_payment_hint(): void {
+        $this->resetAfterTest();
+        set_config('salute_speech_api_key', 'ключ', 'local_unics');
+        \local_unics\ai\tts_status::mark_unavailable('Payment Required');
+
+        $r = (new \local_unics\health\checks\salute_speech())->run();
+
+        $this->assertStringContainsString('оплат', mb_strtolower($r->action));
+    }
+
     public function test_tts_available_is_ok(): void {
         $this->resetAfterTest();
         set_config('salute_speech_api_key', 'ключ', 'local_unics');

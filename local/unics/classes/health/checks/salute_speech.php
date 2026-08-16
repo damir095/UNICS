@@ -47,7 +47,7 @@ class salute_speech implements check {
         }
         $reason = tts_status::reason();
         $at = tts_status::marked_at();
-        $action = strpos($reason, '402') !== false
+        $action = self::is_payment_reason($reason)
             ? 'Оплатите пакет SmartSpeech в личном кабинете Сбера. Кодом это не решается; после '
               . 'оплаты первый же удачный синтез снимет метку автоматически.'
             : 'Проверьте ключ и доступ в интернет с сервера. Метка снимется сама при первом '
@@ -57,5 +57,19 @@ class salute_speech implements check {
             $action,
             $at > 0 ? ['Метка поставлена' => userdate($at)] : []
         );
+    }
+
+    /**
+     * Говорит ли причина о неоплаченном пакете.
+     *
+     * Одного «402» мало: метку ставит `ai_generator`, и в нее уходит поле `message` ответа
+     * Сбера, а не код. На стенде там лежит «Payment Required» БЕЗ числа - проверка по коду
+     * молча уводила администратора в ветку «проверьте ключ и интернет», то есть давала ровно
+     * не то действие, ради которого страница и делается. Найдено живым заходом, а не тестом:
+     * тест кормил искусственную строку «HTTP 402 Payment Required».
+     */
+    private static function is_payment_reason(string $reason): bool {
+        $lower = mb_strtolower($reason);
+        return strpos($lower, '402') !== false || strpos($lower, 'payment required') !== false;
     }
 }
