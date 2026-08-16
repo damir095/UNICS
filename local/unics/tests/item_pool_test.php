@@ -154,6 +154,29 @@ final class item_pool_test extends \advanced_testcase {
         $this->assertSame(4, $r['missing']);
     }
 
+    /**
+     * Удаленный педагогом вопрос в пул не возвращается.
+     *
+     * Moodle не удаляет использованный вопрос физически: `question_delete_question()` помечает
+     * версию скрытой, а запись банка остается. Проверки существования записи тут мало, и без
+     * проверки статуса удаленный вопрос всплывал бы в тесте каждого следующего ученика
+     * (найдено ревью).
+     */
+    public function test_hidden_question_version_is_not_taken(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        [$hidden, ] = $this->make_item($element, 2);
+        [$alive, ]  = $this->make_item($element, 2);
+        $DB->set_field('question_versions', 'status', 'hidden', ['questionbankentryid' => $hidden]);
+
+        $r = item_pool::take($element, 2, 5);
+
+        $this->assertSame([$alive], $r['ids']);
+        $this->assertSame(4, $r['missing']);
+    }
+
     /** Задание с чужим уровнем в выдачу по своему уровню не идет. */
     public function test_other_level_is_not_taken(): void {
         $this->resetAfterTest();

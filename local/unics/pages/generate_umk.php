@@ -88,7 +88,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $topic          = required_param('topic', PARAM_TEXT);
     $target_section = optional_param('target_section', -1, PARAM_INT);
     // Элемент кодификатора: 0 = методист не выбрал, привязки и пула не будет.
+    // Существование проверяем: по этому id пойдут привязки заданий, и мусорное значение
+    // развело бы пул вокруг несуществующего навыка, где его никто никогда не увидит.
     $element_id     = optional_param('element_id', 0, PARAM_INT);
+    if ($element_id > 0 && !$DB->record_exists('unics_codifier_element', ['id' => $element_id])) {
+        $element_id = 0;
+    }
 
     if (empty($course_id) || empty($student_ids) || empty($title) || empty($topic)) {
         redirect(
@@ -369,6 +374,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         'generate_video'      => (int)$generate_video,
         'generate_images'     => (int)$generate_images,
         'individual'          => (int)$individual,
+        // Без этой строки выбор элемента терялся между предпросмотром и запуском, и пул не
+        // работал НИ РАЗУ через интерфейс: форма всегда идет через предпросмотр (action по
+        // умолчанию - preview). Тесты этого не видели - они зовут launcher напрямую.
+        'element_id'          => (int)$element_id,
     ];
     foreach ($hidden as $hn => $hv) {
         echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => $hn, 'value' => $hv]);
@@ -585,7 +594,9 @@ foreach (\local_unics\codifier_manager::list_subject_categories() as $catid => $
     }
     $items = '';
     foreach (\local_unics\codifier_manager::get_tree((int)$codifier->id) as $el) {
-        $items .= html_writer::tag('option', $el->code . ' ' . $el->title, ['value' => (int)$el->id]);
+        // Экранируем: код и название элемента пишет методист в редакторе кодификатора,
+        // html_writer::tag() содержимое не чистит (соседний цикл по курсам делает то же).
+        $items .= html_writer::tag('option', s($el->code . ' ' . $el->title), ['value' => (int)$el->id]);
     }
     if ($items !== '') {
         $element_opts .= html_writer::tag('optgroup', $items, ['label' => $codifier->name]);

@@ -52,6 +52,11 @@ final class course_builder_reuse_test extends \advanced_testcase {
         $expected = \context_coursecat::instance((int)$course->category)->id;
         $this->assertSame($expected, $contextid,
             'банк обязан жить выше курса, иначе удаление курса уносит задания и их калибровку');
+
+        // Категория обязана быть НАСТОЯЩЕЙ, а не служебной top: интерфейс банка показывает
+        // только категории с parent <> 0, и пул в top методист не увидел бы никогда.
+        $parent = (int)$DB->get_field('question_categories', 'parent', ['id' => $catid]);
+        $this->assertNotSame(0, $parent, 'вопросы не должны лежать в служебной категории top');
     }
 
     public function test_reused_entries_go_into_slots_without_new_questions(): void {

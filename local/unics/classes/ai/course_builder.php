@@ -140,19 +140,52 @@ class course_builder {
         global $DB;
         $catid = (int)$DB->get_field('course', 'category', ['id' => $course_id]);
         $ctx   = \context_coursecat::instance($catid);
-        $qcat  = $DB->get_record('question_categories', ['contextid' => $ctx->id, 'parent' => 0]);
+
+        // parent = 0 - служебная категория «top» самого Moodle, а не место для вопросов.
+        // Интерфейс банка показывает только категории с parent <> 0
+        // (question_bank_helper.php:250), поэтому вопросы, положенные прямо в top, не видны
+        // НИГДЕ в интерфейсе. Для пула, который методист должен курировать годами, это
+        // неприемлемо, поэтому заводим настоящую категорию под top (найдено ревью).
+        $top = $DB->get_record('question_categories', ['contextid' => $ctx->id, 'parent' => 0]);
+        if (!$top) {
+            $top = (object)[
+                'name'       => 'top',
+                'info'       => '',
+                'infoformat' => FORMAT_PLAIN,
+                'contextid'  => $ctx->id,
+                'parent'     => 0,
+                'sortorder'  => 0,
+                'stamp'      => make_unique_id_code(),
+            ];
+            $top->id = $DB->insert_record('question_categories', $top);
+        }
+
+        $name = 'УНИКС: пул заданий';
+        $qcat = $DB->get_record('question_categories',
+            ['contextid' => $ctx->id, 'parent' => $top->id, 'name' => $name]);
         if ($qcat) {
             return (int)$qcat->id;
         }
-        return (int)$DB->insert_record('question_categories', (object)[
-            'name'       => 'УНИКС: пул заданий',
-            'info'       => 'Задания, привязанные к элементам кодификатора. [[umk-item-pool-design]]',
-            'infoformat' => FORMAT_PLAIN,
-            'contextid'  => $ctx->id,
-            'parent'     => 0,
-            'sortorder'  => 999,
-            'stamp'      => make_unique_id_code(),
-        ]);
+        try {
+            return (int)$DB->insert_record('question_categories', (object)[
+                'name'       => $name,
+                'info'       => 'Задания, привязанные к элементам кодификатора. [[umk-item-pool-design]]',
+                'infoformat' => FORMAT_PLAIN,
+                'contextid'  => $ctx->id,
+                'parent'     => (int)$top->id,
+                'sortorder'  => 999,
+                'stamp'      => make_unique_id_code(),
+            ]);
+        } catch (\Throwable $e) {
+            // Параллельные воркеры (на стенде их три) могут создать категорию одновременно.
+            // Перечитываем: две категории с одним именем развели бы пул надвое.
+            $qcat = $DB->get_record('question_categories',
+                ['contextid' => $ctx->id, 'parent' => $top->id, 'name' => $name], '*', IGNORE_MULTIPLE);
+            if (!$qcat) {
+                throw $e;
+            }
+            return (int)$qcat->id;
+        }
     }
 
     /**

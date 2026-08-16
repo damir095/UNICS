@@ -15,6 +15,13 @@ defined('MOODLE_INTERNAL') || die();
  *
  * Класс намеренно не знает ни про ИИ, ни про курсы: он отвечает на один вопрос - какие записи
  * банка взять и скольких не хватило.
+ *
+ * ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ. Отбор и последующая привязка не атомарны: если три воркера (предел
+ * параллельности на стенде) стартуют по одному элементу с пустым пулом, каждый создаст свои пять
+ * заданий - будет 15 вместо 5. Состояние временное и самоисправляющееся: со следующей генерации
+ * пул уже не пуст. Блокировка на элемент тут не помогает - дорогая часть это генерация, и
+ * остальные воркеры уйдут в обход по таймауту. Лечится только перепланировкой (сначала застолбить
+ * места, потом наполнять) - отдельная задача, см. [[umk-item-pool-design]], раздел 6a.
  */
 class item_pool {
 
@@ -50,34 +57,49 @@ class item_pool {
 
         $target = self::TARGET_B[$level] ?? 0.0;
 
-        // Записи банка, привязанные к элементу и ЖИВЫЕ. Проверка существования обязательна:
-        // задание могли удалить руками, привязка при этом осталась бы, а битый слот в тесте
-        // ребенку не покажешь (урок 249 сирот на стенде).
+        // Записи банка, привязанные к элементу и ГОДНЫЕ к показу.
+        //
+        // Двух проверок мало одной. Существование записи ловит удаление начисто (урок 249 сирот
+        // на стенде). Но `question_delete_question()` для вопроса, который где-то использован,
+        // не удаляет его, а помечает версию скрытой: запись банка остается, и без проверки
+        // статуса удаленный педагогом вопрос всплывал бы в тесте каждого следующего ученика.
+        //
+        // Число ответов считается тем же запросом: раньше на каждое задание уходил свой COUNT.
         $rows = $DB->get_records_sql("
-            SELECT l.target_id AS item_ref, il.level AS declared, i.b AS measured
+            SELECT l.target_id AS item_ref, il.level AS declared, i.b AS measured,
+                   COUNT(qa.id) AS answers
               FROM {unics_codifier_link} l
               JOIN {question_bank_entries} qbe ON qbe.id = l.target_id
+              JOIN {question_versions} qv ON qv.questionbankentryid = l.target_id
+                   AND qv.status = :ready
          LEFT JOIN {unics_item_level} il ON il.item_ref = l.target_id
          LEFT JOIN {unics_item_irt} i ON i.item_ref = l.target_id
-             WHERE l.target_type = :tq AND l.element_id = :eid",
-            ['tq' => codifier_link_manager::TYPE_QUESTION, 'eid' => $element_id]);
+         LEFT JOIN {question_attempts} qa ON qa.questionid = qv.questionid
+             WHERE l.target_type = :tq AND l.element_id = :eid
+          GROUP BY l.target_id, il.level, i.b",
+            [
+                'ready' => \core_question\local\bank\question_version_status::QUESTION_STATUS_READY,
+                'tq'    => codifier_link_manager::TYPE_QUESTION,
+                'eid'   => $element_id,
+            ]);
 
         $exact = [];
         $unleveled = [];
         foreach ($rows as $r) {
             $ref = (int)$r->item_ref;
+            $answers = (int)$r->answers;
             if ($r->measured !== null) {
                 if (abs((float)$r->measured - $target) <= self::B_TOLERANCE) {
-                    $exact[$ref] = self::answers_count($ref);
+                    $exact[$ref] = $answers;
                 }
                 continue;
             }
             if ($r->declared === null) {
-                $unleveled[$ref] = self::answers_count($ref);
+                $unleveled[$ref] = $answers;
                 continue;
             }
             if ((int)$r->declared === $level) {
-                $exact[$ref] = self::answers_count($ref);
+                $exact[$ref] = $answers;
             }
         }
 

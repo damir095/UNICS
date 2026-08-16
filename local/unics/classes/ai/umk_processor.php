@@ -246,6 +246,12 @@ class umk_processor {
                         $reuse
                     );
 
+                    // Ограничение по группе - ПЕРВЫМ делом после сборки. Пока оно не наложено,
+                    // индивидуальный тест виден всему курсу, поэтому между созданием теста и
+                    // этой строкой не должно стоять ничего, что может бросить: наружный catch
+                    // проглотил бы исключение и оставил тест открытым (найдено ревью).
+                    $builder->restrict_activity_to_group($quiz_cmid, $group_id);
+
                     // Новые задания попадают в пул элемента: со следующей генерации их получат
                     // другие ученики, и у задания начнут копиться ответы.
                     if ($element_id > 0) {
@@ -268,7 +274,6 @@ class umk_processor {
                             . ', создано ' . count($fresh));
                     }
 
-                    $builder->restrict_activity_to_group($quiz_cmid, $group_id);
                     $builder->set_view_completion($quiz_cmid); // B8 (тест входит в завершение курса)
                     $quiz_cmid_gate = $quiz_cmid;               // B1: гейт навесим после сборки материалов
                     $DB->insert_record('unics_umk_materials', (object)[
