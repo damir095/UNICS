@@ -1598,5 +1598,31 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026081401, 'local', 'unics');
     }
 
+    if ($oldversion < 2026081606) {
+        // Пул заданий по элементу кодификатора [[umk-item-pool-design]]: заявленный уровень
+        // задания живет отдельно от unics_item_irt, потому что строка в item_irt появляется
+        // ТОЛЬКО после калибровки, а заявленный уровень нужен ровно до нее. Класть замысел
+        // автора рядом с наблюдением значило бы их перепутать.
+        $table = new xmldb_table('unics_item_level');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('item_ref', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null);
+        $table->add_field('level', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, 2);
+        $table->add_field('created_by_mdl_user_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, 0);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, 0);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('uq_item_level', XMLDB_INDEX_UNIQUE, ['item_ref']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        $umk = new xmldb_table('unics_umk');
+        $field = new xmldb_field('element_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'images_total');
+        if (!$dbman->field_exists($umk, $field)) {
+            $dbman->add_field($umk, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026081606, 'local', 'unics');
+    }
+
     return true;
 }

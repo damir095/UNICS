@@ -286,6 +286,7 @@
         <FIELD NAME="profile_key"      TYPE="char" LENGTH="40"  NOTNULL="false" SEQUENCE="false" COMMENT="sha1 отпечатка профиля; NULL = старый уровневый регламент"/>
         <FIELD NAME="images_made"      TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="сколько иллюстраций ИИ реально создано"/>
         <FIELD NAME="images_total"     TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="сколько запрашивалось; NULL - не запрашивались"/>
+        <FIELD NAME="element_id"       TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="элемент кодификатора комплекта; NULL = без привязки"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -711,6 +712,22 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="uq_item_irt_ref" UNIQUE="true" FIELDS="item_ref"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="unics_item_level" COMMENT="Заявленный уровень задания 1-3 до появления калибровки; item_ref = questionbankentryid">
+      <FIELDS>
+        <FIELD NAME="id"                     TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="item_ref"               TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="questionbankentryid"/>
+        <FIELD NAME="level"                  TYPE="int" LENGTH="2"  NOTNULL="true"  DEFAULT="2" SEQUENCE="false" COMMENT="1=базовый 2=стандарт 3=продвинутый"/>
+        <FIELD NAME="created_by_mdl_user_id" TYPE="int" LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated"            TYPE="int" LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_item_level" UNIQUE="true" FIELDS="item_ref"/>
       </INDEXES>
     </TABLE>
 
