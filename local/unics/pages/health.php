@@ -20,7 +20,12 @@ $PAGE->set_title('Здоровье системы - УНИКС');
 $PAGE->set_heading('Здоровье системы');
 
 // Прогон дорогих проверок - только по явной кнопке: они ходят по сети.
-$runexpensive = optional_param('checknow', 0, PARAM_INT) === 1 && confirm_sesskey();
+// sesskey читается через optional_param: у confirm_sesskey() без аргумента внутри
+// required_param, и адрес ?checknow=1 без ключа ронял бы страницу сообщением про
+// недостающий параметр вместо показа дешевых проверок (найдено ревью).
+$sesskey = optional_param('sesskey', '', PARAM_RAW);
+$runexpensive = optional_param('checknow', 0, PARAM_INT) === 1
+    && $sesskey !== '' && confirm_sesskey($sesskey);
 
 echo $OUTPUT->header();
 

@@ -15,7 +15,7 @@ defined('MOODLE_INTERNAL') || die();
 class banner {
 
     public static function render(): string {
-        global $PAGE;
+        global $PAGE, $CFG;
 
         if (!isloggedin() || isguestuser() || during_initial_install()) {
             return '';
@@ -24,13 +24,14 @@ class banner {
         if (!has_capability('local/unics:manage', $context)) {
             return '';
         }
-        $path = $PAGE->url ? $PAGE->url->get_path() : '';
-        $ours = strpos($path, '/local/unics/') === 0 || strpos($path, '/admin/') === 0;
+        $rel = self::relative_path($PAGE->url ? $PAGE->url->get_path() : '');
+        $ours = strpos($rel, '/local/unics/') === 0
+            || strpos($rel, '/' . $CFG->admin . '/') === 0;
         if (!$ours) {
             return '';
         }
         // На самой странице здоровья полоса избыточна.
-        if ($path === '/local/unics/pages/health.php') {
+        if ($rel === '/local/unics/pages/health.php') {
             return '';
         }
 
@@ -55,5 +56,21 @@ class banner {
             'alert alert-danger mb-0 rounded-0',
             ['role' => 'alert']
         );
+    }
+
+    /**
+     * Путь страницы без каталога установки.
+     *
+     * На стенде сайт лежит в корне, и сравнение с «/local/unics/» работало бы и без этого.
+     * Но при установке в подкаталог (`http://host/moodle/`) путь начинается с «/moodle/», и
+     * полоса не появилась бы НИГДЕ и НИКОГДА - то есть отказала бы ровно так же тихо, как то,
+     * что она сторожит. Каталог админки берется из настройки: его разрешено переименовывать.
+     */
+    private static function relative_path(string $path): string {
+        $root = rtrim((new \moodle_url('/'))->get_path(), '/');
+        if ($root !== '' && strpos($path, $root) === 0) {
+            return substr($path, strlen($root));
+        }
+        return $path;
     }
 }

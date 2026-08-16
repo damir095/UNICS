@@ -43,11 +43,30 @@ class gigachat implements check {
         if (!empty($res['ok'])) {
             return check_result::ok('Отвечает');
         }
+        $message = self::readable((string)($res['message'] ?? ''));
         return check_result::alarm(
-            'Ключ задан, но сервис не отвечает: ' . ($res['message'] ?? 'нет ответа'),
+            'Ключ задан, но сервис не отвечает: ' . $message,
             'Проверьте правильность ключа и доступ в интернет с сервера.',
-            ['Ответ сервиса' => (string)($res['message'] ?? '')]
+            ['Ответ сервиса' => $message]
         );
+    }
+
+    /**
+     * Причина отказа в виде, годном для страницы.
+     *
+     * Сообщение приходит из moodle_exception, а в проекте есть известная беда: русские фразы
+     * передаются как идентификаторы langstring, и наружу выходит «error/<фраза>» плюс сырой JSON
+     * Сбера. Страницу читает администратор без знания PHP, поэтому служебный префикс срезаем, а
+     * длину ограничиваем: полный ответ сервиса ему все равно ничего не скажет.
+     */
+    private static function readable(string $message): string {
+        $message = trim(preg_replace('#^error/#', '', trim($message)));
+        if ($message === '') {
+            return 'нет ответа';
+        }
+        return \core_text::strlen($message) > 200
+            ? \core_text::substr($message, 0, 200) . '...'
+            : $message;
     }
 
     /** Живой запрос: авторизация в GigaChat через существующий генератор. */

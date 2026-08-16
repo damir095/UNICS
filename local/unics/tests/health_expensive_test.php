@@ -56,13 +56,23 @@ final class health_expensive_test extends \advanced_testcase {
         $this->assertSame(check_result::OK, $check->run()->level);
     }
 
-    /** Дорогих ровно две. Озвучка сюда НЕ входит: она читает метку tts_status, без сети. */
+    /**
+     * Дорогих в РЕЕСТРЕ ровно две. Озвучка сюда не входит: она читает метку tts_status, без сети.
+     *
+     * Список берется из health_report::checks(), а не перечисляется руками (найдено ревью:
+     * ручной список пропустил бы новую сетевую проверку, помеченную дешевой - а дешевые
+     * считаются на КАЖДОЙ штабной странице ради полосы, и чужой таймаут вешал бы админку).
+     */
     public function test_only_two_checks_are_expensive(): void {
         $this->resetAfterTest();
-        foreach ([new gigachat(), new irt_service()] as $c) {
-            $this->assertFalse($c->is_cheap(), $c->name() . ' обязана быть дорогой');
+        $expensive = [];
+        foreach (\local_unics\health\health_report::checks() as $c) {
+            if (!$c->is_cheap()) {
+                $expensive[] = $c->name();
+            }
         }
-        $this->assertTrue((new \local_unics\health\checks\salute_speech())->is_cheap(),
-            'озвучка читает готовую метку и в сеть не ходит');
+        sort($expensive);
+        $this->assertSame(['gigachat', 'irt_service'], $expensive,
+            'сетевая проверка обязана быть дорогой, а дешевая - не ходить по сети');
     }
 }
