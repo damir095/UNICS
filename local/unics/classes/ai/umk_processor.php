@@ -63,7 +63,7 @@ class umk_processor {
             $student_ids = array_filter(array_map('intval', $student_ids));
 
             if (empty($student_ids)) {
-                throw new \moodle_exception('Список учащихся пуст для UMK #' . $umk->id);
+                throw new \moodle_exception('generalexceptionmessage', 'error', '', 'Список учащихся пуст для UMK #' . $umk->id);
             }
 
             // --- Репрезентативный профиль: первый учащийся + уровень из UMK ---
@@ -73,7 +73,7 @@ class umk_processor {
                 if ($first_student) break;
             }
             if (!$first_student) {
-                throw new \moodle_exception('Не найден ни один учащийся для UMK #' . $umk->id);
+                throw new \moodle_exception('generalexceptionmessage', 'error', '', 'Не найден ни один учащийся для UMK #' . $umk->id);
             }
 
             $umk_level = (int)$umk->difficulty_level;
@@ -83,7 +83,7 @@ class umk_processor {
             $profile = \local_unics\ai\profile_fingerprint::profile_of(
                 (int)$first_student->id, $generator);
             if ($profile === null) {
-                throw new \moodle_exception('Не найден профиль учащегося для UMK #' . $umk->id);
+                throw new \moodle_exception('generalexceptionmessage', 'error', '', 'Не найден профиль учащегося для UMK #' . $umk->id);
             }
             // Уровень УМК авторитетнее ученического: у старых уровневых УМК он единственный
             // общий признак группы.

@@ -23,7 +23,7 @@ $PAGE->set_heading('Редактирование пользователя');
 
 $profile = unics_user_manager::get_user_profile($user_id);
 if (!$profile) {
-    throw new moodle_exception('Пользователь не найден в системе УНИКС');
+    throw new moodle_exception('generalexceptionmessage', 'error', '', 'Пользователь не найден в системе УНИКС');
 }
 
 // Scope-check: редактируемый пользователь должен входить в скоуп текущего.

@@ -301,7 +301,7 @@ class ai_generator {
     // ----------------------------------------------------------------
     public function generate_text(string $prompt, int $max_tokens = 1024): string {
         if (empty($this->api_key)) {
-            throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
         }
         // Отказ модели - это болванка вместо материала, и приходит он с HTTP 200 и непустым
         // текстом, то есть штатными проверками не ловится. 2026-08-09 такая болванка легла в
@@ -375,7 +375,7 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('GigaChat auth cURL ошибка: ' . $curl_err);
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat auth cURL ошибка: ' . $curl_err);
         }
         if ($auth_code !== 200) {
             throw new \moodle_exception('GigaChat auth HTTP ' . $auth_code . ': ' . $auth_resp);
@@ -394,7 +394,7 @@ class ai_generator {
         $decoded = json_decode($json, true);
         $token   = $decoded['access_token'] ?? '';
         if (empty($token)) {
-            throw new \moodle_exception('GigaChat: не удалось получить access_token');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat: не удалось получить access_token');
         }
 
         // Сбер отдает expires_at в МИЛЛИСЕКУНДАХ (замерено: 1786308715480). Без перевода
@@ -490,7 +490,7 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('GigaChat cURL ошибка: ' . $curl_err);
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat cURL ошибка: ' . $curl_err);
         }
         if ($http_code !== 200) {
             // 401 = токен негоден раньше вычисленного срока (перекос часов, отзыв, смена
@@ -505,7 +505,7 @@ class ai_generator {
         $this->last_finish_reason = (string)($decoded['choices'][0]['finish_reason'] ?? '');
         $text = $decoded['choices'][0]['message']['content'] ?? '';
         if (mb_strlen(trim($text)) < 50) {
-            throw new \moodle_exception('GigaChat вернул пустой ответ');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat вернул пустой ответ');
         }
 
         return $text;
@@ -586,14 +586,14 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('SaluteSpeech auth cURL ошибка: ' . $curl_err);
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech auth cURL ошибка: ' . $curl_err);
         }
         if ($auth_code !== 200) {
             throw new \moodle_exception('SaluteSpeech auth HTTP ' . $auth_code . ': ' . $auth_resp);
         }
         $token = json_decode($auth_resp, true)['access_token'] ?? '';
         if (empty($token)) {
-            throw new \moodle_exception('SaluteSpeech: не удалось получить access_token');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech: не удалось получить access_token');
         }
         return $token;
     }
@@ -625,14 +625,14 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('SaluteSpeech cURL ошибка: ' . $curl_err);
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech cURL ошибка: ' . $curl_err);
         }
         return [$http_code, (string)$audio];
     }
 
     private function generate_audio_salute(string $text): string {
         if (empty($this->salute_key)) {
-            throw new \moodle_exception('SaluteSpeech API key не настроен в настройках плагина');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech API key не настроен в настройках плагина');
         }
 
         $voice = get_config('local_unics', 'salute_voice') ?: 'Nec_24000';
@@ -660,7 +660,7 @@ class ai_generator {
             throw new \moodle_exception('SaluteSpeech HTTP ' . $http_code . ': ' . $message);
         }
         if (strlen($audio) < 1000) {
-            throw new \moodle_exception('SaluteSpeech вернул некорректные аудиоданные');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech вернул некорректные аудиоданные');
         }
 
         // Синтез удался - значит пакет оплачен. Метка снимается сама, без администратора.
@@ -759,7 +759,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         }
 
         if (empty($result)) {
-            throw new \moodle_exception('ИИ вернул некорректный формат теста: ' . mb_substr($raw, 0, 300));
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'ИИ вернул некорректный формат теста: ' . mb_substr($raw, 0, 300));
         }
 
         return $result;
@@ -858,7 +858,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         }
 
         if (!isset($data['slides']) || !is_array($data['slides'])) {
-            throw new \moodle_exception('ИИ вернул некорректный формат видеосценария: ' . mb_substr($raw, 0, 300));
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'ИИ вернул некорректный формат видеосценария: ' . mb_substr($raw, 0, 300));
         }
 
         $result = [];
@@ -874,7 +874,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         }
 
         if (empty($result)) {
-            throw new \moodle_exception('ИИ не вернул ни одного слайда');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'ИИ не вернул ни одного слайда');
         }
 
         return $result;
@@ -932,7 +932,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('GigaChat image cURL ошибка: ' . $curl_err);
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat image cURL ошибка: ' . $curl_err);
         }
         if ($http_code !== 200) {
             if ($http_code === 401) {
@@ -965,7 +965,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         }
 
         if (empty($uuid)) {
-            throw new \moodle_exception('GigaChat image: UUID изображения не найден в ответе');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat image: UUID изображения не найден в ответе');
         }
 
         return $uuid;
@@ -986,7 +986,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         $data = $this->raw_download_image($uuid);
 
         if (strlen($data) < 1000) {
-            throw new \moodle_exception('GigaChat image download: пустой ответ ('
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat image download: пустой ответ ('
                 . strlen($data) . ' байт)');
         }
 
@@ -1017,7 +1017,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('GigaChat image download cURL ошибка: ' . $curl_err);
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat image download cURL ошибка: ' . $curl_err);
         }
         if ($http_code !== 200) {
             if ($http_code === 401) {
@@ -1042,7 +1042,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
 
     public function generate_image(string $prompt): string {
         if (empty($this->api_key)) {
-            throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
         }
 
         // Один повтор ТОЛЬКО на запрос за UUID: именно он виснет (в ошибке «0 bytes
