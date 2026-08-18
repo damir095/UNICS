@@ -29,6 +29,19 @@ class ai_generator {
      */
     private string $token_cache = '';
     private int $token_expires_at = 0;
+
+    /**
+     * Сколько картинок подряд должно не получиться, чтобы перестать ходить в сеть.
+     *
+     * Замер 2026-08-10: отказы приходят ПАЧКАМИ. На мертвом сервисе комплект честно
+     * перебирал все девять картинок - до девяти минут (9 x 2 попытки x 30 секунд
+     * таймаута) ради нуля иллюстраций. Три подряд - достаточный признак, что дело не в
+     * конкретном промте, а в сервисе.
+     */
+    const IMAGE_FAILURE_STREAK = 3;
+
+    /** Счетчик подряд идущих неудач картинок; удачная генерация его обнуляет. */
+    private int $image_failures_in_row = 0;
     private string $tts_provider;
     private string $salute_key;
 
@@ -1016,6 +1029,17 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         return (string) $img_data;
     }
 
+    /**
+     * Пауза перед повторной попыткой обращения к ИИ.
+     *
+     * Раньше повтор бил в ту же секунду, а отказы приходят пачками - на пачке такая
+     * попытка обречена. Вынесено отдельным методом: это шов для тестов, иначе каждый
+     * прогон сьюта честно спал бы секунды.
+     */
+    protected function pause_before_retry(int $attempt): void {
+        sleep(2);
+    }
+
     public function generate_image(string $prompt): string {
         if (empty($this->api_key)) {
             throw new \moodle_exception('API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
@@ -1033,6 +1057,14 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         // не «проваливается быстро». Классификатор сюда не добавлен намеренно - потолок
         // потерь ограничен (девять картинок на комплект), а угадывать вид ошибки по тексту
         // значит завести вторую эвристику там, где хватает верхней границы.
+        // Предохранитель: сервис уже отказал IMAGE_FAILURE_STREAK раз подряд, значит дело
+        // не в промте. Дальше ходить в сеть - это минуты ожидания ради того же нуля.
+        if ($this->image_failures_in_row >= self::IMAGE_FAILURE_STREAK) {
+            throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                'Сервис картинок не отвечает: подряд неудачных - '
+                . $this->image_failures_in_row . ', попытки прекращены до конца комплекта.');
+        }
+
         $uuid = null;
         $last = null;
         for ($attempt = 1; $attempt <= 2; $attempt++) {
@@ -1044,13 +1076,18 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
                 if ($attempt === 1) {
                     $this->trace('  [warn] Картинка не создана с первой попытки, повтор. '
                         . $e->getMessage());
+                    $this->pause_before_retry($attempt);
                 }
             }
         }
 
         if ($uuid === null) {
+            $this->image_failures_in_row++;
             throw $last;
         }
+
+        // Получилось - значит сервис жив, и прошлые неудачи были про конкретные промты.
+        $this->image_failures_in_row = 0;
 
         return $this->download_image($uuid);
     }
