@@ -204,14 +204,19 @@ class item_pool {
                 'element_id = :eid AND level = :lvl AND expires_at <= :now',
                 ['eid' => $element_id, 'lvl' => $level, 'now' => $now]);
 
-            $plain   = self::take($element_id, $level, $count);
-            $missing = $plain['missing'];
-
+            // Порядок ВАЖЕН: сначала чужие брони, потом задания. Сосед, который завершится
+            // между этими двумя запросами, снимает бронь и добавляет задания - при таком
+            // порядке мы увидим и старую бронь, и новые задания, то есть в худшем случае
+            // недосчитаем себе мест. Обратный порядок дал бы ноль там и ноль там - и мы
+            // создали бы дубли, ради устранения которых все и затевалось (найдено ревью).
             $others = (int)$DB->get_field_sql(
                 'SELECT COALESCE(SUM(slots), 0) FROM {unics_item_reservation}
                   WHERE element_id = :eid AND level = :lvl
                     AND owner_queue_id <> :qid AND expires_at > :now',
                 ['eid' => $element_id, 'lvl' => $level, 'qid' => $queue_id, 'now' => $now]);
+
+            $plain   = self::take($element_id, $level, $count);
+            $missing = $plain['missing'];
 
             $mine    = max(0, $missing - $others);
             $waiting = min($missing - $mine, $others);
@@ -274,8 +279,23 @@ class item_pool {
             if (count($ids) >= $need || time() >= $deadline) {
                 return $ids;
             }
-            // Пауза, а не плотный цикл: сосед генерирует десятки секунд, крутить БД незачем.
-            sleep(2);
+            // Ждать больше некого: сосед либо упал (release), либо его бронь протухла.
+            // Без этой проверки воркер честно выстаивал все 60 секунд впустую - и уходил
+            // с пустыми руками, хотя мог бы сразу сгенерировать сам (найдено ревью).
+            if (!self::has_live_reservations($element_id, $level)) {
+                return $ids;
+            }
+            // Пауза, а не плотный цикл: отбор кандидатов - тяжелый запрос с агрегатом,
+            // а сосед генерирует десятки секунд. Пять секунд дают 12 опросов вместо 30.
+            sleep(5);
         }
+    }
+
+    /** Есть ли живые чужие брони по паре: ждать имеет смысл только пока они есть. */
+    public static function has_live_reservations(int $element_id, int $level): bool {
+        global $DB;
+        return $DB->record_exists_select('unics_item_reservation',
+            'element_id = :eid AND level = :lvl AND expires_at > :now',
+            ['eid' => $element_id, 'lvl' => $level, 'now' => time()]);
     }
 }

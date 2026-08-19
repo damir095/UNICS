@@ -201,8 +201,11 @@ class codifier_manager {
             $DB->delete_records_select('unics_cat_step', "session_id $ssql", $sparams);
         }
 
+        // unics_item_reservation тоже здесь: бронь чистится только сверткой по паре
+        // (элемент, уровень), а к удаленному элементу никто больше не обратится - строки
+        // остались бы навсегда (найдено ревью; тот же класс, что «чистил 1 таблицу из 7»).
         foreach (['unics_codifier_link', 'unics_skill_mastery', 'unics_mastery_history',
-                  'unics_adaptive_suggestion', 'unics_cat_session'] as $table) {
+                  'unics_adaptive_suggestion', 'unics_cat_session', 'unics_item_reservation'] as $table) {
             $DB->delete_records_select($table, "element_id $insql", $params);
         }
 

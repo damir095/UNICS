@@ -239,4 +239,54 @@ final class item_pool_reservation_test extends \advanced_testcase {
 
         $this->assertCount(2, $ids);
     }
+
+    /**
+     * Ждать некого - выходим сразу, не выстаивая весь срок.
+     *
+     * Найдено ревью: сосед мог упасть и снять бронь, а ждущий честно висел все 60 секунд и
+     * уходил с пустыми руками. Теперь отсутствие живых броней - сигнал прекратить ожидание.
+     */
+    public function test_wait_exits_early_when_nobody_holds_slots(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+
+        $started = time();
+        $ids = item_pool::wait_for_slots($element, 2, 5, 60);
+
+        $this->assertSame([], $ids);
+        $this->assertLessThan(6, time() - $started, 'без броней ждать нечего');
+    }
+
+    /** Пока бронь жива, ожидание имеет смысл; когда снята - нет. */
+    public function test_live_reservations_are_visible(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+
+        item_pool::take_or_reserve($element, 2, 5, 101);
+        $this->assertTrue(item_pool::has_live_reservations($element, 2));
+
+        item_pool::release(101, $element, 2);
+        $this->assertFalse(item_pool::has_live_reservations($element, 2));
+    }
+
+    /**
+     * Удаление элемента уносит и брони.
+     *
+     * Найдено ревью: бронь чистится только сверткой по паре (элемент, уровень), а к удаленному
+     * элементу никто не обратится - строки жили бы вечно. Тот же класс, что «чистил 1 из 7».
+     */
+    public function test_deleting_element_removes_reservations(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        item_pool::take_or_reserve($element, 2, 5, 101);
+
+        codifier_manager::delete_element($element);
+
+        $this->assertSame(0, $DB->count_records('unics_item_reservation',
+            ['element_id' => $element]));
+    }
 }

@@ -245,6 +245,23 @@ class umk_processor {
                             . count($reuse) . ' из ' . (5 - $needed));
                     }
 
+                    // Сосед не справился, а своих заданий мы не генерировали (все места
+                    // были забронированы им). Генерируем сами: остаться БЕЗ теста хуже,
+                    // чем создать лишние задания - ребенок важнее чистоты пула
+                    // (найдено ревью: раньше комплект уходил без теста вовсе).
+                    if ($element_id > 0 && !$questions && !$reuse) {
+                        mtrace('  Пул элемента #' . $element_id
+                            . ': сосед не дал заданий, генерируем сами');
+                        $retry   = \local_unics\learning\item_pool::take_or_reserve(
+                            $element_id, $umk_level, 5, (int)$task->id);
+                        $reuse   = $retry['ids'];
+                        $needed  = max($retry['mine'], 5 - count($reuse));
+                        if ($needed > 0) {
+                            $questions = $generator->generate_quiz(
+                                $profile, $umk->topic, $text, $needed, $extra_context);
+                        }
+                    }
+
                     if (!$questions && !$reuse) {
                         if ($element_id > 0) {
                             \local_unics\learning\item_pool::release(
