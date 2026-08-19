@@ -1624,5 +1624,28 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026081606, 'local', 'unics');
     }
 
+    if ($oldversion < 2026081901) {
+        // Бронь мест в пуле [[item-pool-reservation-design]]: три заявки по одному элементу при
+        // пустом пуле создавали 15 заданий вместо 5. Уникальный индекс по владельцу несущий:
+        // именно он делает перезапуск заявки ЗАМЕНОЙ брони, а не добавлением второй.
+        $table = new xmldb_table('unics_item_reservation');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('element_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null);
+        $table->add_field('level', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, 2);
+        $table->add_field('slots', XMLDB_TYPE_INTEGER, '4', null, XMLDB_NOTNULL, null, 0);
+        $table->add_field('owner_queue_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null);
+        $table->add_field('expires_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, 0);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('uq_reservation_owner', XMLDB_INDEX_UNIQUE,
+            ['owner_queue_id', 'element_id', 'level']);
+        $table->add_index('ix_reservation_pair', XMLDB_INDEX_NOTUNIQUE,
+            ['element_id', 'level', 'expires_at']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026081901, 'local', 'unics');
+    }
+
     return true;
 }

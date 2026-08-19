@@ -731,6 +731,24 @@
       </INDEXES>
     </TABLE>
 
+    <TABLE NAME="unics_item_reservation" COMMENT="Бронь мест в пуле заданий на время генерации; протухает сама">
+      <FIELDS>
+        <FIELD NAME="id"             TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="element_id"     TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="level"          TYPE="int" LENGTH="2"  NOTNULL="true"  DEFAULT="2" SEQUENCE="false"/>
+        <FIELD NAME="slots"          TYPE="int" LENGTH="4"  NOTNULL="true"  DEFAULT="0" SEQUENCE="false" COMMENT="сколько мест держит эта заявка"/>
+        <FIELD NAME="owner_queue_id" TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false" COMMENT="id строки unics_ai_queue"/>
+        <FIELD NAME="expires_at"     TYPE="int" LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="uq_reservation_owner" UNIQUE="true" FIELDS="owner_queue_id, element_id, level"/>
+        <INDEX NAME="ix_reservation_pair" UNIQUE="false" FIELDS="element_id, level, expires_at"/>
+      </INDEXES>
+    </TABLE>
+
     <TABLE NAME="unics_mastery_history" COMMENT="Append-only лог смен владения навыком (per-skill аналог unics_level_history; разметка для ML)">
       <FIELDS>
         <FIELD NAME="id"           TYPE="int"    LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
