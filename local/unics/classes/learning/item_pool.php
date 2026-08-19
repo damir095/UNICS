@@ -16,12 +16,10 @@ defined('MOODLE_INTERNAL') || die();
  * Класс намеренно не знает ни про ИИ, ни про курсы: он отвечает на один вопрос - какие записи
  * банка взять и скольких не хватило.
  *
- * ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ. Отбор и последующая привязка не атомарны: если три воркера (предел
- * параллельности на стенде) стартуют по одному элементу с пустым пулом, каждый создаст свои пять
- * заданий - будет 15 вместо 5. Состояние временное и самоисправляющееся: со следующей генерации
- * пул уже не пуст. Блокировка на элемент тут не помогает - дорогая часть это генерация, и
- * остальные воркеры уйдут в обход по таймауту. Лечится только перепланировкой (сначала застолбить
- * места, потом наполнять) - отдельная задача, см. [[umk-item-pool-design]], раздел 6a.
+ * ПАРАЛЛЕЛЬНОСТЬ. Отбор и привязка сами по себе не атомарны, и три воркера по одному элементу с
+ * пустым пулом создавали 15 заданий вместо 5. Лечит бронь мест: take_or_reserve() под КОРОТКИМ
+ * локом считает и столбит недостающее, а генерация идет вне лока ([[item-pool-reservation-design]]).
+ * Прежняя запись «блокировка не помогает» касалась наивной схемы с локом на всю генерацию.
  */
 class item_pool {
 
@@ -37,6 +35,13 @@ class item_pool {
      * ребенку. Пока наблюдений меньше, задание судится по заявленному уровню, как до калибровки.
      */
     const MIN_CALIBRATED_N = \local_unics\item_irt_manager::MIN_CALIBRATED_N;
+
+    /**
+     * Сколько живет бронь места. Генерация комплекта на стенде занимает около трех минут
+     * (замер 2026-08-10 - 169 секунд), поэтому пяти минут хватает живому воркеру, а мертвый
+     * освобождает места сам - отдельный уборщик не нужен.
+     */
+    const RESERVATION_TTL = 300;
 
     /**
      * Отобрать задания элемента под уровень.
@@ -167,5 +172,73 @@ class item_pool {
             'created_by_mdl_user_id' => $userid,
             'timecreated'            => time(),
         ]);
+    }
+
+    /**
+     * Отобрать задания и забронировать недостающие места.
+     *
+     * Бронируются только НЕДОСТАЮЩИЕ места, а не весь тест: существующие задания общие, их
+     * берут все воркеры сразу, в этом и смысл пула. Лок держится ровно на подсчет и вставку
+     * брони - генерация идет ВНЕ его. Именно это отличает замысел от «лока на всю генерацию»,
+     * который был отвергнут как блокирующий воркеров на минуты.
+     *
+     * @return array{ids: int[], mine: int, waiting: int}
+     */
+    public static function take_or_reserve(int $element_id, int $level, int $count,
+                                           int $queue_id): array {
+        global $DB;
+
+        $factory = \core\lock\lock_config::get_lock_factory('local_unics_item_pool');
+        $lock = $factory->get_lock('element_' . $element_id . '_level_' . $level, 2);
+        if (!$lock) {
+            // Лок занят дольше двух секунд - работаем как до этой правки, без брони. Редкая
+            // гонка лучше зависшего воркера: заторами мы занимались весь август.
+            $plain = self::take($element_id, $level, $count);
+            return ['ids' => $plain['ids'], 'mine' => $plain['missing'], 'waiting' => 0];
+        }
+
+        try {
+            $now = time();
+            // Уборка протухших - здесь и вся уборка, отдельного уборщика нет.
+            $DB->delete_records_select('unics_item_reservation',
+                'element_id = :eid AND level = :lvl AND expires_at <= :now',
+                ['eid' => $element_id, 'lvl' => $level, 'now' => $now]);
+
+            $plain   = self::take($element_id, $level, $count);
+            $missing = $plain['missing'];
+
+            $others = (int)$DB->get_field_sql(
+                'SELECT COALESCE(SUM(slots), 0) FROM {unics_item_reservation}
+                  WHERE element_id = :eid AND level = :lvl
+                    AND owner_queue_id <> :qid AND expires_at > :now',
+                ['eid' => $element_id, 'lvl' => $level, 'qid' => $queue_id, 'now' => $now]);
+
+            $mine    = max(0, $missing - $others);
+            $waiting = min($missing - $mine, $others);
+
+            // Одна бронь на заявку и пару: перезапуск ЗАМЕНЯЕТ свою прежнюю.
+            $DB->delete_records('unics_item_reservation',
+                ['owner_queue_id' => $queue_id, 'element_id' => $element_id, 'level' => $level]);
+            if ($mine > 0) {
+                $DB->insert_record('unics_item_reservation', (object)[
+                    'element_id'     => $element_id,
+                    'level'          => $level,
+                    'slots'          => $mine,
+                    'owner_queue_id' => $queue_id,
+                    'expires_at'     => $now + self::RESERVATION_TTL,
+                ]);
+            }
+
+            return ['ids' => $plain['ids'], 'mine' => $mine, 'waiting' => $waiting];
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** Снять свою бронь: генерация не состоялась либо уже завершена. */
+    public static function release(int $queue_id, int $element_id, int $level): void {
+        global $DB;
+        $DB->delete_records('unics_item_reservation',
+            ['owner_queue_id' => $queue_id, 'element_id' => $element_id, 'level' => $level]);
     }
 }
