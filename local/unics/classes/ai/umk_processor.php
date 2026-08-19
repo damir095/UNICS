@@ -217,13 +217,17 @@ class umk_processor {
             if ($generate_quiz) {
                 try {
                     $element_id = isset($umk->element_id) ? (int)$umk->element_id : 0;
-                    $reuse  = [];
-                    $needed = 5;
+                    $reuse   = [];
+                    $needed  = 5;
+                    $waiting = 0;
                     if ($element_id > 0) {
-                        // Общий измеритель: сначала берем то, что уже отвечали другие ученики.
-                        $pool   = \local_unics\learning\item_pool::take($element_id, $umk_level, 5);
-                        $reuse  = $pool['ids'];
-                        $needed = $pool['missing'];
+                        // Бронь мест: соседний воркер по этому же элементу не станет плодить
+                        // свои задания, а дождется наших ([[item-pool-reservation-design]]).
+                        $pool    = \local_unics\learning\item_pool::take_or_reserve(
+                            $element_id, $umk_level, 5, (int)$task->id);
+                        $reuse   = $pool['ids'];
+                        $needed  = $pool['mine'];
+                        $waiting = $pool['waiting'];
                     }
 
                     $questions = [];
@@ -232,7 +236,20 @@ class umk_processor {
                             $profile, $umk->topic, $text, $needed, $extra_context);
                     }
 
+                    // Чужое ждем ПОСЛЕ своей генерации: пока мы генерировали, сосед
+                    // скорее всего закончил, и ожидание выйдет нулевым.
+                    if ($waiting > 0) {
+                        $reuse = \local_unics\learning\item_pool::wait_for_slots(
+                            $element_id, $umk_level, 5 - $needed, 60);
+                        mtrace('  Пул элемента #' . $element_id . ': дождались '
+                            . count($reuse) . ' из ' . (5 - $needed));
+                    }
+
                     if (!$questions && !$reuse) {
+                        if ($element_id > 0) {
+                            \local_unics\learning\item_pool::release(
+                                (int)$task->id, $element_id, $umk_level);
+                        }
                         // Ни пула, ни ответа ИИ: теста не будет, но комплект остается.
                         throw new \moodle_exception('generalexceptionmessage', 'error', '',
                             'Ни одного задания: пул пуст и генерация не дала вопросов');
@@ -255,18 +272,16 @@ class umk_processor {
                     // Новые задания попадают в пул элемента: со следующей генерации их получат
                     // другие ученики, и у задания начнут копиться ответы.
                     if ($element_id > 0) {
-                        $fresh = [];
-                        if ($questions) {
-                            // Автора у unics_umk нет (поля created_by_mdl_user_id в таблице не
-                            // существует), а привязка требует НЕ NULL пользователя. Задача идет
-                            // из cron, поэтому пишем администратора.
-                            $by = (int)get_admin()->id;
-                            $fresh = array_slice($this->slot_entries($quiz_cmid), count($reuse));
-                            foreach ($fresh as $ref) {
-                                \local_unics\codifier_link_manager::link_question($element_id, (int)$ref, $by);
-                                \local_unics\learning\item_pool::remember_level((int)$ref, $umk_level, $by);
-                            }
-                        }
+                        // Автора у unics_umk нет (поля created_by_mdl_user_id в таблице не
+                        // существует), а привязка требует НЕ NULL пользователя. Задача идет
+                        // из cron, поэтому пишем администратора.
+                        $by = (int)get_admin()->id;
+                        $fresh = $questions
+                            ? array_slice($this->slot_entries($quiz_cmid), count($reuse))
+                            : [];
+                        // fulfil привязывает созданное И снимает бронь: место больше не наше.
+                        \local_unics\learning\item_pool::fulfil(
+                            (int)$task->id, $element_id, $umk_level, $fresh, $by);
                         // Печатаем ВСЕГДА, в том числе когда создано ноль: именно этот случай -
                         // пул покрыл тест целиком - и есть цель работы, и лог о нем молчать
                         // не должен.
@@ -284,6 +299,13 @@ class umk_processor {
                     ]);
                     mtrace("  Тест создан (" . (count($questions) + count($reuse)) . " вопросов)");
                 } catch (\Throwable $eq) {
+                    // Генерация упала - место в пуле держать незачем, сосед его ждет.
+                    // Без этого бронь висела бы до протухания, а тест соседа собрался бы
+                    // коротким на пустом месте.
+                    if (!empty($element_id)) {
+                        \local_unics\learning\item_pool::release(
+                            (int)$task->id, $element_id, $umk_level);
+                    }
                     $dbg = property_exists($eq, 'debuginfo') ? ' | ' . $eq->debuginfo : '';
                     mtrace("  [warn] Тест не создан: " . $eq->getMessage() . $dbg);
                 }
