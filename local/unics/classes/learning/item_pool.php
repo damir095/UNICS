@@ -241,4 +241,41 @@ class item_pool {
         $DB->delete_records('unics_item_reservation',
             ['owner_queue_id' => $queue_id, 'element_id' => $element_id, 'level' => $level]);
     }
+
+    /**
+     * Закрыть бронь созданными заданиями: привязать к элементу, записать уровень, снять бронь.
+     *
+     * Бронь снимается ЦЕЛИКОМ, даже если создано меньше, чем бронировали: висящая бронь
+     * держала бы места до протухания зря, а сосед ждал бы того, чего уже не будет.
+     */
+    public static function fulfil(int $queue_id, int $element_id, int $level, array $refs,
+                                  int $userid): void {
+        foreach ($refs as $ref) {
+            \local_unics\codifier_link_manager::link_question($element_id, (int)$ref, $userid);
+            self::remember_level((int)$ref, $level, $userid);
+        }
+        self::release($queue_id, $element_id, $level);
+    }
+
+    /**
+     * Дождаться, пока в пуле наберется $need годных заданий, но не дольше $seconds.
+     *
+     * Ждем чужую бронь: сосед генерирует те же задания, и взять их правильнее, чем плодить
+     * свои. По истечении срока отдаем что есть - короткий тест лучше, чем никакого, а зависший
+     * сосед не должен останавливать очередь (урок августовского затора).
+     *
+     * @return int[] item_ref, сколько набралось
+     */
+    public static function wait_for_slots(int $element_id, int $level, int $need,
+                                           int $seconds): array {
+        $deadline = time() + $seconds;
+        while (true) {
+            $ids = self::take($element_id, $level, $need)['ids'];
+            if (count($ids) >= $need || time() >= $deadline) {
+                return $ids;
+            }
+            // Пауза, а не плотный цикл: сосед генерирует десятки секунд, крутить БД незачем.
+            sleep(2);
+        }
+    }
 }

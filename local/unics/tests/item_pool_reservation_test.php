@@ -171,4 +171,72 @@ final class item_pool_reservation_test extends \advanced_testcase {
         $this->assertSame(1, $DB->count_records('unics_item_reservation',
             ['owner_queue_id' => 101, 'element_id' => $element, 'level' => 2]));
     }
+
+    /** fulfil привязывает созданное и снимает бронь - место освобождается для соседа. */
+    public function test_fulfil_links_items_and_drops_reservation(): void {
+        global $DB, $USER;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        item_pool::take_or_reserve($element, 2, 5, 101);
+        $refs = [];
+        for ($i = 0; $i < 5; $i++) {
+            $refs[] = $this->make_bare_item();
+        }
+
+        item_pool::fulfil(101, $element, 2, $refs, (int)$USER->id);
+
+        $this->assertSame(0, $DB->count_records('unics_item_reservation',
+            ['owner_queue_id' => 101]), 'бронь обязана сняться');
+        $r = item_pool::take_or_reserve($element, 2, 5, 202);
+        $this->assertCount(5, $r['ids'], 'соседу достаются готовые задания');
+        $this->assertSame(0, $r['mine']);
+    }
+
+    /**
+     * Сгенерировалось меньше, чем забронировано: бронь снимается ЦЕЛИКОМ.
+     *
+     * Иначе она держала бы места до протухания зря, а сосед ждал бы того, чего уже не будет.
+     */
+    public function test_partial_generation_drops_whole_reservation(): void {
+        global $DB, $USER;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        item_pool::take_or_reserve($element, 2, 5, 101);
+
+        item_pool::fulfil(101, $element, 2, [$this->make_bare_item()], (int)$USER->id);
+
+        $this->assertSame(0, $DB->count_records('unics_item_reservation',
+            ['owner_queue_id' => 101]));
+    }
+
+    /** Хватает заданий - ожидание возвращает их сразу, не тратя ни секунды. */
+    public function test_wait_returns_at_once_when_pool_is_full(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        for ($i = 0; $i < 5; $i++) {
+            $this->make_item($element, 2);
+        }
+
+        $started = time();
+        $ids = item_pool::wait_for_slots($element, 2, 5, 60);
+
+        $this->assertCount(5, $ids);
+        $this->assertLessThan(3, time() - $started, 'ждать было нечего');
+    }
+
+    /** Срок вышел - отдаем что есть, а не пустоту: короткий тест лучше, чем никакого. */
+    public function test_wait_returns_what_exists_after_deadline(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $element = $this->make_element();
+        $this->make_item($element, 2);
+        $this->make_item($element, 2);
+
+        $ids = item_pool::wait_for_slots($element, 2, 5, 0);
+
+        $this->assertCount(2, $ids);
+    }
 }
