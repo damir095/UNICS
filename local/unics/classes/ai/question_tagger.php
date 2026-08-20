@@ -71,6 +71,61 @@ class question_tagger {
 n - номер задания из списка выше, code - код элемента, sure - уверен ли ты в выборе.";
     }
 
+    /**
+     * Спросить у модели разметку и разобрать ответ.
+     *
+     * Две попытки: порча разметки у модели случайна, устойчивую повтором не вылечить. Детектор
+     * отказа отдельно не зову - он внутри generate_text ([[ai-refusal-detector-design]]).
+     *
+     * @param array $questions ['bankentryid' => int, 'name' => string, 'text' => string]
+     * @param array $elements ['code' => string, 'title' => string, 'description' => string]
+     * @return array список ['n' => int, 'code' => string, 'sure' => bool]
+     */
+    public function propose(array $questions, array $elements): array {
+        $prompt = self::build_prompt($questions, $elements);
+        $codes = array_column($elements, 'code');
+        $last = null;
+        for ($attempt = 1; $attempt <= self::PARSE_ATTEMPTS; $attempt++) {
+            $raw = $this->gen->generate_text($prompt, 4096);
+            try {
+                return self::parse($raw, $codes, count($questions));
+            } catch (\moodle_exception $e) {
+                $last = $e;
+            }
+        }
+        throw $last;
+    }
+
+    /**
+     * Записать подтвержденные методистом привязки.
+     *
+     * @param array $pairs список ['bankentryid' => int, 'element_id' => int]
+     * @return int сколько привязок СОЗДАНО (существующие не считаются)
+     */
+    public static function apply(array $pairs, int $userid): int {
+        global $DB;
+        $created = 0;
+        foreach ($pairs as $pair) {
+            $beid = (int)($pair['bankentryid'] ?? 0);
+            $elid = (int)($pair['element_id'] ?? 0);
+            if ($beid <= 0 || $elid <= 0) {
+                continue;
+            }
+            // link_question идемпотентен и возвращает id в обоих случаях, поэтому «создано»
+            // считаем сами: методисту важно знать, сколько привязок реально добавилось.
+            $exists = $DB->record_exists('unics_codifier_link', [
+                'element_id'  => $elid,
+                'target_type' => \local_unics\codifier_link_manager::TYPE_QUESTION,
+                'target_id'   => $beid,
+            ]);
+            \local_unics\codifier_link_manager::link_question($elid, $beid, $userid);
+            if (!$exists) {
+                $created++;
+            }
+        }
+        return $created;
+    }
+
     // -----------------------------------------------------------------
     // Что размечать: вопросы дисциплины без привязок
     // -----------------------------------------------------------------

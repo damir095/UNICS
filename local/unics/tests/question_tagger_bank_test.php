@@ -83,6 +83,48 @@ final class question_tagger_bank_test extends \advanced_testcase {
         $this->assertSame(3, question_tagger::untagged_count($this->codifier));
     }
 
+    public function test_apply_links_and_does_not_duplicate(): void {
+        global $DB, $USER;
+        $beid = $this->make_question('Про дроби');
+        $pairs = [['bankentryid' => $beid, 'element_id' => $this->element]];
+
+        $this->assertSame(1, question_tagger::apply($pairs, (int)$USER->id));
+        $this->assertSame(0, question_tagger::apply($pairs, (int)$USER->id),
+            'повторное подтверждение не должно плодить привязки');
+        $this->assertSame(1, $DB->count_records('unics_codifier_link',
+            ['target_type' => codifier_link_manager::TYPE_QUESTION, 'target_id' => $beid]));
+    }
+
+    public function test_apply_skips_pair_without_element(): void {
+        global $DB, $USER;
+        $beid = $this->make_question('Про дроби');
+        $this->assertSame(0, question_tagger::apply(
+            [['bankentryid' => $beid, 'element_id' => 0]], (int)$USER->id));
+        $this->assertSame(0, $DB->count_records('unics_codifier_link',
+            ['target_type' => codifier_link_manager::TYPE_QUESTION]));
+    }
+
+    public function test_propose_retries_once_after_broken_reply(): void {
+        $good = '{"tags":[{"n":1,"code":"1","sure":true}]}';
+        $gen = new class('мусор', $good) extends \local_unics\ai\ai_generator {
+            private array $queue;
+            public int $calls = 0;
+            // Родительский конструктор не зову намеренно: он читает ключ API из настроек.
+            public function __construct(string $first, string $second) {
+                $this->queue = [$first, $second];
+            }
+            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+                $this->calls++;
+                return array_shift($this->queue) ?? '';
+            }
+        };
+        $questions = [['bankentryid' => 11, 'name' => 'Про дроби', 'text' => 'Разделите 1/2 на 1/4']];
+        $out = (new question_tagger($gen))->propose($questions,
+            question_tagger::elements_for_prompt($this->codifier));
+        $this->assertSame(2, $gen->calls, 'битый ответ обязан вызывать вторую попытку');
+        $this->assertSame('1', $out[0]['code']);
+    }
+
     public function test_elements_for_prompt_carry_code_and_description(): void {
         $out = question_tagger::elements_for_prompt($this->codifier);
         $this->assertSame('1', $out[0]['code']);
