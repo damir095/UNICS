@@ -707,42 +707,12 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
 
         $raw = $this->generate_text($prompt, 4096);
 
-        // Нормализуем невалидные escape-последовательности перед парсингом
-        $fix_escapes = static function (string $s): string {
-            return preg_replace_callback('/\\\\(.)/u', static function (array $m): string {
-                if (in_array($m[1], ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'], true)) {
-                    return $m[0];
-                }
-                return '\\\\' . $m[1];
-            }, $s) ?? $s;
-        };
+        // Разбор с восстановлением обрезанного ответа - общий для всех JSON-выходов
+        // ([[codifier-ai-proposal-design]], раздел 4). Раньше эта логика жила здесь замыканием
+        // и считала скобки разностью счетчиков, из-за чего теряла недописанный последний
+        // вопрос: жадный кусок «до последней закрывающей» отрезал его целиком.
+        $data = json_reply::decode($raw, 'questions') ?? [];
 
-        // Извлекаем JSON - GigaChat иногда добавляет пояснения вокруг
-        $json_str = '';
-        if (preg_match('/\{.*\}/su', $raw, $m)) {
-            $json_str = $m[0];
-        } else {
-            $json_str = $raw;
-        }
-
-        $data = json_decode($json_str, true) ?? json_decode($fix_escapes($json_str), true);
-
-        // Восстановление частичного JSON: если массив обрезан - закрываем его вручную
-        if (!isset($data['questions']) && $json_str !== '') {
-            $recovered = $json_str;
-            // Считаем непарные { и [, закрываем их
-            $open_brace   = substr_count($recovered, '{') - substr_count($recovered, '}');
-            $open_bracket = substr_count($recovered, '[') - substr_count($recovered, ']');
-            $recovered .= str_repeat('}', max(0, $open_brace));
-            $recovered .= str_repeat(']', max(0, $open_bracket));
-            // Закрываем ещё раз внешний объект если нужно
-            if (substr_count($recovered, '{') > substr_count($recovered, '}')) {
-                $recovered .= '}';
-            }
-            $data = json_decode($recovered, true) ?? json_decode($fix_escapes($recovered), true);
-        }
-
-        // Последний резерв - поиск отдельных question-объектов в сыром тексте
         $result = [];
         if (isset($data['questions']) && is_array($data['questions'])) {
             foreach ($data['questions'] as $q) {
