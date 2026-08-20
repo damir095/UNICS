@@ -88,13 +88,33 @@ class json_reply {
         // Резерв допустим ТОЛЬКО когда верхний уровень ответа - список. Иначе объект с чужим
         // ключом («questions» там, где ждали «sections») тоже свернулся бы в список из одной
         // строки и выдал бы себя за ответ.
-        if ($expect_key !== '' && self::root_char($raw) === '[') {
-            $objects = self::decode_objects($raw);
-            if ($objects) {
-                return [$expect_key => $objects];
+        if ($expect_key !== '') {
+            // Список бывает и корнем ответа, и значением ожидаемого ключа. Второй случай тоже
+            // надо собирать поэлементно: живой ответ 2026-08-21 содержал один вопрос с порчей
+            // («"correct:0"»), и он ронял три здоровых вместе с собой.
+            $scope = self::root_char($raw) === '[' ? $raw : self::list_of_key($raw, $expect_key);
+            if ($scope !== '') {
+                $objects = self::decode_objects($scope);
+                if ($objects) {
+                    return [$expect_key => $objects];
+                }
             }
         }
         return null;
+    }
+
+    /**
+     * Кусок ответа со списком, который лежит под ожидаемым ключом.
+     *
+     * @return string подстрока от открывающей скобки списка или '' если ключа нет
+     */
+    private static function list_of_key(string $raw, string $key): string {
+        $pos = strpos($raw, '"' . $key . '"');
+        if ($pos === false) {
+            return '';
+        }
+        $bracket = strpos($raw, '[', $pos);
+        return $bracket === false ? '' : substr($raw, $bracket);
     }
 
     /**

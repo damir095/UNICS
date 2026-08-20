@@ -114,6 +114,24 @@ final class arithmetic_checker_test extends \advanced_testcase {
         }
     }
 
+    public function test_verdict_keeps_model_key_when_it_is_right_among_equals(): void {
+        // Живой ответ 2026-08-21: «7/8 - 3/8» с вариантами «4/8» и «1/2» - оба верны. Ключ
+        // модели указывал на «1/2», и переставлять его на первый совпавший незачем.
+        $out = arithmetic_checker::verdict('Вычислите разность: 7/8 - 3/8',
+            ['4/8', '1/2', '4/5', '1/4'], 1);
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertSame(1, $out['correct'], 'верный ключ модели не трогаем');
+    }
+
+    public function test_verdict_reads_expression_from_any_part_of_solution(): void {
+        // «x = 1/2 + 1/4 = 2/4 + 1/4 = 3/4»: слева от первого равенства стоит «x», а
+        // вычисление идет дальше. Живой ответ 2026-08-21 с неверным ключом ловится именно так.
+        $out = arithmetic_checker::verdict('Решите уравнение: x - 1/4 = 1/2',
+            ['3/4', '5/4', '1/4', '3/8'], 1, 'x = 1/2 + 1/4 = 2/4 + 1/4 = 3/4');
+        $this->assertSame('fixed', $out['verdict']);
+        $this->assertSame(0, $out['correct']);
+    }
+
     public function test_verdict_drops_when_no_answer_is_right(): void {
         $out = arithmetic_checker::verdict('4/7 + 3/7 равно?', ['7/10', '7/49', '7/14'], 0);
         $this->assertSame('drop', $out['verdict']);

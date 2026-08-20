@@ -199,4 +199,13 @@ final class output_style_test extends \advanced_testcase {
         $this->assertSame('Сколько будет 2/5 + 1/5?',
             \local_unics\ai\output_style::strip_math_markup('Сколько будет 2/5 + 1/5?'));
     }
+    public function test_strip_math_markup_expands_unicode_fractions(): void {
+        // Живая генерация 2026-08-21: модель ушла от запрета на LaTeX в символы дробей, и
+        // верификатор перестал понимать выражение. Хуже того, вариант «½» не опознавался как
+        // число, поэтому ВЕРНЫЕ задания отбрасывались как безответные.
+        $this->assertSame('1/3 + 1/6 = ?',
+            \local_unics\ai\output_style::strip_math_markup('⅓ + ⅙ = ?'));
+        $this->assertSame('1/2', \local_unics\ai\output_style::strip_math_markup('½'));
+        $this->assertSame('3/4', \local_unics\ai\output_style::strip_math_markup('¾'));
+    }
 }

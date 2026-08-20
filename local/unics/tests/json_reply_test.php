@@ -202,6 +202,17 @@ final class json_reply_test extends \advanced_testcase {
         $this->assertStringContainsString('frac', $out['questions'][0]['text']);
     }
 
+    public function test_broken_element_inside_wrapped_list(): void {
+        // Живая генерация 2026-08-21: модель написала «"correct:0"» - двоеточие внутри строки,
+        // и один битый вопрос ронял ВЕСЬ ответ, включая три здоровых. Резерв тогда работал
+        // только для корневого списка, а тут список лежит внутри ключа.
+        $raw = '{"questions":[{"text":"первый","correct":0},{"text":"битый","correct:0"},'
+            . '{"text":"третий","correct":1}]}';
+        $out = json_reply::decode($raw, 'questions');
+        $this->assertNotNull($out, 'битый вопрос не повод терять здоровые');
+        $this->assertSame(['первый', 'третий'], array_column($out['questions'], 'text'));
+    }
+
     public function test_garbage_returns_null(): void {
         $this->assertNull(json_reply::decode('Извините, не могу помочь.', 'sections'));
     }

@@ -82,15 +82,28 @@ class arithmetic_checker {
                                    string $solution = ''): array {
         $value = self::expression($text);
         if ($value === null && $solution !== '') {
-            // В решении выражение стоит слева от знака равенства: «2/5 + 1/5 = 3/5».
-            $value = self::expression(explode('=', $solution)[0]);
+            // Решение модели - цепочка вида «x = 1/2 + 1/4 = 2/4 + 1/4 = 3/4». Смотрим КАЖДУЮ
+            // часть: слева от первого равенства часто стоит «x», а вычисление идет дальше.
+            foreach (explode('=', $solution) as $part) {
+                $value = self::expression($part);
+                if ($value !== null) {
+                    break;
+                }
+            }
         }
         if ($value === null) {
             return ['verdict' => 'unverifiable', 'correct' => $correct];
         }
-        foreach (array_values($answers) as $i => $answer) {
+        $answers = array_values($answers);
+        // Ключ модели проверяем ПЕРВЫМ. Иначе задание с двумя равными вариантами («4/8» и
+        // «1/2») объявлялось бы исправленным, и ключ переезжал бы с верного варианта на
+        // первый совпавший - бессмысленная правка вместо честного «сошлось».
+        if (isset($answers[$correct]) && self::equals(self::rational((string)$answers[$correct]), $value)) {
+            return ['verdict' => 'ok', 'correct' => $correct];
+        }
+        foreach ($answers as $i => $answer) {
             if (self::equals(self::rational((string)$answer), $value)) {
-                return ['verdict' => $i === $correct ? 'ok' : 'fixed', 'correct' => $i];
+                return ['verdict' => 'fixed', 'correct' => $i];
             }
         }
         return ['verdict' => 'drop', 'correct' => $correct];
