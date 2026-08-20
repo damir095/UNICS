@@ -719,6 +719,10 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             try {
                 return $this->questions_from_reply($raw, $num);
             } catch (\moodle_exception $e) {
+                // След обязателен: без него удачный повтор неотличим от чистого прогона, и
+                // частота порчи первого ответа остается невидимой.
+                $this->trace('  [warn] Тест не разобрался, попытка ' . $attempt . ' из '
+                    . self::QUIZ_PARSE_ATTEMPTS);
                 $last = $e;
             }
         }
@@ -754,8 +758,10 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             }, array_values($q['answers']));
             $correct = max(0, min((int)($q['correct'] ?? 0), count($answers) - 1));
 
+            // Решение тоже чистим: иначе запасной источник выражения мертв ровно тогда, когда
+            // модель шлет LaTeX или символы дробей - то есть в большинстве живых ответов.
             $check = arithmetic_checker::verdict($text, $answers, $correct,
-                (string)($q['solution'] ?? ''));
+                output_style::strip_math_markup((string)($q['solution'] ?? '')));
             if ($check['verdict'] === 'drop') {
                 $dropped++;
                 continue;

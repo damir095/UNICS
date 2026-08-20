@@ -73,6 +73,8 @@ class output_style {
         // вернула «⅓ + ⅙ = ?» с вариантами «½», «⅔». Верификатор такие числа не понимал, и
         // ВЕРНЫЕ задания отбрасывались как безответные.
         $out = strtr($text, self::VULGAR_FRACTIONS);
+        // Смешанное число «1½» без разделителя слиплось бы в «11/2» - вдесятеро больше.
+        $out = preg_replace('~(\d)\s*(\d+/\d+)~u', '$1 $2', $out) ?? $out;
         $out = preg_replace('/\\\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/u', '$1/$2', $out) ?? $out;
         $out = str_replace(['\\cdot', '\\times'], '×', $out);
         $out = str_replace('\\div', ':', $out);

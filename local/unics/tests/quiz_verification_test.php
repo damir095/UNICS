@@ -76,8 +76,12 @@ final class quiz_verification_test extends \advanced_testcase {
             'text' => 'Что такое дробь?', 'answers' => ['часть целого', 'сумма'], 'correct' => 0,
         ]]], JSON_UNESCAPED_UNICODE);
         $gen = $this->generator(['мусор', $good]);
+        ob_start();
         $out = $gen->generate_quiz([], 'Дроби', '', 1);
+        $trace = ob_get_clean();
         $this->assertSame(2, $gen->calls, 'битый ответ обязан вызывать вторую попытку');
+        $this->assertStringContainsString('попытка 1 из 2', $trace,
+            'без следа удачный повтор неотличим от чистого прогона');
         $this->assertCount(1, $out);
     }
 

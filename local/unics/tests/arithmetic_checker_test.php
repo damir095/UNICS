@@ -132,6 +132,52 @@ final class arithmetic_checker_test extends \advanced_testcase {
         $this->assertSame(0, $out['correct']);
     }
 
+    // -----------------------------------------------------------------
+    // Где верификатор обязан молчать (ревью 2026-08-21)
+    // -----------------------------------------------------------------
+
+    public function test_verdict_keeps_silent_on_word_problem(): void {
+        // «3 + 2» тут не ответ, а условие: после выражения в тексте есть еще число. Раньше ключ
+        // переезжал с верного «4» на «5» - верификатор сам сочинял неверный ключ.
+        $out = arithmetic_checker::verdict('У Маши было 3 + 2 конфеты, она съела 1. Сколько осталось?',
+            ['4', '5', '6', '3'], 0);
+        $this->assertSame('unverifiable', $out['verdict']);
+        $this->assertSame(0, $out['correct']);
+    }
+
+    public function test_verdict_keeps_silent_on_year_range(): void {
+        // Дефис в «1941-1945» - диапазон, а не вычитание: годный вопрос по истории удалялся.
+        $out = arithmetic_checker::verdict('Сколько лет длилась война 1941-1945 годов?',
+            ['4 года', '5 лет', '3 года', '6 лет'], 0);
+        $this->assertSame('unverifiable', $out['verdict']);
+    }
+
+    public function test_verdict_keeps_silent_on_time_and_ratio(): void {
+        // Двоеточие в «10:30» и «2:3» - время и отношение, а не деление.
+        $this->assertSame('unverifiable', arithmetic_checker::verdict(
+            'Урок начался в 10:30. Сколько это минут?', ['630', '1030', '600', '30'], 0)['verdict']);
+        $this->assertSame('unverifiable', arithmetic_checker::verdict(
+            'Мальчиков и девочек 2:3. Сколько девочек, если мальчиков 12?',
+            ['18', '12', '6', '24'], 0)['verdict']);
+    }
+
+    public function test_verdict_keeps_silent_when_no_answer_is_a_number(): void {
+        // Ни один вариант не число - значит найденное «выражение» скорее всего не про ответ.
+        // Молчание тут безвредно, а отбраковка стоила бы ребенку вопроса.
+        $out = arithmetic_checker::verdict('Сколько будет 2 + 3 яблок?',
+            ['5 яблок', '6 яблок', '4 яблока', '7 яблок'], 0);
+        $this->assertSame('unverifiable', $out['verdict']);
+    }
+
+    public function test_verdict_takes_last_step_of_multistep_solution(): void {
+        // «3 + 4 = 7, периметр 7 × 2 = 14»: ответ - ПОСЛЕДНИЙ шаг. Раньше брался первый, и
+        // ключ переезжал с верного «14» на промежуточное «7».
+        $out = arithmetic_checker::verdict('Найди периметр прямоугольника со сторонами 3 и 4.',
+            ['14', '7', '12', '10'], 0, 'Сумма сторон 3 + 4 = 7, периметр 7 × 2 = 14');
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertSame(0, $out['correct']);
+    }
+
     public function test_verdict_drops_when_no_answer_is_right(): void {
         $out = arithmetic_checker::verdict('4/7 + 3/7 равно?', ['7/10', '7/49', '7/14'], 0);
         $this->assertSame('drop', $out['verdict']);

@@ -95,7 +95,11 @@ class umk_processor {
             // Учебный текст - единственный выход, который ложится в страницу как FORMAT_MARKDOWN
             // и потому РЕНДЕРИТСЯ: без сдвига «#» от модели стал бы <h1> внутри страницы курса,
             // где заголовок уже есть ([[ai-output-style-design]], раздел 1).
-            $text   = \local_unics\ai\output_style::shift_headings($generator->generate_text($prompt));
+            // Математическая разметка чистится и здесь, а не только в тесте: промт запрещает
+            // LaTeX всем выходам, но модель его шлет, и ребенок видел бы «$ \frac{4}{7} $»
+            // прямо в тексте урока ([[quiz-answer-verification-design]]).
+            $text   = \local_unics\ai\output_style::shift_headings(
+                \local_unics\ai\output_style::strip_math_markup($generator->generate_text($prompt)));
 
             // --- 1a. Иллюстрации учебного текста ([[ai-lecture-images-design]]) ---
             // Картинки нужны ДО создания страницы: в тексте уже должны стоять ссылки

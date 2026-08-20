@@ -80,11 +80,12 @@ class arithmetic_checker {
      */
     public static function verdict(string $text, array $answers, int $correct,
                                    string $solution = ''): array {
-        $value = self::expression($text);
+        $value = self::sole_expression($text);
         if ($value === null && $solution !== '') {
-            // Решение модели - цепочка вида «x = 1/2 + 1/4 = 2/4 + 1/4 = 3/4». Смотрим КАЖДУЮ
-            // часть: слева от первого равенства часто стоит «x», а вычисление идет дальше.
-            foreach (explode('=', $solution) as $part) {
+            // Решение модели - цепочка вида «3 + 4 = 7, периметр 7 × 2 = 14». Ответ дает
+            // ПОСЛЕДНИЙ вычислимый шаг: на первом стоит промежуточный результат, и ключ уезжал
+            // с верного «14» на «7» (найдено ревью 2026-08-21).
+            foreach (array_reverse(explode('=', $solution)) as $part) {
                 $value = self::expression($part);
                 if ($value !== null) {
                     break;
@@ -95,6 +96,19 @@ class arithmetic_checker {
             return ['verdict' => 'unverifiable', 'correct' => $correct];
         }
         $answers = array_values($answers);
+        // Ни один вариант не число - значит найденное «выражение» скорее всего не про ответ
+        // («Сколько будет 2 + 3 яблок?» с вариантами «5 яблок»). Молчание тут безвредно, а
+        // отбраковка стоила бы ребенку годного вопроса.
+        $numeric = false;
+        foreach ($answers as $answer) {
+            if (self::rational((string)$answer) !== null) {
+                $numeric = true;
+                break;
+            }
+        }
+        if (!$numeric) {
+            return ['verdict' => 'unverifiable', 'correct' => $correct];
+        }
         // Ключ модели проверяем ПЕРВЫМ. Иначе задание с двумя равными вариантами («4/8» и
         // «1/2») объявлялось бы исправленным, и ключ переезжал бы с верного варианта на
         // первый совпавший - бессмысленная правка вместо честного «сошлось».
@@ -109,19 +123,69 @@ class arithmetic_checker {
         return ['verdict' => 'drop', 'correct' => $correct];
     }
 
+    /** Шаблон операнда: дробь, целое, десятичное. */
+    private const NUM = '-?\d+(?:/\d+|[.,]\d+)?';
+
+    /**
+     * Класс знаков, которые можно писать слитно с числами: «1/3+1/6» модель пишет постоянно.
+     *
+     * Разделитель регулярок в классе - тильда: косая входит в запись дроби, и preg_quote
+     * экранировал бы ее, ломая шаблон с разделителем «косая».
+     */
+    private static function ops_class(): string {
+        return implode('', array_map(static function (string $o): string {
+            return preg_quote($o, '~');
+        }, ['+', '*', "\u{00D7}", "\u{00B7}", "\u{00F7}"]));
+    }
+
+    /**
+     * Шаблон выражения «операнд знак операнд».
+     *
+     * Минус и двоеточие требуют пробелов с ОБЕИХ сторон, потому что слитно они означают совсем
+     * другое: «1941-1945» - диапазон лет, «10:30» - время, «2:3» - отношение. Раньше такие
+     * вопросы объявлялись вычислительными и удалялись из теста (найдено ревью 2026-08-21).
+     */
+    private static function expression_regex(): string {
+        $num = self::NUM;
+        $tight = '[' . self::ops_class() . ']';
+        $spaced = '(?:[-' . preg_quote("\u{2212}\u{2013}", '~') . ':]|' . $tight . ')';
+        return '~(' . $num . ')(?:\s*(' . $tight . ')\s*|\s+(' . $spaced . ')\s+)(' . $num . ')~u';
+    }
+
+    /**
+     * Выражение вопроса - но только если оно ЕДИНСТВЕННОЕ, что есть в тексте из чисел.
+     *
+     * «У Маши было 3 + 2 конфеты, она съела 1» - тут «3 + 2» не ответ, а условие: после
+     * выражения осталось число 1, и вопрос спрашивает про другое. Раньше верификатор считал
+     * такой текст вычислительным и переставлял ключ с верного «4» на «5», то есть САМ сочинял
+     * неверный ключ (найдено ревью 2026-08-21).
+     *
+     * @return array|null пара [числитель, знаменатель] или null
+     */
+    private static function sole_expression(string $text): ?array {
+        $value = self::expression($text);
+        if ($value === null) {
+            return null;
+        }
+        $rest = self::without_first_expression($text);
+        return preg_match('~\d~u', $rest) ? null : $value;
+    }
+
+    /** Текст без первого найденного выражения - для проверки, что других чисел не осталось. */
+    private static function without_first_expression(string $text): string {
+        $re = self::expression_regex();
+        return preg_match($re, $text, $m) ? str_replace($m[0], ' ', $text) : $text;
+    }
+
     /**
      * Найти в тексте «операнд знак операнд» и вычислить.
      *
      * @return array|null пара [числитель, знаменатель] или null, если считать нечего
      */
     public static function expression(string $text): ?array {
-        // Разделитель регулярки - тильда, а не косая: косая сама входит в список знаков
-        // операций, и preg_quote экранировал бы ее, ломая шаблон.
-        $ops = implode('', array_map(static function (string $o): string {
-            return preg_quote($o, '~');
-        }, array_keys(self::OPS)));
-        $num = '-?\d+(?:/\d+|[.,]\d+)?';
-        $re = '~(' . $num . ')\s*([' . $ops . '])\s*(' . $num . ')~u';
+        $ops = self::ops_class();
+        $num = self::NUM;
+        $re = self::expression_regex();
         if (!preg_match_all($re, $text, $m, PREG_SET_ORDER)) {
             return null;
         }
@@ -132,16 +196,18 @@ class arithmetic_checker {
         // совпадение регулярка не находит, потому что операнд уже съеден первым.
         $pos = strpos($text, $m[0][0]);
         $tail = $pos === false ? '' : substr($text, $pos + strlen($m[0][0]));
-        if (preg_match('~^\s*[' . $ops . ']\s*' . $num . '~u', $tail)) {
+        if (preg_match('~^\s*(?:[' . $ops . ']|\s[-:]\s)\s*' . $num . '~u', $tail)) {
             return null;
         }
 
+        // Знак приходит либо слитной группой, либо группой «с пробелами» - смотрим непустую.
+        $sign = $m[0][2] !== '' ? $m[0][2] : ($m[0][3] ?? '');
         $left = self::rational($m[0][1]);
-        $right = self::rational($m[0][3]);
-        if (!$left || !$right) {
+        $right = self::rational($m[0][4] ?? '');
+        if (!$left || !$right || !isset(self::OPS[$sign])) {
             return null;
         }
-        switch (self::OPS[$m[0][2]]) {
+        switch (self::OPS[$sign]) {
             case '+':
                 return [$left[0] * $right[1] + $right[0] * $left[1], $left[1] * $right[1]];
             case '-':

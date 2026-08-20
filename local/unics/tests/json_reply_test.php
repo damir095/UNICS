@@ -213,6 +213,26 @@ final class json_reply_test extends \advanced_testcase {
         $this->assertSame(['первый', 'третий'], array_column($out['questions'], 'text'));
     }
 
+    public function test_list_of_another_key_is_not_taken(): void {
+        // Скобка должна стоять сразу за ожидаемым ключом, иначе чужой список выдает себя за наш.
+        $raw = '{"questions":"нет вопросов","other":[{"text":"чужой","correct:0"},'
+            . '{"text":"чужой2","answers":["a"],"correct":0}]}';
+        $this->assertNull(json_reply::decode($raw, 'questions'));
+    }
+
+    public function test_object_outside_the_list_is_not_harvested(): void {
+        // Без границы списка запасной разбор собирал соседние ключи и выдавал их за элементы.
+        $raw = '{"questions":[{"text":"первый","correct:0"}],'
+            . '"meta":{"text":"я не вопрос","answers":["a","b"],"correct":0}}';
+        $out = json_reply::decode($raw, 'questions');
+        if ($out !== null) {
+            $this->assertNotSame('я не вопрос', $out['questions'][0]['text'] ?? '',
+                'объект вне списка вопросов не должен становиться вопросом');
+        } else {
+            $this->assertNull($out);
+        }
+    }
+
     public function test_garbage_returns_null(): void {
         $this->assertNull(json_reply::decode('Извините, не могу помочь.', 'sections'));
     }
