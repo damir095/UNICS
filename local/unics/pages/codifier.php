@@ -170,10 +170,14 @@ echo html_writer::empty_tag('input', ['type' => 'file', 'name' => 'importfile', 
 echo html_writer::tag('button', 'Импортировать', ['type' => 'submit', 'class' => 'btn btn-outline-primary']);
 echo html_writer::end_tag('form');
 
-// Предложение структуры моделью ([[codifier-ai-proposal-design]]).
+// Предложение структуры ([[codifier-ai-proposal-design]]) и разметка банка вопросов
+// ([[codifier-bank-tagging-design]]) моделью.
 echo html_writer::div(
     html_writer::link(new moodle_url('/local/unics/pages/codifier_ai.php', ['categoryid' => $categoryid]),
-        'Предложить структуру с помощью ИИ', ['class' => 'btn btn-outline-primary']),
+        'Предложить структуру с помощью ИИ', ['class' => 'btn btn-outline-primary mr-2'])
+    . html_writer::link(new moodle_url('/local/unics/pages/codifier_bank_ai.php',
+        ['categoryid' => $categoryid]),
+        'Разметить банк вопросов', ['class' => 'btn btn-outline-primary']),
     'mb-3');
 
 // Дерево.
