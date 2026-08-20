@@ -60,4 +60,44 @@ final class codifier_proposer_test extends \advanced_testcase {
         $this->expectException(\moodle_exception::class);
         codifier_proposer::parse('Извините, не могу помочь.', 6, 5);
     }
+
+    // -----------------------------------------------------------------
+    // Разводка кодов
+    // -----------------------------------------------------------------
+
+    public function test_plan_numbers_from_scratch(): void {
+        $parsed = codifier_proposer::parse($this->reply(2, 2), 6, 5);
+        $plan = codifier_proposer::plan([], $parsed);
+        $this->assertSame('1', $plan[0]['code']);
+        $this->assertSame('2', $plan[1]['code']);
+        $this->assertSame('1.1', $plan[0]['topics'][0]['code']);
+        $this->assertSame('1.2', $plan[0]['topics'][1]['code']);
+        $this->assertFalse($plan[0]['shifted']);
+    }
+
+    public function test_plan_walks_around_taken_codes(): void {
+        // На стенде заняты ровно эти коды остатками демонстрационных прогонов.
+        $parsed = codifier_proposer::parse($this->reply(2, 2), 6, 5);
+        $plan = codifier_proposer::plan(['1', '1.1', '2', '2.1'], $parsed);
+        $this->assertSame('3', $plan[0]['code'], 'коды 1 и 2 заняты');
+        $this->assertSame('4', $plan[1]['code']);
+        $this->assertSame('3.1', $plan[0]['topics'][0]['code']);
+        $this->assertTrue($plan[0]['shifted'], 'сдвиг обязан быть виден методисту');
+        $this->assertSame('1', $plan[0]['natural']);
+    }
+
+    public function test_plan_walks_around_taken_topic_code(): void {
+        $parsed = codifier_proposer::parse($this->reply(1, 2), 6, 5);
+        $plan = codifier_proposer::plan(['1.1'], $parsed);
+        $this->assertSame('1', $plan[0]['code'], 'сам код 1 свободен');
+        $this->assertSame('1.2', $plan[0]['topics'][0]['code'], 'код 1.1 занят');
+        $this->assertSame('1.3', $plan[0]['topics'][1]['code']);
+    }
+
+    public function test_plan_does_not_reuse_code_inside_one_batch(): void {
+        $parsed = codifier_proposer::parse($this->reply(3, 1), 6, 5);
+        $plan = codifier_proposer::plan([], $parsed);
+        $codes = [$plan[0]['code'], $plan[1]['code'], $plan[2]['code']];
+        $this->assertSame($codes, array_unique($codes));
+    }
 }

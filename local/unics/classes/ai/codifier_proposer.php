@@ -70,6 +70,58 @@ class codifier_proposer {
         return $out;
     }
 
+    /**
+     * Назначить коды предложенным элементам, обходя занятые.
+     *
+     * Занятые коды подает вызывающий, а не читает сама функция: так она остается чистой и
+     * проверяется без стенда.
+     *
+     * @param array $existing_codes коды, уже занятые в кодификаторе (плоско, разделы и темы)
+     * @param array $parsed результат parse()
+     * @return array план; 'natural' - номер, который элемент получил бы на пустом кодификаторе,
+     *               'shifted' - признак того, что код пришлось сдвинуть
+     */
+    public static function plan(array $existing_codes, array $parsed): array {
+        $used = [];
+        foreach ($existing_codes as $c) {
+            $used[(string)$c] = true;
+        }
+        $out = [];
+        foreach (array_values($parsed) as $i => $sec) {
+            // Единственный источник истины о занятости - реестр $used. Отдельный счетчик «следующий
+            // свободный» рядом с ним завел бы вторую бухгалтерию, которая молча разошлась бы с
+            // первой: коды перестали бы сталкиваться сами собой, а не по проверке.
+            $n = 1;
+            while (isset($used[(string)$n])) {
+                $n++;
+            }
+            $code = (string)$n;
+            $used[$code] = true;
+
+            $topics = [];
+            $tn = 1;
+            foreach ($sec['topics'] as $t) {
+                while (isset($used[$code . '.' . $tn])) {
+                    $tn++;
+                }
+                $tcode = $code . '.' . $tn;
+                $used[$tcode] = true;
+                $topics[] = ['code' => $tcode, 'title' => $t['title'], 'description' => $t['description']];
+            }
+
+            $natural = (string)($i + 1);
+            $out[] = [
+                'code'        => $code,
+                'natural'     => $natural,
+                'shifted'     => $code !== $natural,
+                'title'       => $sec['title'],
+                'description' => $sec['description'],
+                'topics'      => $topics,
+            ];
+        }
+        return $out;
+    }
+
     /** Строка из значения любого вида: модель иногда шлет объект вместо строки. */
     private static function str_of($v): string {
         return is_scalar($v) ? trim((string)$v) : '';
