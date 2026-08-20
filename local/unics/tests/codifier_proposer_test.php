@@ -100,4 +100,41 @@ final class codifier_proposer_test extends \advanced_testcase {
         $codes = [$plan[0]['code'], $plan[1]['code'], $plan[2]['code']];
         $this->assertSame($codes, array_unique($codes));
     }
+
+    // -----------------------------------------------------------------
+    // Промт и вызов модели
+    // -----------------------------------------------------------------
+
+    public function test_prompt_carries_everything_the_methodist_asked(): void {
+        $p = (new codifier_proposer())->build_prompt('Математика', 6, 7, 4,
+            'по учебнику Мерзляка', ['Нефть и нефтепродукты', 'Части света']);
+        $this->assertStringContainsString('Математика', $p);
+        $this->assertStringContainsString('6 класса', $p);
+        $this->assertStringContainsString('7 разделов', $p);
+        $this->assertStringContainsString('4 тем', $p);
+        $this->assertStringContainsString('по учебнику Мерзляка', $p);
+        $this->assertStringContainsString('Нефть и нефтепродукты', $p);
+        $this->assertStringContainsString('"sections"', $p, 'формат ответа обязан быть в промте');
+    }
+
+    public function test_prompt_without_existing_elements_has_no_empty_section(): void {
+        $p = (new codifier_proposer())->build_prompt('Математика', 6, 6, 5, '', []);
+        $this->assertStringNotContainsString('НЕ повторяй', $p);
+    }
+
+    public function test_propose_parses_generator_reply(): void {
+        $gen = new class($this->reply(2, 2)) extends \local_unics\ai\ai_generator {
+            private string $canned;
+            // Родительский конструктор не зову намеренно: он читает ключ API из настроек.
+            public function __construct(string $canned) {
+                $this->canned = $canned;
+            }
+            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+                return $this->canned;
+            }
+        };
+        $out = (new codifier_proposer($gen))->propose('Математика', 6, 6, 5);
+        $this->assertCount(2, $out);
+        $this->assertSame('Раздел 1', $out[0]['title']);
+    }
 }

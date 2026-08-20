@@ -25,6 +25,63 @@ class codifier_proposer {
     /** Потолок тем в разделе. */
     public const MAX_TOPICS = 8;
 
+    /** @var ai_generator генератор; внедряется конструктором - шов для тестов. */
+    private ai_generator $gen;
+
+    public function __construct(?ai_generator $gen = null) {
+        $this->gen = $gen ?? new ai_generator();
+    }
+
+    /**
+     * Промт структуры кодификатора.
+     *
+     * @param array $existing названия элементов, которые уже есть (чтобы модель не повторялась)
+     */
+    public function build_prompt(string $subject, int $class_number, int $sections, int $per_section,
+                                 string $extra = '', array $existing = []): string {
+        $existing_block = '';
+        if ($existing) {
+            $titles = array_map(static function ($t): string {
+                return '- ' . mb_substr(trim((string)$t), 0, 120);
+            }, array_slice(array_values($existing), 0, 60));
+            $existing_block = "\n\nВ кодификаторе уже есть такие элементы. НЕ повторяй их и не предлагай"
+                . " близкие по смыслу:\n" . implode("\n", $titles) . "\n";
+        }
+        $extra_block = trim($extra) !== ''
+            ? "\n\nУказания методиста, выполняй их в первую очередь:\n"
+                . mb_substr(trim($extra), 0, 500) . "\n"
+            : '';
+
+        return "Ты - методист, составляющий кодификатор содержания по предмету «{$subject}»"
+            . " для {$class_number} класса российской школы.
+
+Кодификатор - это иерархия проверяемых элементов содержания, как у ФИПИ: крупные разделы, внутри каждого - темы.
+
+Предложи ровно {$sections} разделов, в каждом ровно {$per_section} тем.{$existing_block}{$extra_block}
+Требования:
+- Разделы идут в том порядке, в каком материал изучается в течение учебного года
+- Название темы - то, что проверяется у ученика, а не заголовок параграфа учебника
+- Описание - одна строка вида «что ученик умеет после темы», не длиннее 200 символов
+- Никаких номеров и кодов в названиях: нумерацию присвоит система
+- ЗАПРЕЩЕНО использовать LaTeX-формулы, символы \$ и обратную косую черту. Формулы записывай обычным текстом.
+
+Верни ответ СТРОГО в формате JSON, без пояснений и без markdown-тегов:
+{\"sections\":[{\"title\":\"Название раздела\",\"description\":\"одна строка\",\"topics\":[{\"title\":\"Название темы\",\"description\":\"одна строка\"}]}]}";
+    }
+
+    /**
+     * Спросить у модели структуру и разобрать ответ.
+     *
+     * Детектор отказа модели отдельно не зову: он стоит внутри generate_text и бросает сам
+     * ([[ai-refusal-detector-design]]).
+     */
+    public function propose(string $subject, int $class_number, int $sections, int $per_section,
+                            string $extra = '', array $existing = []): array {
+        $prompt = $this->build_prompt($subject, $class_number, $sections, $per_section, $extra, $existing);
+        $raw = $this->gen->generate_text($prompt, 4096);
+        return self::parse($raw, $sections, $per_section);
+    }
+
     /**
      * Разбор ответа модели в список разделов с темами.
      *
