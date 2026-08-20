@@ -179,6 +179,111 @@ class codifier_proposer {
         return $out;
     }
 
+    // -----------------------------------------------------------------
+    // Чтение кодификатора и запись подтвержденного дерева
+    // -----------------------------------------------------------------
+
+    /** Коды, уже занятые в кодификаторе (плоско, разделы и темы вместе). */
+    public static function existing_codes(int $codifier_id): array {
+        global $DB;
+        $codes = $DB->get_fieldset_select('unics_codifier_element', 'code',
+            'codifier_id = :cid', ['cid' => $codifier_id]);
+        return array_values(array_filter(array_map('strval', $codes), static function (string $c): bool {
+            return $c !== '';
+        }));
+    }
+
+    /** Названия существующих элементов - для промта, чтобы модель не повторялась. */
+    public static function existing_titles(int $codifier_id): array {
+        global $DB;
+        $rows = $DB->get_records('unics_codifier_element', ['codifier_id' => $codifier_id],
+            'ordinal ASC, id ASC', 'id, title');
+        return array_values(array_map(static function ($r): string {
+            return (string)$r->title;
+        }, $rows));
+    }
+
+    /**
+     * Записать подтвержденное методистом дерево.
+     *
+     * Строки без названия пропускаются: методист мог очистить поле, чтобы убрать элемент.
+     * Раздел без названия уходит вместе со своими темами - тема без родителя повисла бы.
+     *
+     * Занятый код отклоняет ВЕСЬ шаг, а не пропускает строку молча: технически база дубликат
+     * стерпит (уникального индекса на code нет), но import_from_rows и человек опознают элемент
+     * именно по коду, и два элемента «1.1» ломают обоих.
+     *
+     * @param array $sections план (формат plan()), уже отфильтрованный по галочкам
+     * @return int сколько элементов создано
+     * @throws \moodle_exception если код занят или повторяется внутри пачки
+     */
+    public static function apply(int $codifier_id, array $sections): int {
+        global $DB;
+
+        $rows = [];
+        foreach ($sections as $sec) {
+            $stitle = self::str_of($sec['title'] ?? '');
+            if ($stitle === '') {
+                continue;
+            }
+            $topics = [];
+            foreach ((array)($sec['topics'] ?? []) as $t) {
+                $ttitle = self::str_of($t['title'] ?? '');
+                if ($ttitle === '') {
+                    continue;
+                }
+                $topics[] = ['code' => self::str_of($t['code'] ?? ''), 'title' => $ttitle,
+                             'description' => self::str_of($t['description'] ?? '')];
+            }
+            $rows[] = ['code' => self::str_of($sec['code'] ?? ''), 'title' => $stitle,
+                       'description' => self::str_of($sec['description'] ?? ''), 'topics' => $topics];
+        }
+
+        self::assert_codes_free($codifier_id, $rows);
+
+        $created = 0;
+        $tx = $DB->start_delegated_transaction();
+        foreach ($rows as $r) {
+            $sid = \local_unics\codifier_manager::add_element($codifier_id, null,
+                $r['code'], $r['title'], $r['description'] !== '' ? $r['description'] : null);
+            $created++;
+            foreach ($r['topics'] as $t) {
+                \local_unics\codifier_manager::add_element($codifier_id, $sid,
+                    $t['code'], $t['title'], $t['description'] !== '' ? $t['description'] : null);
+                $created++;
+            }
+        }
+        $tx->allow_commit();
+        return $created;
+    }
+
+    /**
+     * Проверка кодов ДО первой вставки: занятый в кодификаторе и повторенный внутри пачки.
+     *
+     * @throws \moodle_exception
+     */
+    private static function assert_codes_free(int $codifier_id, array $rows): void {
+        $taken = array_flip(self::existing_codes($codifier_id));
+        $seen = [];
+        foreach ($rows as $r) {
+            foreach (array_merge([$r], $r['topics']) as $one) {
+                $code = (string)$one['code'];
+                if ($code === '') {
+                    continue;
+                }
+                if (isset($taken[$code])) {
+                    throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                        'Код «' . $code . '» уже занят в кодификаторе. Поправьте код и повторите.');
+                }
+                if (isset($seen[$code])) {
+                    throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                        'Код «' . $code . '» встречается в предложении дважды. Поправьте код и повторите.');
+                }
+                $seen[$code] = true;
+            }
+        }
+    }
+
     /** Строка из значения любого вида: модель иногда шлет объект вместо строки. */
     private static function str_of($v): string {
         return is_scalar($v) ? trim((string)$v) : '';

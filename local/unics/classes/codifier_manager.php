@@ -87,7 +87,8 @@ class codifier_manager {
         return $out;
     }
 
-    public static function add_element(int $codifier_id, ?int $parent_id, string $code, string $title): int {
+    public static function add_element(int $codifier_id, ?int $parent_id, string $code, string $title,
+                                       ?string $description = null): int {
         global $DB;
         $now = time();
         // ordinal = в хвост среди соседей.
@@ -107,6 +108,7 @@ class codifier_manager {
             'parent_id'    => $parent_id,
             'code'         => $code,
             'title'        => $title,
+            'description'  => $description,
             'ordinal'      => $ordinal,
             'path'         => null,
             'timecreated'  => $now,
