@@ -170,6 +170,12 @@ echo html_writer::empty_tag('input', ['type' => 'file', 'name' => 'importfile', 
 echo html_writer::tag('button', 'Импортировать', ['type' => 'submit', 'class' => 'btn btn-outline-primary']);
 echo html_writer::end_tag('form');
 
+// Предложение структуры моделью ([[codifier-ai-proposal-design]]).
+echo html_writer::div(
+    html_writer::link(new moodle_url('/local/unics/pages/codifier_ai.php', ['categoryid' => $categoryid]),
+        'Предложить структуру с помощью ИИ', ['class' => 'btn btn-outline-primary']),
+    'mb-3');
+
 // Дерево.
 $tree = codifier_manager::get_tree($codifier->id);
 
