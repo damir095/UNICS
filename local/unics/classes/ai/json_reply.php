@@ -36,11 +36,20 @@ class json_reply {
                 return $data;
             }
         }
+        // Висячая запятая перед закрывающей скобкой. Замерено на живом ответе GigaChat
+        // 2026-08-20: «"description": "Навыки...", }» - JSON такое запрещает, а модель пишет
+        // это регулярно.
+        foreach ([$greedy, $tail] as $c) {
+            $data = self::try_decode(self::strip_trailing_commas($c), $expect_key);
+            if ($data !== null) {
+                return $data;
+            }
+        }
         // Обрезанный ответ: восстанавливаем СНАЧАЛА хвост до конца строки. Жадный кусок тут
         // вредит - он отрезает все после последней закрывающей скобки, то есть выбрасывает
         // недописанный последний раздел целиком.
         foreach ([$tail, $greedy] as $c) {
-            $data = self::try_decode(self::close_brackets($c), $expect_key);
+            $data = self::try_decode(self::close_brackets(self::strip_trailing_commas($c)), $expect_key);
             if ($data !== null) {
                 return $data;
             }
@@ -82,6 +91,43 @@ class json_reply {
             return in_array($m[1], ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'], true)
                 ? $m[0] : '\\\\' . $m[1];
         }, $s) ?? $s;
+    }
+
+    /**
+     * Убрать запятые перед закрывающей скобкой: «[1, 2, ]» -> «[1, 2]».
+     *
+     * Строковые литералы обходятся стороной, иначе запятая внутри описания темы («Итак, }»)
+     * была бы принята за висячую и текст испортился бы.
+     */
+    private static function strip_trailing_commas(string $s): string {
+        $out = '';
+        $instring = false;
+        $escaped = false;
+        $len = strlen($s);
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $s[$i];
+            if ($instring) {
+                if ($escaped) {
+                    $escaped = false;
+                } else if ($ch === '\\') {
+                    $escaped = true;
+                } else if ($ch === '"') {
+                    $instring = false;
+                }
+                $out .= $ch;
+                continue;
+            }
+            if ($ch === '"') {
+                $instring = true;
+            } else if ($ch === '}' || $ch === ']') {
+                $trimmed = rtrim($out);
+                if (substr($trimmed, -1) === ',') {
+                    $out = substr($trimmed, 0, -1);
+                }
+            }
+            $out .= $ch;
+        }
+        return $out;
     }
 
     /**

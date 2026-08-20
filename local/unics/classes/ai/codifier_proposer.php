@@ -25,6 +25,9 @@ class codifier_proposer {
     /** Потолок тем в разделе. */
     public const MAX_TOPICS = 8;
 
+    /** Сколько раз просить структуру, если ответ не разобрался. */
+    public const PARSE_ATTEMPTS = 2;
+
     /** @var ai_generator генератор; внедряется конструктором - шов для тестов. */
     private ai_generator $gen;
 
@@ -52,21 +55,25 @@ class codifier_proposer {
                 . mb_substr(trim($extra), 0, 500) . "\n"
             : '';
 
+        $total = $sections * $per_section;
+
         return "Ты - методист, составляющий кодификатор содержания по предмету «{$subject}»"
             . " для {$class_number} класса российской школы.
 
 Кодификатор - это иерархия проверяемых элементов содержания, как у ФИПИ: крупные разделы, внутри каждого - темы.
 
-Предложи ровно {$sections} разделов, в каждом ровно {$per_section} тем.{$existing_block}{$extra_block}
+Предложи {$sections} разделов, в каждом {$per_section} тем, всего {$total} строк.{$existing_block}{$extra_block}
 Требования:
 - Разделы идут в том порядке, в каком материал изучается в течение учебного года
+- Строки одного раздела идут подряд, и поле «section» у них написано ОДИНАКОВО, слово в слово
 - Название темы - то, что проверяется у ученика, а не заголовок параграфа учебника
 - Описание - одна строка вида «что ученик умеет после темы», не длиннее 200 символов
 - Никаких номеров и кодов в названиях: нумерацию присвоит система
+- Не ставь запятую перед закрывающей скобкой: «\"описание\",}» - это ошибка формата
 - ЗАПРЕЩЕНО использовать LaTeX-формулы, символы \$ и обратную косую черту. Формулы записывай обычным текстом.
 
-Верни ответ СТРОГО в формате JSON, без пояснений и без markdown-тегов:
-{\"sections\":[{\"title\":\"Название раздела\",\"description\":\"одна строка\",\"topics\":[{\"title\":\"Название темы\",\"description\":\"одна строка\"}]}]}";
+Верни ответ СТРОГО в формате JSON, без пояснений и без markdown-тегов. Список ПЛОСКИЙ, вложенных массивов нет:
+{\"items\":[{\"section\":\"Название раздела\",\"topic\":\"Название темы\",\"description\":\"одна строка\"}]}";
     }
 
     /**
@@ -78,51 +85,64 @@ class codifier_proposer {
     public function propose(string $subject, int $class_number, int $sections, int $per_section,
                             string $extra = '', array $existing = []): array {
         $prompt = $this->build_prompt($subject, $class_number, $sections, $per_section, $extra, $existing);
-        $raw = $this->gen->generate_text($prompt, 4096);
-        return self::parse($raw, $sections, $per_section);
+        // Две попытки: порча разметки у модели случайна, и второй ответ на тот же промт обычно
+        // приходит целым. Отказ модели сюда не долетает - generate_text бросает раньше и сам
+        // уже отработал свой повтор.
+        $last = null;
+        for ($attempt = 1; $attempt <= self::PARSE_ATTEMPTS; $attempt++) {
+            $raw = $this->gen->generate_text($prompt, 4096);
+            try {
+                return self::parse($raw, $sections, $per_section);
+            } catch (\moodle_exception $e) {
+                $last = $e;
+            }
+        }
+        throw $last;
     }
 
     /**
      * Разбор ответа модели в список разделов с темами.
+     *
+     * Ответ ПЛОСКИЙ - список строк «раздел, тема, описание», а иерархию собираем мы
+     * группировкой по названию раздела. Вложенный формат («разделы, внутри topics») модель
+     * ломала в двух живых заходах из трех 2026-08-20: не закрывала объект темы перед началом
+     * следующей и валила скобки в конце в произвольном порядке. Плоский список этой ошибки
+     * не допускает в принципе - вложенность там ровно одна.
      *
      * @return array список ['title' => string, 'description' => string, 'topics' => [...]]
      * @throws \moodle_exception если не разобралось ни одного раздела
      */
     public static function parse(string $raw, int $max_sections = self::MAX_SECTIONS,
                                  int $max_topics = self::MAX_TOPICS): array {
-        $data = json_reply::decode($raw, 'sections');
+        $data = json_reply::decode($raw, 'items');
         $out = [];
-        foreach ((array)($data['sections'] ?? []) as $s) {
-            if (!is_array($s)) {
+        $index = []; // название раздела => позиция в $out
+        foreach ((array)($data['items'] ?? []) as $item) {
+            if (!is_array($item)) {
                 continue;
             }
-            $title = self::str_of($s['title'] ?? '');
-            if ($title === '') {
+            $section = self::str_of($item['section'] ?? '');
+            $topic   = self::str_of($item['topic'] ?? '');
+            if ($section === '' || $topic === '') {
                 continue;
             }
-            $topics = [];
-            foreach ((array)($s['topics'] ?? []) as $t) {
-                if (!is_array($t)) {
-                    continue;
+            if (!isset($index[$section])) {
+                if (count($out) >= $max_sections) {
+                    continue; // разделов уже достаточно, темы лишнего раздела не берем
                 }
-                $ttitle = self::str_of($t['title'] ?? '');
-                if ($ttitle === '') {
-                    continue;
-                }
-                $topics[] = ['title' => $ttitle, 'description' => self::str_of($t['description'] ?? '')];
-                if (count($topics) >= $max_topics) {
-                    break;
-                }
+                $index[$section] = count($out);
+                $out[] = ['title' => $section, 'description' => '', 'topics' => []];
             }
-            $out[] = ['title' => $title, 'description' => self::str_of($s['description'] ?? ''),
-                      'topics' => $topics];
-            if (count($out) >= $max_sections) {
-                break;
+            $pos = $index[$section];
+            if (count($out[$pos]['topics']) >= $max_topics) {
+                continue;
             }
+            $out[$pos]['topics'][] = ['title' => $topic,
+                                      'description' => self::str_of($item['description'] ?? '')];
         }
         if (!$out) {
             throw new \moodle_exception('generalexceptionmessage', 'error', '',
-                'ИИ вернул некорректную структуру кодификатора: ' . mb_substr(trim($raw), 0, 300));
+                'ИИ вернул некорректную структуру кодификатора. ' . self::head_and_tail($raw));
         }
         return $out;
     }
@@ -193,14 +213,17 @@ class codifier_proposer {
         }));
     }
 
-    /** Названия существующих элементов - для промта, чтобы модель не повторялась. */
+    /**
+     * Названия существующих элементов - для промта и для показа методисту.
+     *
+     * Порядок обхода дерева, а не плоская сортировка по ordinal: у тем свой ordinal внутри
+     * родителя, поэтому плоский запрос перемешивал разделы с чужими темами, и список выглядел
+     * бессвязным набором (замечено живым заходом 2026-08-20).
+     */
     public static function existing_titles(int $codifier_id): array {
-        global $DB;
-        $rows = $DB->get_records('unics_codifier_element', ['codifier_id' => $codifier_id],
-            'ordinal ASC, id ASC', 'id, title');
-        return array_values(array_map(static function ($r): string {
-            return (string)$r->title;
-        }, $rows));
+        return array_values(array_map(static function ($e): string {
+            return (string)$e->title;
+        }, \local_unics\codifier_manager::get_tree($codifier_id)));
     }
 
     /**
@@ -287,5 +310,20 @@ class codifier_proposer {
     /** Строка из значения любого вида: модель иногда шлет объект вместо строки. */
     private static function str_of($v): string {
         return is_scalar($v) ? trim((string)$v) : '';
+    }
+
+    /**
+     * Начало и хвост ответа для сообщения об ошибке.
+     *
+     * Только начало не годится: 2026-08-20 живой заход показал первые 300 символов, и по ним
+     * нельзя было отличить обрыв ответа от порчи разметки - причина всегда в конце.
+     */
+    private static function head_and_tail(string $raw, int $len = 200): string {
+        $raw = trim($raw);
+        if (mb_strlen($raw) <= $len * 2) {
+            return 'Ответ: ' . $raw;
+        }
+        return 'Начало ответа: ' . mb_substr($raw, 0, $len)
+            . ' [...] Конец ответа: ' . mb_substr($raw, -$len);
     }
 }

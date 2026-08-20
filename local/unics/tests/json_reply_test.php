@@ -50,6 +50,32 @@ final class json_reply_test extends \advanced_testcase {
         $this->assertNotNull($out);
     }
 
+    public function test_trailing_comma_is_repaired(): void {
+        // Замерено на живом ответе GigaChat 2026-08-20: модель ставит запятую перед скобкой.
+        $raw = '{"sections":[{"title":"Дроби","topics":[{"title":"Сложение","description":"складывает",},],},]}';
+        $out = json_reply::decode($raw, 'sections');
+        $this->assertNotNull($out, 'висячая запятая обязана чиниться');
+        $this->assertSame('Сложение', $out['sections'][0]['topics'][0]['title']);
+    }
+
+    public function test_trailing_comma_inside_text_is_left_alone(): void {
+        // Запятая внутри описания не висячая: чинить ее значило бы портить текст темы.
+        $raw = '{"sections":[{"title":"Итак, вот } скобка","topics":[]}]}';
+        $out = json_reply::decode($raw, 'sections');
+        $this->assertSame('Итак, вот } скобка', $out['sections'][0]['title']);
+    }
+
+    public function test_trailing_comma_and_truncation_together(): void {
+        // Живой случай целиком: модель и запятые ставит, и обрывается на лимите токенов.
+        $raw = '{"sections": [{"title": "Натуральные числа", "description": "считает", '
+            . '"topics": [{"title": "Сложение дробей", "description": "складывает", }, '
+            . '{"title": "Умножен';
+        $out = json_reply::decode($raw, 'sections');
+        $this->assertNotNull($out, 'запятая плюс обрыв обязаны чиниться вместе');
+        $this->assertSame('Натуральные числа', $out['sections'][0]['title']);
+        $this->assertSame('Сложение дробей', $out['sections'][0]['topics'][0]['title']);
+    }
+
     public function test_garbage_returns_null(): void {
         $this->assertNull(json_reply::decode('Извините, не могу помочь.', 'sections'));
     }
