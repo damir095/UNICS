@@ -40,6 +40,9 @@ class ai_generator {
      */
     const IMAGE_FAILURE_STREAK = 3;
 
+    /** Сколько раз просить тест, если ответ не разобрался или все вопросы отбракованы. */
+    public const QUIZ_PARSE_ATTEMPTS = 2;
+
     /** Счетчик подряд идущих неудач картинок; удачная генерация его обнуляет. */
     private int $image_failures_in_row = 0;
     private string $tts_provider;
@@ -701,33 +704,75 @@ class ai_generator {
 - Язык соответствует возрасту и уровню «{$level}»
 - ЗАПРЕЩЕНО использовать LaTeX-формулы, символы $ и обратную косую черту \\. Все формулы и уравнения записывай ТОЛЬКО обычным текстом: например «y = kx + b», «x в квадрате», «дробь k/x».
 
+- Если в вопросе есть вычисление, покажи его в поле solution: «2/5 + 1/5 = 3/5». Правильный ответ обязан совпадать с результатом вычисления.
+
 Верни ответ СТРОГО в формате JSON, без пояснений и без markdown-тегов:
-{\"questions\":[{\"text\":\"Текст вопроса?\",\"answers\":[\"Вариант А\",\"Вариант Б\",\"Вариант В\",\"Вариант Г\"],\"correct\":0}]}
+{\"questions\":[{\"text\":\"Текст вопроса?\",\"answers\":[\"Вариант А\",\"Вариант Б\",\"Вариант В\",\"Вариант Г\"],\"correct\":0,\"solution\":\"вычисление или пусто\"}]}
 correct - индекс правильного ответа (0, 1, 2 или 3).";
 
-        $raw = $this->generate_text($prompt, 4096);
+        // Две попытки: разовая порча ответа оставляла комплект без теста, а статус у него был
+        // «готов» (найдено зондом 2026-08-20). У генерации структуры кодификатора и разметки
+        // банка вторая попытка есть давно, а самый важный выход был защищен слабее всех.
+        $last = null;
+        for ($attempt = 1; $attempt <= self::QUIZ_PARSE_ATTEMPTS; $attempt++) {
+            $raw = $this->generate_text($prompt, 4096);
+            try {
+                return $this->questions_from_reply($raw, $num);
+            } catch (\moodle_exception $e) {
+                $last = $e;
+            }
+        }
+        throw $last;
+    }
 
+    /**
+     * Разбор ответа и проверка каждого вопроса ([[quiz-answer-verification-design]]).
+     *
+     * Задание с неверным ключом ребенку не показываем: ключ либо переезжает на верный вариант,
+     * либо вопрос выбывает. Зонд 2026-08-20 нашел шесть неверных ключей из десяти - модель
+     * складывает знаменатели, ребенок с верным ответом получал «неверно», а калибровка IRT
+     * измеряла трудность по ошибочному ключу.
+     *
+     * @param int $num сколько вопросов просили у модели
+     * @throws \moodle_exception если после проверки не осталось ни одного вопроса
+     */
+    private function questions_from_reply(string $raw, int $num): array {
         // Разбор с восстановлением обрезанного ответа - общий для всех JSON-выходов
-        // ([[codifier-ai-proposal-design]], раздел 4). Раньше эта логика жила здесь замыканием
-        // и считала скобки разностью счетчиков, из-за чего теряла недописанный последний
-        // вопрос: жадный кусок «до последней закрывающей» отрезал его целиком.
+        // ([[codifier-ai-proposal-design]], раздел 4).
         $data = json_reply::decode($raw, 'questions') ?? [];
 
         $result = [];
-        if (isset($data['questions']) && is_array($data['questions'])) {
-            foreach ($data['questions'] as $q) {
-                if (empty($q['text']) || empty($q['answers']) || !is_array($q['answers'])) {
-                    continue;
-                }
-                $correct = max(0, min((int)($q['correct'] ?? 0), count($q['answers']) - 1));
-                $result[] = [
-                    'text'    => trim($q['text']),
-                    'answers' => array_values($q['answers']),
-                    'correct' => $correct,
-                ];
+        $fixed = 0;
+        $dropped = 0;
+        foreach ((array)($data['questions'] ?? []) as $q) {
+            if (!is_array($q) || empty($q['text']) || empty($q['answers']) || !is_array($q['answers'])) {
+                continue;
+            }
+            $text = output_style::strip_math_markup((string)$q['text']);
+            $answers = array_map(static function ($a): string {
+                return output_style::strip_math_markup((string)$a);
+            }, array_values($q['answers']));
+            $correct = max(0, min((int)($q['correct'] ?? 0), count($answers) - 1));
+
+            $check = arithmetic_checker::verdict($text, $answers, $correct,
+                (string)($q['solution'] ?? ''));
+            if ($check['verdict'] === 'drop') {
+                $dropped++;
+                continue;
+            }
+            if ($check['verdict'] === 'fixed') {
+                $fixed++;
+            }
+            $result[] = ['text' => $text, 'answers' => $answers, 'correct' => $check['correct']];
+            if (count($result) >= $num) {
+                break;
             }
         }
 
+        if ($fixed || $dropped) {
+            $this->trace('  Проверка заданий: исправлено ключей ' . $fixed
+                . ', отброшено вопросов ' . $dropped);
+        }
         if (empty($result)) {
             // Начало И хвост: по одному началу нельзя отличить обрыв ответа от порчи разметки,
             // а причина всегда в конце ([[codifier-ai-proposal-design]], раздел 11).
