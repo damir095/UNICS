@@ -71,6 +71,89 @@ class question_tagger {
 n - номер задания из списка выше, code - код элемента, sure - уверен ли ты в выборе.";
     }
 
+    // -----------------------------------------------------------------
+    // Что размечать: вопросы дисциплины без привязок
+    // -----------------------------------------------------------------
+
+    /**
+     * Вопросы дисциплины без привязки к элементам.
+     *
+     * Контексты берем по `path` контекста категории курсов: вопросы живут сразу на трех уровнях -
+     * в общем пуле категории (туда кладет задания генератор УМК), в курсах и в тестах внутри
+     * курсов. Все три лежат ниже категории, поэтому одного условия по пути достаточно.
+     *
+     * @return array список ['bankentryid' => int, 'name' => string, 'text' => string]
+     */
+    public static function untagged(int $codifier_id, int $limit): array {
+        global $DB;
+        list($sql, $params) = self::untagged_sql($codifier_id);
+        $rows = $DB->get_records_sql($sql . ' ORDER BY qbe.id', $params, 0, $limit);
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'bankentryid' => (int)$r->bankentryid,
+                'name'        => (string)$r->name,
+                'text'        => self::plain_text((string)$r->questiontext),
+            ];
+        }
+        return $out;
+    }
+
+    /** Сколько всего вопросов дисциплины ждут разметки. */
+    public static function untagged_count(int $codifier_id): int {
+        global $DB;
+        list($sql, $params) = self::untagged_sql($codifier_id);
+        return (int)$DB->count_records_sql('SELECT COUNT(1) FROM (' . $sql . ') sub', $params);
+    }
+
+    /**
+     * Запрос неразмеченных вопросов дисциплины.
+     *
+     * @return array{0: string, 1: array} [sql, params]
+     */
+    private static function untagged_sql(int $codifier_id): array {
+        global $DB;
+        $catid = (int)$DB->get_field('unics_codifier', 'mdl_category_id', ['id' => $codifier_id]);
+        $ctx = $catid ? \context_coursecat::instance($catid, IGNORE_MISSING) : false;
+        if (!$ctx) {
+            // Категорию удалили - отдаем заведомо пустой запрос, а не падаем.
+            return ["SELECT qbe.id AS bankentryid, '' AS name, '' AS questiontext
+                       FROM {question_bank_entries} qbe WHERE 1 = 0", []];
+        }
+        $sql = "SELECT qbe.id AS bankentryid, q.name, q.questiontext
+                  FROM {question_bank_entries} qbe
+                  JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
+                  JOIN {context} ctx ON ctx.id = qc.contextid
+                  JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
+                       AND qv.version = (SELECT MAX(v.version) FROM {question_versions} v
+                                          WHERE v.questionbankentryid = qbe.id)
+                  JOIN {question} q ON q.id = qv.questionid
+                 WHERE (ctx.id = :ctxid OR " . $DB->sql_like('ctx.path', ':ctxpath') . ")
+                       AND q.qtype <> 'random'
+                       AND NOT EXISTS (SELECT 1 FROM {unics_codifier_link} l
+                                        WHERE l.target_type = :ttype AND l.target_id = qbe.id)";
+        return [$sql, [
+            'ctxid'   => $ctx->id,
+            'ctxpath' => $ctx->path . '/%',
+            'ttype'   => \local_unics\codifier_link_manager::TYPE_QUESTION,
+        ]];
+    }
+
+    /** Элементы кодификатора для промта, в порядке обхода дерева. */
+    public static function elements_for_prompt(int $codifier_id): array {
+        $out = [];
+        foreach (\local_unics\codifier_manager::get_tree($codifier_id) as $e) {
+            $out[] = ['code' => (string)$e->code, 'title' => (string)$e->title,
+                      'description' => (string)($e->description ?? '')];
+        }
+        return $out;
+    }
+
+    /** Текст вопроса без разметки и в пределах TEXT_LIMIT. */
+    private static function plain_text(string $html): string {
+        return mb_substr(trim(html_to_text($html, 0, false)), 0, self::TEXT_LIMIT);
+    }
+
     /**
      * Разбор ответа модели.
      *
