@@ -70,6 +70,33 @@ class arithmetic_checker {
     }
 
     /**
+     * Вердикт по заданию: сошелся ли ключ модели с нашим расчетом.
+     *
+     * @param string $text текст вопроса
+     * @param array $answers варианты ответа (строки)
+     * @param int $correct индекс варианта, объявленного моделью верным
+     * @param string $solution поле решения от модели - запасной источник выражения
+     * @return array{verdict: string, correct: int} verdict: ok, fixed, unverifiable или drop
+     */
+    public static function verdict(string $text, array $answers, int $correct,
+                                   string $solution = ''): array {
+        $value = self::expression($text);
+        if ($value === null && $solution !== '') {
+            // В решении выражение стоит слева от знака равенства: «2/5 + 1/5 = 3/5».
+            $value = self::expression(explode('=', $solution)[0]);
+        }
+        if ($value === null) {
+            return ['verdict' => 'unverifiable', 'correct' => $correct];
+        }
+        foreach (array_values($answers) as $i => $answer) {
+            if (self::equals(self::rational((string)$answer), $value)) {
+                return ['verdict' => $i === $correct ? 'ok' : 'fixed', 'correct' => $i];
+            }
+        }
+        return ['verdict' => 'drop', 'correct' => $correct];
+    }
+
+    /**
      * Найти в тексте «операнд знак операнд» и вычислить.
      *
      * @return array|null пара [числитель, знаменатель] или null, если считать нечего
