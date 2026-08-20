@@ -88,8 +88,8 @@ final class question_tagger_bank_test extends \advanced_testcase {
         $beid = $this->make_question('Про дроби');
         $pairs = [['bankentryid' => $beid, 'element_id' => $this->element]];
 
-        $this->assertSame(1, question_tagger::apply($pairs, (int)$USER->id));
-        $this->assertSame(0, question_tagger::apply($pairs, (int)$USER->id),
+        $this->assertSame(1, question_tagger::apply($this->codifier, $pairs, (int)$USER->id));
+        $this->assertSame(0, question_tagger::apply($this->codifier, $pairs, (int)$USER->id),
             'повторное подтверждение не должно плодить привязки');
         $this->assertSame(1, $DB->count_records('unics_codifier_link',
             ['target_type' => codifier_link_manager::TYPE_QUESTION, 'target_id' => $beid]));
@@ -98,10 +98,80 @@ final class question_tagger_bank_test extends \advanced_testcase {
     public function test_apply_skips_pair_without_element(): void {
         global $DB, $USER;
         $beid = $this->make_question('Про дроби');
-        $this->assertSame(0, question_tagger::apply(
+        $this->assertSame(0, question_tagger::apply($this->codifier,
             [['bankentryid' => $beid, 'element_id' => 0]], (int)$USER->id));
         $this->assertSame(0, $DB->count_records('unics_codifier_link',
             ['target_type' => codifier_link_manager::TYPE_QUESTION]));
+    }
+
+    public function test_apply_refuses_element_of_another_codifier(): void {
+        global $DB, $USER;
+        $beid = $this->make_question('Про дроби');
+        $other_cod = (int)$DB->insert_record('unics_codifier', (object)[
+            'mdl_category_id' => (int)$this->getDataGenerator()->create_category()->id,
+            'name' => 'Чужой', 'created_by_mdl_user_id' => (int)$USER->id, 'timecreated' => time(),
+        ]);
+        $alien = codifier_manager::add_element($other_cod, null, '1', 'Чужая тема');
+
+        $this->assertSame(0, question_tagger::apply($this->codifier,
+            [['bankentryid' => $beid, 'element_id' => $alien]], (int)$USER->id),
+            'элемент чужого кодификатора привязывать нельзя');
+        $this->assertSame(0, $DB->count_records('unics_codifier_link',
+            ['target_type' => codifier_link_manager::TYPE_QUESTION]));
+    }
+
+    public function test_apply_refuses_question_of_another_subject(): void {
+        global $DB, $USER;
+        $other = $this->getDataGenerator()->create_course(
+            ['category' => $this->getDataGenerator()->create_category()->id]);
+        $gen = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $gen->create_question_category(
+            ['contextid' => \context_course::instance($other->id)->id]);
+        $q = $gen->create_question('truefalse', null, ['name' => 'Чужой', 'category' => $cat->id]);
+        $alien = (int)$DB->get_field('question_versions', 'questionbankentryid', ['questionid' => $q->id]);
+
+        // Поля предпросмотра приходят из браузера: подделанный bankentryid не должен приниматься.
+        $this->assertSame(0, question_tagger::apply($this->codifier,
+            [['bankentryid' => $alien, 'element_id' => $this->element]], (int)$USER->id),
+            'вопрос чужой дисциплины привязывать нельзя');
+        $this->assertSame(0, $DB->count_records('unics_codifier_link',
+            ['target_type' => codifier_link_manager::TYPE_QUESTION]));
+    }
+
+    public function test_hidden_question_is_excluded(): void {
+        global $DB;
+        // Удаление используемого вопроса не удаляет его, а прячет версию: такой вопрос нельзя
+        // ни предлагать модели, ни привязывать - пул его все равно не выдаст.
+        $normal = $this->make_question('Живой');
+        $hidden = $this->make_question('Удаленный');
+        $DB->set_field('question_versions', 'status',
+            \core_question\local\bank\question_version_status::QUESTION_STATUS_HIDDEN,
+            ['questionbankentryid' => $hidden]);
+
+        $this->assertSame([$normal], array_column(question_tagger::untagged($this->codifier, 30), 'bankentryid'));
+        $this->assertSame(1, question_tagger::untagged_count($this->codifier));
+    }
+
+    public function test_older_ready_version_is_used_when_newest_is_hidden(): void {
+        global $DB;
+        // Правка вопроса создает новую версию, а удаление ее прячет. Годной остается предыдущая
+        // готовая - брать надо ее, а не терять вопрос целиком и не показывать модели спрятанное.
+        $beid = $this->make_question('Живой');
+        $ready = $DB->get_record('question_versions', ['questionbankentryid' => $beid], '*', MUST_EXIST);
+        $gen = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $gen->create_question_category(
+            ['contextid' => \context_course::instance($this->course->id)->id]);
+        $newq = $gen->create_question('truefalse', null, ['name' => 'Спрятанная правка', 'category' => $cat->id]);
+        $DB->update_record('question_versions', (object)[
+            'id' => (int)$DB->get_field('question_versions', 'id', ['questionid' => $newq->id]),
+            'questionbankentryid' => $beid,
+            'version' => (int)$ready->version + 1,
+            'status' => \core_question\local\bank\question_version_status::QUESTION_STATUS_HIDDEN,
+        ]);
+
+        $out = question_tagger::untagged($this->codifier, 30);
+        $this->assertSame([$beid], array_column($out, 'bankentryid'));
+        $this->assertSame('Живой', $out[0]['name'], 'модели нельзя показывать спрятанную версию');
     }
 
     public function test_propose_retries_once_after_broken_reply(): void {

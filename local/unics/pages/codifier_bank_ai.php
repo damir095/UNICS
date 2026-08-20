@@ -46,16 +46,6 @@ $error  = '';
 $rows   = [];
 $tree   = codifier_manager::get_tree((int)$codifier->id);
 
-/**
- * Текст ошибки для методиста.
- *
- * Берем параметр исключения, а не getMessage(): языковая строка generalexceptionmessage
- * подставляет текст в шаблон «Исключение - {$a}».
- */
-function local_unics_bank_ai_error_text(moodle_exception $e): string {
-    return is_string($e->a) && $e->a !== '' ? $e->a : $e->getMessage();
-}
-
 // ----------------------------------------------------------------
 // POST
 // ----------------------------------------------------------------
@@ -103,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 ];
             }
         } catch (moodle_exception $e) {
-            $error = local_unics_bank_ai_error_text($e);
+            $error = local_unics_ai_error_text($e);
         }
     }
 
@@ -116,10 +106,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 $pairs[] = ['bankentryid' => (int)$beid, 'element_id' => (int)$elid];
             }
         }
-        $n = question_tagger::apply($pairs, (int)$USER->id);
-        redirect($backurl, $n > 0 ? 'Привязано вопросов: ' . $n : 'Ничего не отмечено, банк не изменился.',
-            null, $n > 0 ? \core\output\notification::NOTIFY_SUCCESS
-                         : \core\output\notification::NOTIFY_WARNING);
+        $n = question_tagger::apply((int)$codifier->id, $pairs, (int)$USER->id);
+        if ($n > 0) {
+            redirect($backurl, 'Привязано вопросов: ' . $n, null,
+                \core\output\notification::NOTIFY_SUCCESS);
+        }
+        // Отмеченные строки были, но ни одной новой привязки: элемент оставлен на «не
+        // привязывать» либо пачку подтвердили повторно. Говорить «ничего не отмечено» тут неправда.
+        redirect($backurl, $pairs
+            ? 'Новых привязок не появилось: выбранные вопросы уже привязаны или оставлены без элемента.'
+            : 'Ничего не отмечено, банк не изменился.',
+            null, \core\output\notification::NOTIFY_WARNING);
     }
 }
 
@@ -184,9 +181,11 @@ echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'batch', 'va
 // иначе теряла бы все правки методиста.
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'apply']);
 
+// Подписи экранируются: html_writer::select отдает содержимое option через tag(), а тот его НЕ
+// экранирует. Названия элементов приходят в том числе импортом xlsx, где разметка не чистится.
 $options = [0 => 'не привязывать'];
 foreach ($tree as $e) {
-    $options[(int)$e->id] = trim($e->code . ' ' . $e->title);
+    $options[(int)$e->id] = trim(s($e->code) . ' ' . s($e->title));
 }
 echo html_writer::start_div('table-responsive');
 echo html_writer::start_tag('table', ['class' => local_unics_table_class()]);

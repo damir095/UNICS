@@ -99,16 +99,29 @@ n - номер задания из списка выше, code - код элем
     /**
      * Записать подтвержденные методистом привязки.
      *
+     * Обе стороны пары проверяются на принадлежность ЭТОМУ кодификатору и его дисциплине, а не
+     * берутся из формы на веру: поля предпросмотра приходят из браузера, а гейт страницы пускает
+     * любого методиста или регионального администратора. Без проверки один POST связывал бы
+     * вопрос чужого предмета с элементом чужого кодификатора, и эта связь ушла бы в пул заданий
+     * и в CAT - ребенок получил бы задание не по своей теме.
+     *
      * @param array $pairs список ['bankentryid' => int, 'element_id' => int]
      * @return int сколько привязок СОЗДАНО (существующие не считаются)
      */
-    public static function apply(array $pairs, int $userid): int {
+    public static function apply(int $codifier_id, array $pairs, int $userid): int {
         global $DB;
+        $own_elements = array_flip(array_map('intval', $DB->get_fieldset_select(
+            'unics_codifier_element', 'id', 'codifier_id = :cid', ['cid' => $codifier_id])));
+        $own_questions = array_flip(self::subject_bankentry_ids($codifier_id));
+
         $created = 0;
         foreach ($pairs as $pair) {
             $beid = (int)($pair['bankentryid'] ?? 0);
             $elid = (int)($pair['element_id'] ?? 0);
             if ($beid <= 0 || $elid <= 0) {
+                continue;
+            }
+            if (!isset($own_elements[$elid]) || !isset($own_questions[$beid])) {
                 continue;
             }
             // link_question идемпотентен и возвращает id в обоих случаях, поэтому «создано»
@@ -154,10 +167,25 @@ n - номер задания из списка выше, code - код элем
         return $out;
     }
 
+    /**
+     * Все записи банка дисциплины, размеченные и нет: множество допустимых целей привязки.
+     *
+     * @return int[]
+     */
+    public static function subject_bankentry_ids(int $codifier_id): array {
+        global $DB;
+        list($sql, $params) = self::subject_sql($codifier_id);
+        return array_map('intval', $DB->get_fieldset_sql(
+            'SELECT bankentryid FROM (' . $sql . ') sub', $params));
+    }
+
     /** Сколько всего вопросов дисциплины ждут разметки. */
     public static function untagged_count(int $codifier_id): int {
         global $DB;
         list($sql, $params) = self::untagged_sql($codifier_id);
+        // Считаем по идентификатору, а не по всей выборке: иначе во временную таблицу уезжает
+        // текст каждого вопроса целиком, а это LONGTEXT, и запрос идет на каждый показ формы.
+        $sql = preg_replace('/^\s*SELECT .*? FROM /su', 'SELECT qbe.id FROM ', $sql, 1) ?? $sql;
         return (int)$DB->count_records_sql('SELECT COUNT(1) FROM (' . $sql . ') sub', $params);
     }
 
@@ -167,6 +195,28 @@ n - номер задания из списка выше, code - код элем
      * @return array{0: string, 1: array} [sql, params]
      */
     private static function untagged_sql(int $codifier_id): array {
+        list($sql, $params) = self::subject_sql($codifier_id);
+        if (!$params) {
+            return [$sql, $params];
+        }
+        $sql .= " AND NOT EXISTS (SELECT 1 FROM {unics_codifier_link} l
+                                   WHERE l.target_type = :ttype AND l.target_id = qbe.id)";
+        $params['ttype'] = \local_unics\codifier_link_manager::TYPE_QUESTION;
+        return [$sql, $params];
+    }
+
+    /**
+     * Запрос всех пригодных вопросов дисциплины (и размеченных, и нет).
+     *
+     * Годной считается ПОСЛЕДНЯЯ ГОТОВАЯ версия вопроса. Фильтр по статусу обязателен: удаление
+     * вопроса, который где-то используется, не удаляет его, а прячет версию - без фильтра модель
+     * размечала бы удаленные вопросы, они съедали бы места в пачке и токены, а привязка навсегда
+     * раздувала бы счетчики готовности к CAT заданиями, которых пул никогда не выдаст (тот же
+     * фильтр стоит в `item_pool::candidates()`).
+     *
+     * @return array{0: string, 1: array} [sql, params]; пустой params означает «выборка пуста»
+     */
+    private static function subject_sql(int $codifier_id): array {
         global $DB;
         $catid = (int)$DB->get_field('unics_codifier', 'mdl_category_id', ['id' => $codifier_id]);
         $ctx = $catid ? \context_coursecat::instance($catid, IGNORE_MISSING) : false;
@@ -181,16 +231,17 @@ n - номер задания из списка выше, code - код элем
                   JOIN {context} ctx ON ctx.id = qc.contextid
                   JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
                        AND qv.version = (SELECT MAX(v.version) FROM {question_versions} v
-                                          WHERE v.questionbankentryid = qbe.id)
+                                          WHERE v.questionbankentryid = qbe.id
+                                                AND v.status = :readyinner)
                   JOIN {question} q ON q.id = qv.questionid
                  WHERE (ctx.id = :ctxid OR " . $DB->sql_like('ctx.path', ':ctxpath') . ")
-                       AND q.qtype <> 'random'
-                       AND NOT EXISTS (SELECT 1 FROM {unics_codifier_link} l
-                                        WHERE l.target_type = :ttype AND l.target_id = qbe.id)";
+                       AND qv.status = :ready
+                       AND q.qtype <> 'random'";
         return [$sql, [
-            'ctxid'   => $ctx->id,
-            'ctxpath' => $ctx->path . '/%',
-            'ttype'   => \local_unics\codifier_link_manager::TYPE_QUESTION,
+            'ctxid'      => $ctx->id,
+            'ctxpath'    => $ctx->path . '/%',
+            'ready'      => \core_question\local\bank\question_version_status::QUESTION_STATUS_READY,
+            'readyinner' => \core_question\local\bank\question_version_status::QUESTION_STATUS_READY,
         ]];
     }
 

@@ -10,6 +10,17 @@ function local_unics_require_not_student(): void {
 }
 
 /**
+ * Текст ошибки ИИ для педагога или методиста.
+ *
+ * Берём параметр исключения, а не getMessage(): языковая строка generalexceptionmessage
+ * подставляет текст в шаблон «Исключение - {$a}», и человек видел бы служебное слово
+ * «Исключение» там, где написано понятное «Код «1» уже занят».
+ */
+function local_unics_ai_error_text(moodle_exception $e): string {
+    return is_string($e->a) && $e->a !== '' ? $e->a : $e->getMessage();
+}
+
+/**
  * Единая кнопка «На дашборд» для верхней части любой страницы плагина.
  * Тонкая обёртка над {@see \local_unics\output\shell::dashboard_button()}.
  */

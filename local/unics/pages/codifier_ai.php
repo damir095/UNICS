@@ -89,17 +89,6 @@ function local_unics_codifier_ai_plan_from_post(): array {
     return $out;
 }
 
-/**
- * Текст ошибки для методиста.
- *
- * Берем параметр исключения, а не getMessage(): языковая строка generalexceptionmessage
- * подставляет текст в шаблон «Исключение - {$a}», и методист видел бы служебное слово
- * «Исключение» там, где написано понятное «Код «1» уже занят».
- */
-function local_unics_codifier_ai_error_text(moodle_exception $e): string {
-    return is_string($e->a) && $e->a !== '' ? $e->a : $e->getMessage();
-}
-
 // ----------------------------------------------------------------
 // POST
 // ----------------------------------------------------------------
@@ -123,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 $topics_n, $extra, codifier_proposer::existing_titles((int)$codifier->id));
             $plan = codifier_proposer::plan(codifier_proposer::existing_codes((int)$codifier->id), $parsed);
         } catch (moodle_exception $e) {
-            $error = local_unics_codifier_ai_error_text($e);
+            $error = local_unics_ai_error_text($e);
         }
     }
 
@@ -140,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 \core\output\notification::NOTIFY_SUCCESS);
         } catch (moodle_exception $e) {
             // Остаемся на предпросмотре: значения, которые методист уже поправил, не теряются.
-            $error = local_unics_codifier_ai_error_text($e);
+            $error = local_unics_ai_error_text($e);
         }
     }
 }
