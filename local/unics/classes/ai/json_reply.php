@@ -33,15 +33,27 @@ class json_reply {
      * @return array|null массив или null, если не разобралось даже после восстановления
      */
     public static function decode(string $raw, string $expect_key = ''): ?array {
+        // Обертку модель иногда выбрасывает и шлет голый список - надеваем ее сами. Проверка
+        // делается ТОЛЬКО для корня ответа: если оборачивать любой встреченный массив, то
+        // внутренний список тем окажется «лучшим кандидатом» и вытеснит настоящий ответ.
+        if ($expect_key !== '') {
+            $list = self::root_list($raw);
+            if ($list !== null) {
+                return [$expect_key => $list];
+            }
+        }
+
         $best = null;
         $bestsize = -1;
         foreach (self::candidates($raw) as $candidate) {
-            // Три вида порчи по возрастанию тяжести. Первый удавшийся вариант для КАЖДОГО
-            // кандидата и есть наименее покалеченное его прочтение.
+            // Виды порчи по возрастанию тяжести. Первый удавшийся вариант для КАЖДОГО кандидата
+            // и есть наименее покалеченное его прочтение.
+            $commas = self::strip_trailing_commas($candidate);
             $variants = [
                 $candidate,
-                self::strip_trailing_commas($candidate),
-                self::close_brackets(self::strip_trailing_commas($candidate)),
+                $commas,
+                self::fix_key_equals($commas),
+                self::close_brackets(self::fix_key_equals($commas)),
             ];
             foreach ($variants as $variant) {
                 $data = self::try_decode($variant, $expect_key);
@@ -57,6 +69,68 @@ class json_reply {
             }
         }
         return $best;
+    }
+
+    /**
+     * Ответ, который САМ является списком объектов, без обертки.
+     *
+     * @return array|null список или null, если корень ответа - не список
+     */
+    private static function root_list(string $raw): ?array {
+        $trimmed = ltrim($raw);
+        if ($trimmed === '' || $trimmed[0] !== '[') {
+            return null;
+        }
+        $commas = self::strip_trailing_commas($trimmed);
+        foreach ([$trimmed, $commas, self::fix_key_equals($commas),
+                  self::close_brackets(self::fix_key_equals($commas))] as $variant) {
+            $data = json_decode($variant, true) ?? json_decode(self::fix_escapes($variant), true);
+            if (is_array($data) && $data && array_is_list($data) && is_array($data[0])) {
+                return $data;
+            }
+        }
+        // Список есть, но целиком не разбирается: собираем из тех объектов, что пригодны.
+        $objects = self::decode_objects($trimmed);
+        return $objects ?: null;
+    }
+
+    /**
+     * Объекты верхнего уровня, разобранные ПООДИНОЧКЕ; битые пропускаются.
+     *
+     * @return array список ассоциативных массивов
+     */
+    public static function decode_objects(string $raw): array {
+        $out = [];
+        $len = strlen($raw);
+        for ($i = 0; $i < $len; $i++) {
+            if ($raw[$i] !== '{') {
+                continue;
+            }
+            $end = self::balanced_end($raw, $i);
+            if ($end === null) {
+                break;
+            }
+            $chunk = substr($raw, $i, $end - $i + 1);
+            $data = self::try_decode(self::fix_key_equals(self::strip_trailing_commas($chunk)), '');
+            if ($data !== null) {
+                $out[] = $data;
+            }
+            $i = $end;
+        }
+        return $out;
+    }
+
+    /**
+     * Починить пару, записанную через равно: «"sure=true"» -> «"sure":true».
+     *
+     * Модель пишет так регулярно, и это не просто опечатка: получается значение без ключа, то
+     * есть весь объект становится невалидным. Логические значения и числа восстанавливаются
+     * своим типом - иначе «"sure=false"» стало бы строкой «false», а непустая строка истинна.
+     */
+    private static function fix_key_equals(string $s): string {
+        $s = preg_replace('/"([A-Za-z_][A-Za-z0-9_]*)=(true|false|null|-?\d+(?:\.\d+)?)"/u',
+            '"$1":$2', $s) ?? $s;
+        return preg_replace('/"([A-Za-z_][A-Za-z0-9_]*)=([^"]*)"/u', '"$1":"$2"', $s) ?? $s;
     }
 
     /**
@@ -78,11 +152,10 @@ class json_reply {
             return null;
         }
         $data = json_decode($json, true) ?? json_decode(self::fix_escapes($json), true);
-        return self::acceptable($data, $expect_key) ? $data : null;
-    }
-
-    private static function acceptable($data, string $expect_key): bool {
-        return is_array($data) && ($expect_key === '' || isset($data[$expect_key]));
+        if (!is_array($data)) {
+            return null;
+        }
+        return ($expect_key === '' || isset($data[$expect_key])) ? $data : null;
     }
 
     /**
@@ -101,7 +174,9 @@ class json_reply {
         $len = strlen($raw);
         $starts = 0;
         for ($i = 0; $i < $len && $starts < self::MAX_STARTS; $i++) {
-            if ($raw[$i] !== '{') {
+            // Скобка списка тоже начало ответа: модель выбрасывает обертку и шлет голый список
+            // (замерено на живом ответе 2026-08-20).
+            if ($raw[$i] !== '{' && $raw[$i] !== '[') {
                 continue;
             }
             $starts++;

@@ -123,6 +123,34 @@ final class json_reply_test extends \advanced_testcase {
         $this->assertStringContainsString('короткий ответ', json_reply::head_and_tail('короткий ответ', 50));
     }
 
+    public function test_bare_list_without_wrapper(): void {
+        // Живой ответ GigaChat 2026-08-20: обертку «tags» модель выбросила и прислала список.
+        $raw = '[{"n":1,"code":"1.1","sure":true},{"n":2,"code":"2.1","sure":false}]';
+        $out = json_reply::decode($raw, 'tags');
+        $this->assertNotNull($out, 'список без обертки обязан разбираться');
+        $this->assertCount(2, $out['tags']);
+        $this->assertSame('1.1', $out['tags'][0]['code']);
+    }
+
+    public function test_key_written_with_equals_sign(): void {
+        // Там же: «"sure=true"» вместо «"sure":true» - значение без ключа, JSON невалиден.
+        $raw = '{"tags":[{"n":1,"code":"1.1","sure=true"},{"n":2,"code":"2.1","sure=false"}]}';
+        $out = json_reply::decode($raw, 'tags');
+        $this->assertNotNull($out);
+        $this->assertTrue($out['tags'][0]['sure']);
+        $this->assertFalse($out['tags'][1]['sure'], 'false обязан остаться ложью, а не строкой');
+    }
+
+    public function test_broken_element_does_not_kill_the_whole_list(): void {
+        // Целиком список не декодируется, но девять строк из десяти пригодны.
+        $raw = '[{"n":1,"code":"1.1","sure":true},{"n":2,"code":,,,},{"n":3,"code":"2.1","sure":false}]';
+        $out = json_reply::decode($raw, 'tags');
+        $this->assertNotNull($out, 'одна битая строка не повод терять остальные');
+        $codes = array_column($out['tags'], 'code');
+        $this->assertContains('1.1', $codes);
+        $this->assertContains('2.1', $codes);
+    }
+
     public function test_garbage_returns_null(): void {
         $this->assertNull(json_reply::decode('Извините, не могу помочь.', 'sections'));
     }
