@@ -26,6 +26,15 @@ class json_reply {
     private const MAX_STARTS = 12;
 
     /**
+     * Сколько объектов пробовать разобрать поодиночке в запасном разборе списка.
+     *
+     * Предел нужен по той же причине, что и MAX_STARTS: поиск закрывающей скобки для каждого
+     * объекта стоит прохода по остатку строки, а запасной разбор включается как раз на большом
+     * и покалеченном ответе, да еще внутри веб-запроса.
+     */
+    private const MAX_OBJECTS = 60;
+
+    /**
      * Разобрать ответ модели.
      *
      * @param string $raw сырой ответ
@@ -33,76 +42,113 @@ class json_reply {
      * @return array|null массив или null, если не разобралось даже после восстановления
      */
     public static function decode(string $raw, string $expect_key = ''): ?array {
-        // Обертку модель иногда выбрасывает и шлет голый список - надеваем ее сами. Проверка
-        // делается ТОЛЬКО для корня ответа: если оборачивать любой встреченный массив, то
-        // внутренний список тем окажется «лучшим кандидатом» и вытеснит настоящий ответ.
-        if ($expect_key !== '') {
-            $list = self::root_list($raw);
-            if ($list !== null) {
-                return [$expect_key => $list];
-            }
-        }
-
+        // Два разряда прочтений. «Свои» - те, где ожидаемый ключ нашелся сам. «Обернутые» - те,
+        // где модель выбросила обертку и прислала голый список, и надели ее мы. Обернутое берется
+        // ТОЛЬКО когда своего нет нигде: иначе эхо примера формата, присланное списком, вытеснит
+        // настоящий ответ, который идет следом.
         $best = null;
         $bestsize = -1;
+        $wrapped = null;
+        $wrappedsize = -1;
+
         foreach (self::candidates($raw) as $candidate) {
-            // Виды порчи по возрастанию тяжести. Первый удавшийся вариант для КАЖДОГО кандидата
-            // и есть наименее покалеченное его прочтение.
-            $commas = self::strip_trailing_commas($candidate);
-            $variants = [
-                $candidate,
-                $commas,
-                self::fix_key_equals($commas),
-                self::close_brackets(self::fix_key_equals($commas)),
-            ];
-            foreach ($variants as $variant) {
-                $data = self::try_decode($variant, $expect_key);
-                if ($data === null) {
+            foreach (self::variants($candidate) as $variant) {
+                $data = json_decode($variant, true) ?? json_decode(self::fix_escapes($variant), true);
+                if (!is_array($data)) {
                     continue;
                 }
-                $size = self::size_of($data, $expect_key);
-                if ($size > $bestsize) {
-                    $best = $data;
-                    $bestsize = $size;
+                if ($expect_key === '' || isset($data[$expect_key])) {
+                    $size = self::size_of($data, $expect_key);
+                    if ($size > $bestsize) {
+                        $best = $data;
+                        $bestsize = $size;
+                    }
+                    break;
                 }
-                break;
+                if ($expect_key !== '' && array_is_list($data) && $data && is_array($data[0])) {
+                    if (count($data) > $wrappedsize) {
+                        $wrapped = [$expect_key => $data];
+                        $wrappedsize = count($data);
+                    }
+                    break;
+                }
             }
         }
-        return $best;
+
+        if ($best !== null) {
+            return $best;
+        }
+        if ($wrapped !== null) {
+            return $wrapped;
+        }
+        // Последний резерв: собрать список из объектов, которые разбираются поодиночке. Живой
+        // ответ 2026-08-20 был списком, где часть строк сломана - терять из-за них остальные
+        // незачем.
+        //
+        // Резерв допустим ТОЛЬКО когда верхний уровень ответа - список. Иначе объект с чужим
+        // ключом («questions» там, где ждали «sections») тоже свернулся бы в список из одной
+        // строки и выдал бы себя за ответ.
+        if ($expect_key !== '' && self::root_char($raw) === '[') {
+            $objects = self::decode_objects($raw);
+            if ($objects) {
+                return [$expect_key => $objects];
+            }
+        }
+        return null;
     }
 
     /**
-     * Ответ, который САМ является списком объектов, без обертки.
+     * Чем открывается ответ по существу: объектом или списком.
      *
-     * @return array|null список или null, если корень ответа - не список
+     * Текст и markdown-фенсы вокруг игнорируются - важна первая структурная скобка.
+     *
+     * @return string '{', '[' или '' если структуры нет вовсе
      */
-    private static function root_list(string $raw): ?array {
-        $trimmed = ltrim($raw);
-        if ($trimmed === '' || $trimmed[0] !== '[') {
-            return null;
+    private static function root_char(string $raw): string {
+        $brace = strpos($raw, '{');
+        $bracket = strpos($raw, '[');
+        if ($brace === false && $bracket === false) {
+            return '';
         }
-        $commas = self::strip_trailing_commas($trimmed);
-        foreach ([$trimmed, $commas, self::fix_key_equals($commas),
-                  self::close_brackets(self::fix_key_equals($commas))] as $variant) {
-            $data = json_decode($variant, true) ?? json_decode(self::fix_escapes($variant), true);
-            if (is_array($data) && $data && array_is_list($data) && is_array($data[0])) {
-                return $data;
-            }
+        if ($brace === false) {
+            return '[';
         }
-        // Список есть, но целиком не разбирается: собираем из тех объектов, что пригодны.
-        $objects = self::decode_objects($trimmed);
-        return $objects ?: null;
+        if ($bracket === false) {
+            return '{';
+        }
+        return $bracket < $brace ? '[' : '{';
     }
 
     /**
-     * Объекты верхнего уровня, разобранные ПООДИНОЧКЕ; битые пропускаются.
+     * Прочтения кандидата по возрастанию тяжести порчи. Первое удавшееся и есть наименее
+     * покалеченное прочтение.
+     *
+     * @return string[]
+     */
+    private static function variants(string $candidate): array {
+        $commas = self::strip_trailing_commas($candidate);
+        return [
+            $candidate,
+            $commas,
+            self::fix_key_equals($commas),
+            self::close_brackets(self::fix_key_equals($commas)),
+        ];
+    }
+
+    /**
+     * Объекты, разобранные ПООДИНОЧКЕ; битые пропускаются.
+     *
+     * Каждый кусок читается той же лестницей прочтений, что и целый ответ: сырой кусок идет
+     * первым. Безусловная починка портила бы здоровые объекты - значение вида «solve x=5»
+     * регулярка пары через равно принимает за ключ и делает объект невалидным.
      *
      * @return array список ассоциативных массивов
      */
-    public static function decode_objects(string $raw): array {
+    private static function decode_objects(string $raw): array {
         $out = [];
         $len = strlen($raw);
-        for ($i = 0; $i < $len; $i++) {
+        $starts = 0;
+        for ($i = 0; $i < $len && $starts < self::MAX_OBJECTS; $i++) {
             if ($raw[$i] !== '{') {
                 continue;
             }
@@ -110,10 +156,14 @@ class json_reply {
             if ($end === null) {
                 break;
             }
+            $starts++;
             $chunk = substr($raw, $i, $end - $i + 1);
-            $data = self::try_decode(self::fix_key_equals(self::strip_trailing_commas($chunk)), '');
-            if ($data !== null) {
-                $out[] = $data;
+            foreach (self::variants($chunk) as $variant) {
+                $data = json_decode($variant, true) ?? json_decode(self::fix_escapes($variant), true);
+                if (is_array($data)) {
+                    $out[] = $data;
+                    break;
+                }
             }
             $i = $end;
         }
@@ -147,17 +197,6 @@ class json_reply {
         return is_array($data[$expect_key] ?? null) ? count($data[$expect_key]) : 1;
     }
 
-    private static function try_decode(string $json, string $expect_key): ?array {
-        if ($json === '') {
-            return null;
-        }
-        $data = json_decode($json, true) ?? json_decode(self::fix_escapes($json), true);
-        if (!is_array($data)) {
-            return null;
-        }
-        return ($expect_key === '' || isset($data[$expect_key])) ? $data : null;
-    }
-
     /**
      * Куски ответа, которые имеет смысл разбирать.
      *
@@ -183,6 +222,12 @@ class json_reply {
             $end = self::balanced_end($raw, $i);
             if ($end !== null) {
                 $out[] = substr($raw, $i, $end - $i + 1);
+                $out[] = trim(substr($raw, $i));
+                // За конец сбалансированного блока: внутренности целого куска отдельными
+                // кандидатами не нужны, а бюджет они съедали. Повторенный восемь раз пример
+                // формата исчерпывал его до того, как дело доходило до настоящего ответа.
+                $i = $end;
+                continue;
             }
             $out[] = trim(substr($raw, $i));
         }

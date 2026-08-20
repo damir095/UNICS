@@ -141,14 +141,56 @@ final class json_reply_test extends \advanced_testcase {
         $this->assertFalse($out['tags'][1]['sure'], 'false обязан остаться ложью, а не строкой');
     }
 
+    public function test_echoed_list_does_not_win_over_wrapped_answer(): void {
+        // Модель повторяет эхом пример формата СПИСКОМ, а потом отвечает как просили. Голый
+        // список - это запасной разбор, и он не должен вытеснять найденный ключ.
+        $raw = '[{"n":1,"code":"пример","sure":true}]' . "\nВот разметка:\n"
+            . '{"tags":[{"n":1,"code":"1.1","sure":true},{"n":2,"code":"2.1","sure":false}]}';
+        $out = json_reply::decode($raw, 'tags');
+        $this->assertNotNull($out);
+        $this->assertSame(['1.1', '2.1'], array_column($out['tags'], 'code'));
+    }
+
+    public function test_bare_list_behind_prefix_and_fence(): void {
+        // Список не обязан стоять первым символом: перед ним бывает и текст, и markdown-фенс,
+        // хотя промт просит без них.
+        $list = '[{"n":1,"code":"1.1","sure":true}]';
+        foreach (["Вот разметка:\n" . $list, "```json\n" . $list . "\n```"] as $raw) {
+            $out = json_reply::decode($raw, 'tags');
+            $this->assertNotNull($out, 'список за префиксом обязан разбираться');
+            $this->assertSame('1.1', $out['tags'][0]['code']);
+        }
+    }
+
+    public function test_many_bracket_starts_do_not_exhaust_the_budget(): void {
+        // Пример формата, повторенный много раз, не должен съедать бюджет кандидатов до того,
+        // как дело дойдет до настоящего ответа.
+        $echo = '';
+        for ($i = 0; $i < 8; $i++) {
+            $echo .= '[{"n":' . $i . ',"code":"пример"}] ';
+        }
+        $out = json_reply::decode('Формат: ' . $echo . "\nОтвет: "
+            . '{"tags":[{"n":1,"code":"1.1","sure":true}]}', 'tags');
+        $this->assertNotNull($out);
+        $this->assertSame('1.1', $out['tags'][0]['code']);
+    }
+
+    public function test_value_with_equals_sign_survives(): void {
+        // «solve x=5» - законное значение, а не пара через равно: чинить его нельзя.
+        $raw = '[{"n":1,"code":"1.1","text":"solve x=5 for x"},{"oops":,}]';
+        $out = json_reply::decode($raw, 'tags');
+        $this->assertNotNull($out, 'битая строка не повод терять здоровую');
+        $this->assertSame('solve x=5 for x', $out['tags'][0]['text']);
+    }
+
     public function test_broken_element_does_not_kill_the_whole_list(): void {
         // Целиком список не декодируется, но девять строк из десяти пригодны.
         $raw = '[{"n":1,"code":"1.1","sure":true},{"n":2,"code":,,,},{"n":3,"code":"2.1","sure":false}]';
         $out = json_reply::decode($raw, 'tags');
         $this->assertNotNull($out, 'одна битая строка не повод терять остальные');
-        $codes = array_column($out['tags'], 'code');
-        $this->assertContains('1.1', $codes);
-        $this->assertContains('2.1', $codes);
+        // Считаем ИМЕННО состав: без этого тест зеленый и когда в список попали лишние
+        // объекты - на этом ревью поймало двойную обертку.
+        $this->assertSame(['1.1', '2.1'], array_column($out['tags'], 'code'));
     }
 
     public function test_garbage_returns_null(): void {
