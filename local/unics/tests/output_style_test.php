@@ -182,4 +182,21 @@ final class output_style_test extends \advanced_testcase {
 
         $this->assertSame('Вулкан - это гора.', $out);
     }
+    public function test_strip_math_markup_turns_latex_fraction_into_text(): void {
+        // Живой ответ 2026-08-20: модель прислала LaTeX, хотя промт его запрещает.
+        $this->assertSame('Сложите 4/7 и 3/7',
+            \local_unics\ai\output_style::strip_math_markup(
+                'Сложите $ \frac{4}{7} $ и $ \frac{3}{7} $'));
+    }
+
+    public function test_strip_math_markup_handles_operations_and_delimiters(): void {
+        $this->assertSame('2 × 3 и 8 : 2',
+            \local_unics\ai\output_style::strip_math_markup(
+                '\(2 \cdot 3\) и \[8 \div 2\]'));
+    }
+
+    public function test_strip_math_markup_leaves_plain_text_alone(): void {
+        $this->assertSame('Сколько будет 2/5 + 1/5?',
+            \local_unics\ai\output_style::strip_math_markup('Сколько будет 2/5 + 1/5?'));
+    }
 }

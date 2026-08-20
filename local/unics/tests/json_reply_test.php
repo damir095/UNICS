@@ -193,6 +193,15 @@ final class json_reply_test extends \advanced_testcase {
         $this->assertSame(['1.1', '2.1'], array_column($out['tags'], 'code'));
     }
 
+    public function test_latex_command_survives_decoding(): void {
+        // «\f» - законный form feed в JSON, поэтому «\frac» декодер съедал до «rac», и в базе
+        // оказывалось «$ rac{4}{7} $». В учебном тексте form feed не встречается, а «\frac»
+        // встречается постоянно.
+        $out = json_reply::decode('{"questions":[{"text":"Сложите \frac{4}{7}"}]}', 'questions');
+        $this->assertNotNull($out);
+        $this->assertStringContainsString('frac', $out['questions'][0]['text']);
+    }
+
     public function test_garbage_returns_null(): void {
         $this->assertNull(json_reply::decode('Извините, не могу помочь.', 'sections'));
     }

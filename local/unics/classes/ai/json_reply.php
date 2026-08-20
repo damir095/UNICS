@@ -126,8 +126,13 @@ class json_reply {
      * @return string[]
      */
     private static function variants(string $candidate): array {
-        $commas = self::strip_trailing_commas($candidate);
+        // Экранирование чинится ПЕРВЫМ, до сырого прочтения: «\frac» дает валидный JSON сам по
+        // себе (там законный form feed), поэтому сырое прочтение удавалось и молча съедало
+        // начало команды. Сырой кандидат идет вторым - на случай, если починка что-то испортит.
+        $escaped = self::fix_escapes($candidate);
+        $commas = self::strip_trailing_commas($escaped);
         return [
+            $escaped,
             $candidate,
             $commas,
             self::fix_key_equals($commas),
@@ -288,7 +293,10 @@ class json_reply {
     /** Экранировать одиночную обратную косую, оставив законные последовательности. */
     private static function fix_escapes(string $s): string {
         return preg_replace_callback('/\\\\(.)/u', static function (array $m): string {
-            return in_array($m[1], ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'], true)
+            // «f» и «b» из списка исключены намеренно: это начало «\frac» и «\binom», а form
+            // feed и backspace в учебном тексте не встречаются. Пока они считались законными,
+            // декодер съедал «\frac» до «rac», и в базе оказывалось «$ rac{4}{7} $».
+            return in_array($m[1], ['"', '\\', '/', 'n', 'r', 't', 'u'], true)
                 ? $m[0] : '\\\\' . $m[1];
         }, $s) ?? $s;
     }
