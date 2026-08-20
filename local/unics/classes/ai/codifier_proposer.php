@@ -28,6 +28,9 @@ class codifier_proposer {
     /** Сколько раз просить структуру, если ответ не разобрался. */
     public const PARSE_ATTEMPTS = 2;
 
+    /** Ожидание лока на кодификатор при записи, секунды. */
+    const LOCK_TIMEOUT = 5;
+
     /** @var ai_generator генератор; внедряется конструктором - шов для тестов. */
     private ai_generator $gen;
 
@@ -40,7 +43,7 @@ class codifier_proposer {
      *
      * @param array $existing названия элементов, которые уже есть (чтобы модель не повторялась)
      */
-    public function build_prompt(string $subject, int $class_number, int $sections, int $per_section,
+    public static function build_prompt(string $subject, int $class_number, int $sections, int $per_section,
                                  string $extra = '', array $existing = []): string {
         $existing_block = '';
         if ($existing) {
@@ -84,7 +87,7 @@ class codifier_proposer {
      */
     public function propose(string $subject, int $class_number, int $sections, int $per_section,
                             string $extra = '', array $existing = []): array {
-        $prompt = $this->build_prompt($subject, $class_number, $sections, $per_section, $extra, $existing);
+        $prompt = self::build_prompt($subject, $class_number, $sections, $per_section, $extra, $existing);
         // Две попытки: порча разметки у модели случайна, и второй ответ на тот же промт обычно
         // приходит целым. Отказ модели сюда не долетает - generate_text бросает раньше и сам
         // уже отработал свой повтор.
@@ -142,7 +145,7 @@ class codifier_proposer {
         }
         if (!$out) {
             throw new \moodle_exception('generalexceptionmessage', 'error', '',
-                'ИИ вернул некорректную структуру кодификатора. ' . self::head_and_tail($raw));
+                'ИИ вернул некорректную структуру кодификатора. ' . json_reply::head_and_tail($raw));
         }
         return $out;
     }
@@ -262,22 +265,72 @@ class codifier_proposer {
                        'description' => self::str_of($sec['description'] ?? ''), 'topics' => $topics];
         }
 
-        self::assert_codes_free($codifier_id, $rows);
+        self::assert_topic_codes_match_sections($rows);
 
-        $created = 0;
-        $tx = $DB->start_delegated_transaction();
+        // Проверка занятости и запись под ОДНИМ локом: между чтением занятых кодов и вставкой
+        // соседняя вкладка успела бы вставить свои, и оба предложения прошли бы проверку. Тот же
+        // класс гонки, что закрывали бронью мест в пуле заданий ([[item-pool-reservation-design]]).
+        $lock = \core\lock\lock_config::get_lock_factory('local_unics_codifier')
+            ->get_lock('codifier_' . $codifier_id, self::LOCK_TIMEOUT);
+        if (!$lock) {
+            throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                'Кодификатор сейчас изменяет кто-то еще. Повторите через несколько секунд.');
+        }
+        try {
+            self::assert_codes_free($codifier_id, $rows);
+
+            $created = 0;
+            $tx = $DB->start_delegated_transaction();
+            try {
+                foreach ($rows as $r) {
+                    $sid = \local_unics\codifier_manager::add_element($codifier_id, null,
+                        $r['code'], $r['title'], $r['description'] !== '' ? $r['description'] : null);
+                    $created++;
+                    foreach ($r['topics'] as $t) {
+                        \local_unics\codifier_manager::add_element($codifier_id, $sid,
+                            $t['code'], $t['title'], $t['description'] !== '' ? $t['description'] : null);
+                        $created++;
+                    }
+                }
+                $tx->allow_commit();
+            } catch (\Exception $e) {
+                // Без явного отката транзакция остается открытой до конца запроса, и КАЖДАЯ
+                // последующая запись в этом запросе молча пропадает при разборе соединения.
+                // Вызывающий ловит moodle_exception, а dml_exception - ее наследник.
+                $tx->rollback($e);
+            }
+            return $created;
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * Код темы обязан начинаться с кода своего раздела.
+     *
+     * Иначе методист, поправивший на предпросмотре только код раздела (было 3, стало 7), получит
+     * раздел «7» с темами «3.1» и «3.2»: в базе parent_id верный, но `import_from_rows` выводит
+     * родителя ИЗ КОДА, отрезая хвост после точки. На первом же экспорте с обратным импортом
+     * такие темы уедут под чужой раздел или пропадут как висячие.
+     *
+     * @throws \moodle_exception
+     */
+    private static function assert_topic_codes_match_sections(array $rows): void {
         foreach ($rows as $r) {
-            $sid = \local_unics\codifier_manager::add_element($codifier_id, null,
-                $r['code'], $r['title'], $r['description'] !== '' ? $r['description'] : null);
-            $created++;
+            $scode = (string)$r['code'];
+            if ($scode === '') {
+                continue;
+            }
             foreach ($r['topics'] as $t) {
-                \local_unics\codifier_manager::add_element($codifier_id, $sid,
-                    $t['code'], $t['title'], $t['description'] !== '' ? $t['description'] : null);
-                $created++;
+                $tcode = (string)$t['code'];
+                if ($tcode === '' || strpos($tcode, $scode . '.') === 0) {
+                    continue;
+                }
+                throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                    'Код темы «' . $tcode . '» не принадлежит разделу «' . $scode
+                    . '»: код темы должен начинаться с кода раздела и точки.');
             }
         }
-        $tx->allow_commit();
-        return $created;
     }
 
     /**
@@ -312,18 +365,4 @@ class codifier_proposer {
         return is_scalar($v) ? trim((string)$v) : '';
     }
 
-    /**
-     * Начало и хвост ответа для сообщения об ошибке.
-     *
-     * Только начало не годится: 2026-08-20 живой заход показал первые 300 символов, и по ним
-     * нельзя было отличить обрыв ответа от порчи разметки - причина всегда в конце.
-     */
-    private static function head_and_tail(string $raw, int $len = 200): string {
-        $raw = trim($raw);
-        if (mb_strlen($raw) <= $len * 2) {
-            return 'Ответ: ' . $raw;
-        }
-        return 'Начало ответа: ' . mb_substr($raw, 0, $len)
-            . ' [...] Конец ответа: ' . mb_substr($raw, -$len);
-    }
 }

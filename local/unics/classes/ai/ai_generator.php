@@ -729,7 +729,10 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         }
 
         if (empty($result)) {
-            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'ИИ вернул некорректный формат теста: ' . mb_substr($raw, 0, 300));
+            // Начало И хвост: по одному началу нельзя отличить обрыв ответа от порчи разметки,
+            // а причина всегда в конце ([[codifier-ai-proposal-design]], раздел 11).
+            throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                'ИИ вернул некорректный формат теста. ' . json_reply::head_and_tail($raw));
         }
 
         return $result;

@@ -76,6 +76,53 @@ final class json_reply_test extends \advanced_testcase {
         $this->assertSame('Сложение дробей', $out['sections'][0]['topics'][0]['title']);
     }
 
+    public function test_echoed_format_does_not_win_over_real_answer(): void {
+        // Модель повторяет пример формата из промта, а потом отвечает. Скобки есть и до, и
+        // после: прежний разбор брал кусок «от первой скобки до последней» и получал мусор.
+        $raw = 'Формат: {"items":[{"section":"пример","topic":"пример"}]}' . "\n\n"
+            . '{"items":[{"section":"Дроби","topic":"Сравнение"},{"section":"Дроби","topic":"Сложение"}]}';
+        $out = json_reply::decode($raw, 'items');
+        $this->assertNotNull($out);
+        $this->assertCount(2, $out['items'], 'выбран обязан быть содержательный ответ, а не эхо примера');
+        $this->assertSame('Дроби', $out['items'][0]['section']);
+    }
+
+    public function test_braces_after_json_do_not_break_it(): void {
+        $raw = '{"items":[{"section":"Дроби","topic":"Сравнение"}]}' . "\n"
+            . 'Если нужен другой вид: {"sections": [...]}';
+        $out = json_reply::decode($raw, 'items');
+        $this->assertNotNull($out);
+        $this->assertSame('Дроби', $out['items'][0]['section']);
+    }
+
+    public function test_truncation_right_after_backslash_is_recovered(): void {
+        // Обрыв сразу за одиночной косой: приписанная кавычка становится экранированной,
+        // и строка не закрывается вовсе.
+        $raw = '{"items":[{"section":"А","topic":"дробь k' . "\\";
+        $out = json_reply::decode($raw, 'items');
+        $this->assertNotNull($out, 'висячая косая обязана отбрасываться перед закрытием строки');
+        $this->assertSame('А', $out['items'][0]['section']);
+    }
+
+    public function test_broken_utf8_returns_null_without_php_warnings(): void {
+        // Невалидный байт роняет /u-регулярку: без защиты preg_replace возвращает null,
+        // и восстановление молча собирало строку из одних скобок.
+        $raw = "{\"items\":[{\"section\":\"\xC3\x28\",\"topic\":\"т";
+        $this->assertNull(json_reply::decode($raw, 'items'));
+    }
+
+    public function test_head_and_tail_shows_both_ends(): void {
+        $raw = str_repeat('а', 300) . 'ХВОСТ';
+        $out = json_reply::head_and_tail($raw, 50);
+        $this->assertStringContainsString('ХВОСТ', $out, 'причина всегда в конце ответа');
+        $this->assertStringContainsString(str_repeat('а', 50), $out);
+        $this->assertLessThan(mb_strlen($raw), mb_strlen($out));
+    }
+
+    public function test_head_and_tail_leaves_short_answer_whole(): void {
+        $this->assertStringContainsString('короткий ответ', json_reply::head_and_tail('короткий ответ', 50));
+    }
+
     public function test_garbage_returns_null(): void {
         $this->assertNull(json_reply::decode('Извините, не могу помочь.', 'sections'));
     }

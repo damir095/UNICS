@@ -74,7 +74,10 @@ final class codifier_apply_test extends \advanced_testcase {
     public function test_apply_refuses_duplicate_inside_batch(): void {
         global $DB;
         $sections = $this->two_sections();
-        $sections[1]['code'] = '1'; // методист поправил код руками и столкнул два раздела
+        // Методист поправил код руками и столкнул два раздела. Коды тем правит следом, иначе
+        // сработает более ранняя проверка «тема принадлежит своему разделу».
+        $sections[1]['code'] = '1';
+        $sections[1]['topics'][0]['code'] = '1.9';
         try {
             codifier_proposer::apply($this->codifier, $sections);
             $this->fail('дубликат внутри пачки обязан отклонять весь шаг');
@@ -94,6 +97,31 @@ final class codifier_apply_test extends \advanced_testcase {
         $codes = codifier_proposer::existing_codes($this->codifier);
         sort($codes);
         $this->assertSame(['1', '1.1'], $codes);
+    }
+
+    public function test_apply_refuses_topic_code_that_left_its_section(): void {
+        global $DB;
+        $sections = $this->two_sections();
+        $sections[0]['code'] = '7'; // методист сдвинул раздел, коды тем остались от прежнего
+        try {
+            codifier_proposer::apply($this->codifier, $sections);
+            $this->fail('код темы обязан принадлежать своему разделу');
+        } catch (\moodle_exception $e) {
+            $this->assertStringContainsString('не принадлежит разделу', $e->getMessage());
+        }
+        $this->assertSame(0, $DB->count_records('unics_codifier_element',
+            ['codifier_id' => $this->codifier]));
+    }
+
+    public function test_apply_allows_section_code_edited_together_with_topics(): void {
+        $sections = $this->two_sections();
+        $sections[0]['code'] = '7';
+        $sections[0]['topics'][0]['code'] = '7.1';
+        $sections[0]['topics'][1]['code'] = '7.2';
+        $this->assertSame(5, codifier_proposer::apply($this->codifier, $sections));
+        $codes = codifier_proposer::existing_codes($this->codifier);
+        sort($codes);
+        $this->assertSame(['2', '2.1', '7', '7.1', '7.2'], $codes);
     }
 
     public function test_existing_titles_feed_the_prompt(): void {

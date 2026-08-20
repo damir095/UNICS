@@ -109,8 +109,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $sections_n   = min(codifier_proposer::MAX_SECTIONS, max(3, $sections_n));
     $topics_n     = min(codifier_proposer::MAX_TOPICS, max(2, $topics_n));
 
+    // Кнопка «Предложить заново» на предпросмотре перебивает скрытое action=apply.
+    if (optional_param('regenerate', 0, PARAM_INT)) {
+        $action = 'propose';
+    }
+
     if ($action === 'propose') {
-        \core_php_time_limit::raise(180); // запрос к модели до 60 секунд плюс повтор при отказе
+        // Худший случай: PARSE_ATTEMPTS попыток, в каждой до двух обращений к модели по 60 секунд
+        // плюс авторизация. 180 секунд не хватало, и методист получал не сообщение, а обрыв.
+        \core_php_time_limit::raise(codifier_proposer::PARSE_ATTEMPTS * 2 * 60 + 60);
         try {
             $parsed = (new codifier_proposer())->propose($subject, $class_number, $sections_n,
                 $topics_n, $extra, codifier_proposer::existing_titles((int)$codifier->id));
@@ -144,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 echo $OUTPUT->header();
 echo $OUTPUT->heading('Структура кодификатора: предложение ИИ');
 if ($error !== '') {
-    echo $OUTPUT->notification($error, \core\output\notification::NOTIFY_ERROR);
+    echo $OUTPUT->notification(s($error), \core\output\notification::NOTIFY_ERROR);
 }
 
 if (!$plan) {
@@ -184,9 +191,24 @@ if (!$plan) {
 echo html_writer::tag('p', 'Проверьте предложенное, поправьте названия и коды, снимите лишнее. '
     . 'В кодификатор попадет только отмеченное.', ['class' => 'text-muted']);
 
-$field = function (string $name, string $value, string $placeholder, int $size) {
+// Недобор разделов методист иначе не отличит от «модель так решила»: ответ мог оборваться на
+// лимите токенов, и восстановление вернуло то, что успело прийти целым.
+if ($action === 'propose' && count($plan) < $sections_n) {
+    echo $OUTPUT->notification('Модель вернула разделов: ' . count($plan) . ' из '
+        . $sections_n . ' запрошенных. Можно попросить заново или добавить недостающее руками.',
+        \core\output\notification::NOTIFY_WARNING);
+}
+
+// Каждому полю нужно ДОСТУПНОЕ ИМЯ: placeholder именем не считается и исчезает, как только в
+// поле появляется значение. Без него читалка объявляет «поле ввода» на каждой из десятков строк,
+// а методист именно здесь решает, что попадет в кодификатор (WCAG 2.2 AA, 4.1.2).
+$field = function (string $name, string $value, string $label, int $size) {
     return html_writer::empty_tag('input', ['type' => 'text', 'name' => $name, 'value' => $value,
-        'class' => 'form-control', 'placeholder' => $placeholder, 'size' => $size]);
+        'class' => 'form-control', 'placeholder' => $label, 'aria-label' => $label, 'size' => $size]);
+};
+$takebox = function (string $name, string $label) {
+    return html_writer::empty_tag('input', ['type' => 'checkbox', 'name' => $name, 'value' => 1,
+        'checked' => 'checked', 'aria-label' => $label]);
 };
 echo html_writer::start_tag('form', ['method' => 'post']);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
@@ -210,30 +232,31 @@ foreach ($plan as $i => $sec) {
         ? html_writer::div('нумерация сдвинута: занятые коды пропущены', 'small text-muted')
         : '';
     echo html_writer::tag('tr',
-        html_writer::tag('td', html_writer::empty_tag('input',
-            ['type' => 'checkbox', 'name' => 's_take[' . $i . ']', 'value' => 1, 'checked' => 'checked']))
-        . html_writer::tag('td', $field('s_code[' . $i . ']', s($sec['code']), 'Код', 6) . $note)
-        . html_writer::tag('td', $field('s_title[' . $i . ']', s($sec['title']), 'Название раздела', 40))
-        . html_writer::tag('td', $field('s_desc[' . $i . ']', s($sec['description']), 'Описание', 40)));
+        html_writer::tag('td', $takebox('s_take[' . $i . ']', 'Взять раздел: ' . $sec['title']))
+        . html_writer::tag('td', $field('s_code[' . $i . ']', (string)$sec['code'], 'Код', 6) . $note)
+        . html_writer::tag('td', $field('s_title[' . $i . ']', (string)$sec['title'], 'Название раздела', 40))
+        . html_writer::tag('td', $field('s_desc[' . $i . ']', (string)$sec['description'], 'Описание', 40)));
     foreach ($sec['topics'] as $j => $t) {
         $key = $i . '_' . $j;
         echo html_writer::tag('tr',
-            html_writer::tag('td', html_writer::empty_tag('input',
-                ['type' => 'checkbox', 'name' => 't_take[' . $key . ']', 'value' => 1,
-                 'checked' => 'checked']))
-            . html_writer::tag('td', $field('t_code[' . $key . ']', s($t['code']), 'Код', 6),
+            html_writer::tag('td', $takebox('t_take[' . $key . ']', 'Взять тему: ' . $t['title']))
+            . html_writer::tag('td', $field('t_code[' . $key . ']', (string)$t['code'], 'Код', 6),
                 ['class' => 'pl-4'])
-            . html_writer::tag('td', $field('t_title[' . $key . ']', s($t['title']), 'Название темы', 40))
-            . html_writer::tag('td', $field('t_desc[' . $key . ']', s($t['description']), 'Описание', 40)));
+            . html_writer::tag('td', $field('t_title[' . $key . ']', (string)$t['title'], 'Название темы', 40))
+            . html_writer::tag('td', $field('t_desc[' . $key . ']', (string)$t['description'], 'Описание', 40)));
     }
 }
 echo html_writer::end_tag('tbody');
 echo html_writer::end_tag('table');
 echo html_writer::end_div();
+// Действие по умолчанию задано СКРЫТЫМ полем, а не только значением кнопки: отправка без
+// значения кнопки (неявная отправка, расширение браузера, вспомогательная технология) молча
+// теряла бы все правки методиста, потому что обе ветки POST пропускались.
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'apply']);
 echo html_writer::tag('button', 'Добавить отмеченные',
-    ['type' => 'submit', 'name' => 'action', 'value' => 'apply', 'class' => 'btn btn-success mr-2']);
+    ['type' => 'submit', 'class' => 'btn btn-success mr-2']);
 echo html_writer::tag('button', 'Предложить заново',
-    ['type' => 'submit', 'name' => 'action', 'value' => 'propose',
+    ['type' => 'submit', 'name' => 'regenerate', 'value' => 1,
      'class' => 'btn btn-outline-secondary mr-2']);
 echo html_writer::link($backurl, 'Назад к кодификатору', ['class' => 'btn btn-link']);
 echo html_writer::end_tag('form');
