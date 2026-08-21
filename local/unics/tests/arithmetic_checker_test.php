@@ -24,6 +24,14 @@ final class arithmetic_checker_test extends \advanced_testcase {
             arithmetic_checker::rational('0.5'), [1, 2]));
     }
 
+    public function test_rational_does_not_glue_mixed_number(): void {
+        // «1 2/63» - смешанное число, а не «12/63». Раньше внутренние пробелы удалялись, и
+        // неверный ключ модели признавался равным правильному ответу (зонд 2026-08-21).
+        $this->assertNull(arithmetic_checker::rational('1 2/63'));
+        $this->assertFalse(arithmetic_checker::equals(
+            arithmetic_checker::rational('1 2/63'), [12, 63]));
+    }
+
     public function test_rational_rejects_words_and_zero_denominator(): void {
         $this->assertNull(arithmetic_checker::rational('не изменится'));
         $this->assertNull(arithmetic_checker::rational('5/0'));
@@ -91,12 +99,12 @@ final class arithmetic_checker_test extends \advanced_testcase {
      */
     private function probe_items(): array {
         return [
-            ['4/7 + 3/7 равно?', ['7/10', '7/49', '7/14', '7/7'], 0, 3],
-            ['Сколько будет 3/10 - 1/10?', ['2/20', '2/10', '4/10', '3/10'], 0, 1],
-            ['Найдите значение 2/5 + 1/5.', ['3/15', '3/5', '2/10', '1/5'], 0, 1],
-            ['Найдите сумму дробей 1/4 + 1/8.', ['3/4', '2/12', '3/8', '1/12'], 0, 2],
-            ['Найдите разность дробей 3/5 - 1/5.', ['1/5', '2/5', '4/5', '2/10'], 0, 1],
-            ['Чему равно 1/2 + 1/4?', ['5/8', '2/6', '3/4', '1/8'], 0, 2],
+            ['4/7 + 3/7 равно?', ['7/10', '7/49', '7/14', '7/7'], 0, 3, 'fixed'],
+            ['Сколько будет 3/10 - 1/10?', ['2/20', '2/10', '4/10', '3/10'], 0, 1, 'fixed'],
+            ['Найдите значение 2/5 + 1/5.', ['3/15', '3/5', '2/10', '1/5'], 0, 1, 'fixed'],
+            ['Найдите сумму дробей 1/4 + 1/8.', ['3/4', '2/12', '3/8', '1/12'], 0, 2, 'fixed'],
+            ['Найдите разность дробей 3/5 - 1/5.', ['1/5', '2/5', '4/5', '2/10'], 0, 1, 'fixed'],
+            ['Чему равно 1/2 + 1/4?', ['5/8', '2/6', '3/4', '1/8'], 0, 2, 'fixed'],
         ];
     }
 
@@ -130,6 +138,104 @@ final class arithmetic_checker_test extends \advanced_testcase {
             ['3/4', '5/4', '1/4', '3/8'], 1, 'x = 1/2 + 1/4 = 2/4 + 1/4 = 3/4');
         $this->assertSame('fixed', $out['verdict']);
         $this->assertSame(0, $out['correct']);
+    }
+
+    // -----------------------------------------------------------------
+    // Словесные формулировки (зонд 2026-08-21, вечер)
+    // -----------------------------------------------------------------
+
+    /**
+     * Девять настоящих промахов зонда: модель формулирует словами, и проверка молчала.
+     *
+     * @return array список [текст, варианты, ключ модели, наш ожидаемый индекс или -1 на drop]
+     */
+    private function word_problems(): array {
+        return [
+            // Умножение словами. Первое задание зонда было ВЕРНЫМ - проверка обязана это
+            // подтвердить, а не переставлять ключ.
+            ['какое число получится, если перемножить дроби 1/3 и 1/5?',
+                ['1/15', '2/8', '1/8', '2/15'], 0, 0, 'ok'],
+            ['найдите произведение дробей 2/3 и 4/5',
+                ['1/3', '8/15', '6/15', '2/15'], 0, 1, 'fixed'],
+            ['сколько будет 4/9 умножить на 3/7?',
+                ['1 2/63', '12/63', '7/16', '1/3'], 0, 1, 'fixed'],
+            ['если площадь прямоугольника равна произведению 3/4 и 5/6, чему она равна?',
+                ['5/24', '15/24', '8/10', '2/24'], 0, 1, 'fixed'],
+            // Сравнение с ответом-неравенством.
+            ['Сравните дроби 2/3 и 5/6.',
+                ['2/3 = 5/6', '2/3 < 5/6', '2/3 > 5/6', 'нельзя сравнить'], 0, 1, 'fixed'],
+            ['Сравните дроби 3/4 и 7/8.',
+                ['3/4 = 7/8', '3/4 > 7/8', '3/4 < 7/8', 'равны'], 0, 2, 'fixed'],
+            // Сравнение с ответом-дробью.
+            ['Какая дробь больше: 7/10 или 3/5?',
+                ['3/5', '7/10', 'они равны', 'нельзя сказать'], 0, 1, 'fixed'],
+            // Общий знаменатель.
+            ['Найдите общий знаменатель для дробей 2/3 и 4/5.',
+                ['10', '15', '8', '12'], 0, 1, 'fixed'],
+            ['Найдите наименьший общий знаменатель для дробей 5/6 и 7/9.',
+                ['36', '18', '54', '15'], 0, 1, 'fixed'],
+        ];
+    }
+
+    public function test_verdict_catches_every_probe_word_problem(): void {
+        foreach ($this->word_problems() as $i => list($text, $answers, $correct, $expected, $verdict)) {
+            $out = arithmetic_checker::verdict($text, $answers, $correct);
+            $this->assertSame($verdict, $out['verdict'], 'промах зонда #' . $i . ': ' . $text);
+            $this->assertSame($expected, $out['correct'], 'промах зонда #' . $i . ': ' . $text);
+        }
+    }
+
+    public function test_verdict_detects_comparison_by_answer_shape(): void {
+        // Живая генерация 2026-08-21: «Найдите верное утверждение: 5/9 и 5/8» - слова-подсказки
+        // нет вовсе, зато все варианты являются неравенствами.
+        $out = arithmetic_checker::verdict('Найдите верное утверждение: 5/9 и 5/8',
+            ['5/9 > 5/8', '5/9 < 5/8', '5/9 = 5/8', 'нельзя сравнить'], 2);
+        $this->assertSame('fixed', $out['verdict']);
+        $this->assertSame(1, $out['correct']);
+    }
+
+    public function test_verdict_prefers_inequality_over_picking_a_fraction(): void {
+        // «Выберите большую» с вариантами-неравенствами - все равно вопрос про знак.
+        $out = arithmetic_checker::verdict('Даны дроби 2/3 и 3/4, выберите большую:',
+            ['2/3 > 3/4', '2/3 < 3/4', '2/3 = 3/4', 'нельзя сравнить'], 2);
+        $this->assertSame('fixed', $out['verdict']);
+        $this->assertSame(1, $out['correct']);
+    }
+
+    public function test_verdict_keeps_silent_on_negated_comparison(): void {
+        // «Укажите НЕВЕРНОЕ сравнение»: ключом стоит заведомо ложное утверждение, и правка
+        // испортила бы верный ключ. Живая генерация 2026-08-21 такой вопрос выдала.
+        $out = arithmetic_checker::verdict('Укажите неверное сравнение дробей 2/3 и 3/4:',
+            ['2/3 < 3/4', '2/3 = 3/4', '2/3 > 3/4', 'нельзя сравнить'], 2);
+        $this->assertSame('unverifiable', $out['verdict']);
+        $this->assertSame(2, $out['correct'], 'ключ не трогаем');
+    }
+
+    public function test_verdict_takes_pair_from_answers_when_text_is_crowded(): void {
+        // Модель вкладывает варианты в текст вопроса, и чисел там становится много. Пара берется
+        // из вариантов - все они сравнивают одну и ту же пару.
+        $text = 'Найдите верное утверждение: 1/3 ____ 1/4. А) 1/3 > 1/4 Б) 1/3 < 1/4 В) 1/3 = 1/4';
+        $out = arithmetic_checker::verdict($text,
+            ['А) 1/3 > 1/4', 'Б) 1/3 < 1/4', 'В) 1/3 = 1/4', 'Г) нельзя сравнить'], 1);
+        $this->assertSame('fixed', $out['verdict']);
+        $this->assertSame(0, $out['correct'], '1/3 больше 1/4');
+    }
+
+    public function test_verdict_understands_order_of_operands(): void {
+        // «Из A вычесть B» и «A разделить на B»: порядок решает.
+        $this->assertSame(0, arithmetic_checker::verdict('Из 3/4 вычтите 1/4.',
+            ['1/2', '-1/2', '1', '4/4'], 1)['correct']);
+        $this->assertSame(0, arithmetic_checker::verdict('Разделите 1/2 на 1/4.',
+            ['2', '1/8', '1/2', '4'], 1)['correct']);
+    }
+
+    public function test_verdict_keeps_silent_on_words_without_numbers(): void {
+        // «Сумма впечатлений» и «сравните характеры» - не арифметика.
+        $this->assertSame('unverifiable', arithmetic_checker::verdict(
+            'Сравните характеры двух героев рассказа.',
+            ['похожи', 'противоположны', 'не ясно', 'нет ответа'], 0)['verdict']);
+        $this->assertSame('unverifiable', arithmetic_checker::verdict(
+            'Какова сумма впечатлений от поездки?', ['большая', 'малая'], 0)['verdict']);
     }
 
     // -----------------------------------------------------------------
