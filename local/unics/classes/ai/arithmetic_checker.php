@@ -48,6 +48,20 @@ class arithmetic_checker {
         if ($s === '') {
             return null;
         }
+        // Смешанное число «1 1/2» - это три вторых, а не «11/2». Раньше внутренние пробелы
+        // удалялись, и неверный ключ признавался равным правильному ответу; потом пробелы
+        // перестали удаляться вовсе, и годные ответы «3 / 8» и «1 1/2» стали нечитаемыми.
+        if (preg_match('~^(-?\d+)\s+(\d+)\s*/\s*(\d+)$~u', $s, $m)) {
+            $den = (int)$m[3];
+            if ($den === 0) {
+                return null;
+            }
+            $whole = (int)$m[1];
+            $sign = $whole < 0 ? -1 : 1;
+            return [$sign * (abs($whole) * $den + (int)$m[2]), $den];
+        }
+        // Пробелы вокруг косой не меняют дроби: «3 / 8» это те же три восьмых.
+        $s = preg_replace('~\s*/\s*~u', '/', $s) ?? $s;
         if (preg_match('/^-?\d+\/\d+$/', $s)) {
             list($n, $d) = explode('/', $s);
             return (int)$d === 0 ? null : [(int)$n, (int)$d];
@@ -90,7 +104,7 @@ class arithmetic_checker {
             return $special;
         }
 
-        $value = self::sole_expression($text) ?? self::worded($text);
+        $value = self::sole_expression($text);
         if ($value === null && $solution !== '') {
             // Решение модели - цепочка вида «3 + 4 = 7, периметр 7 × 2 = 14». Ответ дает
             // ПОСЛЕДНИЙ вычислимый шаг: на первом стоит промежуточный результат, и ключ уезжал
@@ -101,6 +115,11 @@ class arithmetic_checker {
                     break;
                 }
             }
+        }
+        // Словесное действие - последний и самый шаткий источник: слово в тексте может значить
+        // что угодно («сложная задача»), поэтому явное решение модели идет вперед него.
+        if ($value === null) {
+            $value = self::worded($text);
         }
         if ($value === null) {
             return ['verdict' => 'unverifiable', 'correct' => $correct];
@@ -144,11 +163,18 @@ class arithmetic_checker {
      * девяти, потому что искала только «операнд знак операнд».
      */
     private const WORD_OPS = [
-        'произведени' => '*', 'перемнож' => '*', 'умнож' => '*',
-        'сумм' => '+', 'слож' => '+', 'прибав' => '+',
-        'разност' => '-', 'вычест' => '-', 'вычт' => '-', 'отним' => '-',
-        'частно' => '/', 'раздел' => '/', 'делен' => '/',
+        // Шаблоны, а не голые подстроки: «раздел» встречается в «в разделе учебника», «частно»
+        // в «в частности», «слож» в «сложная задача». На всех трех верификатор сочинял значение
+        // и портил верный ключ (найдено ревью 2026-08-21).
+        '~произведени|перемнож|умнож(?:ить|им|ается|ением)~u' => '*',
+        '~сумм[аеуы]|сложит|сложени|прибав~u' => '+',
+        '~разност|вычест|вычти|вычтите|отним~u' => '-',
+        '~частное|частного|раздели|делени~u' => '/',
     ];
+
+    /** Слова, после которых вопрос спрашивает ОБРАТНОЕ: ключ там заведомо ложный. */
+    private const NEGATIONS = ['неверн', 'не верн', 'ошибочн', 'ложн', 'не является',
+        'не соответств', 'кроме', 'исключен'];
 
     /**
      * Класс знаков, которые можно писать слитно с числами: «1/3+1/6» модель пишет постоянно.
@@ -184,88 +210,104 @@ class arithmetic_checker {
      */
     private static function compare_verdict(string $text, array $answers, int $correct): ?array {
         $lower = mb_strtolower($text);
-        $asks_more = mb_strpos($lower, 'больше') !== false || mb_strpos($lower, 'больш') !== false;
-        $asks_less = mb_strpos($lower, 'меньше') !== false || mb_strpos($lower, 'меньш') !== false;
-        // Вопрос опознается и по ФОРМЕ ВАРИАНТОВ, а не только по словам: живая генерация
-        // 2026-08-21 дала «Найдите верное утверждение: 5/9 и 5/8» - слова-подсказки нет вовсе,
-        // зато все варианты являются неравенствами.
-        $by_answers = self::inequality_answers(array_values($answers)) >= 2;
-        if (mb_strpos($lower, 'сравн') === false && !$asks_more && !$asks_less && !$by_answers) {
+        $answers = array_values($answers);
+        // «Наибольший общий делитель» содержит «больш», но сравнением не является: слово должно
+        // стоять отдельно (ревью 2026-08-21).
+        // «Насколько 5/6 больше 1/6» спрашивает РАЗНОСТЬ, а не какая дробь больше: без
+        // этой проверки ключ уезжал с верного ответа на сам операнд (ревью 2026-08-21).
+        $about_difference = (bool)preg_match('~на\s?сколько|насколько~u', $lower);
+        $asks_more = !$about_difference && mb_strpos($lower, 'больше') !== false;
+        $asks_less = !$about_difference && mb_strpos($lower, 'меньше') !== false;
+        // Вопрос опознается и по ФОРМЕ ВАРИАНТОВ: живая генерация дала «Найдите верное
+        // утверждение: 5/9 и 5/8», где слова-подсказки нет вовсе, зато варианты - неравенства.
+        $inequalities = self::inequality_answers($answers);
+        if (mb_strpos($lower, 'сравн') === false && !$asks_more && !$asks_less && $inequalities < 2) {
             return null;
         }
-        // Вопрос с отрицанием спрашивает ОБРАТНОЕ: «укажите неверное сравнение 2/3 и 3/4» -
-        // ключом там стоит заведомо ложное утверждение, и наша правка испортила бы верный ключ.
-        // Живая генерация 2026-08-21 такой вопрос выдала.
-        foreach (['неверн', 'не верн', 'ошибочн', 'не является', 'кроме'] as $negation) {
+        foreach (self::NEGATIONS as $negation) {
             if (mb_strpos($lower, $negation) !== false) {
-                return null;
+                return null; // вопрос спрашивает обратное, ключ там заведомо ложный
             }
         }
 
-        // Пару чисел берем из ВАРИАНТОВ, если в тексте их больше двух: модель порой вкладывает
-        // варианты прямо в текст вопроса, и тогда счет чисел в нем ничего не значит.
-        list($a, $b) = self::compared_pair($text, array_values($answers));
+        if ($inequalities >= 2) {
+            // Каждое неравенство проверяется САМО ПО СЕБЕ, а не по порядку чисел в вопросе:
+            // «5/6 > 2/3» истинно независимо от того, как пара названа в тексте. Прежний способ
+            // (знак из текста, поиск варианта по знаку) объявлял верным ложное утверждение.
+            return self::pick($answers, $correct, static function (string $answer): bool {
+                return self::inequality_is_true($answer);
+            });
+        }
+
+        // Ответ - сама дробь: большая или меньшая из двух названных в тексте.
+        if (!$asks_more && !$asks_less) {
+            return null;
+        }
+        if (!preg_match_all('~' . self::NUM . '~u', $text, $m) || count($m[0]) !== 2) {
+            return null;
+        }
+        $a = self::rational($m[0][0]);
+        $b = self::rational($m[0][1]);
         if (!$a || !$b) {
             return null;
         }
         $diff = $a[0] * $b[1] - $b[0] * $a[1];
-        $sign = $diff > 0 ? '>' : ($diff < 0 ? '<' : '=');
-
-        $answers = array_values($answers);
-        $want = null;
-        if (($asks_more || $asks_less) && !$by_answers) {
-            // Ответ - сама дробь: большая или меньшая из названных. Но если варианты записаны
-            // неравенствами, спрашивают все равно про знак: «выберите большую» с вариантами
-            // «2/3 > 3/4» и «2/3 < 3/4» - это сравнение, а не выбор дроби.
-            $bigger = $diff > 0 ? $a : $b;
-            $want = $asks_more ? $bigger : ($diff > 0 ? $b : $a);
+        if ($diff === 0) {
+            return null; // значения равны, и защитимого ответа на «какая больше» нет
         }
-        $found = null;
-        foreach ($answers as $i => $answer) {
-            $ok = $want !== null
-                ? self::equals(self::rational((string)$answer), $want)
-                : self::inequality_sign((string)$answer) === $sign;
-            if ($ok) {
-                $found = $i;
-                break;
-            }
-        }
-        if ($found === null) {
-            return null; // ни один вариант не опознан - молчим, а не отбраковываем
-        }
-        return ['verdict' => $found === $correct ? 'ok' : 'fixed', 'correct' => $found];
+        $want = $asks_more ? ($diff > 0 ? $a : $b) : ($diff > 0 ? $b : $a);
+        return self::pick($answers, $correct, static function (string $answer) use ($want): bool {
+            return self::equals(self::rational($answer), $want);
+        });
     }
 
     /**
-     * Пара сравниваемых чисел: из текста, а если там их не ровно два - из вариантов-неравенств.
+     * Выбор варианта с проверкой ключа модели ПЕРВЫМ и молчанием при неоднозначности.
      *
-     * Все варианты обязаны сравнивать ОДНУ И ТУ ЖЕ пару, иначе неизвестно, о чем вопрос.
+     * Общий гейт для распознавателей: без него каждый новый путь заново терял правило «верный
+     * ключ не трогаем» и объявлял исправленным то, что и так сходилось (ревью 2026-08-21).
      *
-     * @return array{0: ?array, 1: ?array}
+     * @param callable $matches проверка одного варианта
+     * @return array|null вердикт или null, если подходящего варианта нет либо их несколько
      */
-    private static function compared_pair(string $text, array $answers): array {
-        if (preg_match_all('~' . self::NUM . '~u', $text, $m) && count($m[0]) === 2) {
-            return [self::rational($m[0][0]), self::rational($m[0][1])];
+    private static function pick(array $answers, int $correct, callable $matches): ?array {
+        if (isset($answers[$correct]) && $matches((string)$answers[$correct])) {
+            return ['verdict' => 'ok', 'correct' => $correct];
         }
-        $pair = null;
-        foreach ($answers as $answer) {
-            if (!preg_match('~(' . self::NUM . ')\s*[<>=]\s*(' . self::NUM . ')~u', (string)$answer, $mm)) {
+        $found = null;
+        foreach ($answers as $i => $answer) {
+            if (!$matches((string)$answer)) {
                 continue;
             }
-            $current = [self::rational($mm[1]), self::rational($mm[2])];
-            if (!$current[0] || !$current[1]) {
-                return [null, null];
+            if ($found !== null) {
+                return null; // подходит больше одного варианта - вопрос неоднозначен
             }
-            if ($pair === null) {
-                $pair = $current;
-                continue;
-            }
-            if (!self::equals($pair[0], $current[0]) || !self::equals($pair[1], $current[1])) {
-                return [null, null]; // варианты про разные пары - не наш случай
-            }
+            $found = $i;
         }
-        return $pair ?? [null, null];
+        return $found === null ? null : ['verdict' => 'fixed', 'correct' => $found];
     }
+
+    /** Истинно ли неравенство, записанное в варианте ответа («5/6 > 2/3»). */
+    private static function inequality_is_true(string $answer): bool {
+        if (!preg_match('~(' . self::NUM . ')\s*([<>=])\s*(' . self::NUM . ')~u', $answer, $m)) {
+            return false;
+        }
+        $a = self::rational($m[1]);
+        $b = self::rational($m[3]);
+        if (!$a || !$b) {
+            return false;
+        }
+        $diff = $a[0] * $b[1] - $b[0] * $a[1];
+        switch ($m[2]) {
+            case '>':
+                return $diff > 0;
+            case '<':
+                return $diff < 0;
+            default:
+                return $diff === 0;
+        }
+    }
+
 
     /** Сколько вариантов записаны неравенствами: по этому и опознается вопрос на сравнение. */
     private static function inequality_answers(array $answers): int {
@@ -309,22 +351,16 @@ class arithmetic_checker {
         $lcm = intdiv($x, self::gcd($x, $y)) * $y;
         $least = mb_strpos($lower, 'наименьш') !== false;
 
-        $found = null;
-        foreach (array_values($answers) as $i => $answer) {
-            $n = self::rational((string)$answer);
-            if (!$n || $n[1] !== 1) {
-                continue; // знаменатель - целое число
-            }
-            $fits = $least ? ($n[0] === $lcm) : ($n[0] > 0 && $n[0] % $x === 0 && $n[0] % $y === 0);
-            if ($fits) {
-                $found = $i;
-                break;
-            }
-        }
-        if ($found === null) {
-            return null;
-        }
-        return ['verdict' => $found === $correct ? 'ok' : 'fixed', 'correct' => $found];
+        // Через общий гейт: ключ модели проверяется первым, а при нескольких годных кратных
+        // («18» и «36» оба общие) верификатор молчит вместо бессмысленной правки.
+        return self::pick(array_values($answers), $correct,
+            static function (string $answer) use ($least, $lcm, $x, $y): bool {
+                $n = self::rational($answer);
+                if (!$n || $n[1] !== 1 || $n[0] <= 0) {
+                    return false; // знаменатель - целое положительное число
+                }
+                return $least ? ($n[0] === $lcm) : ($n[0] % $x === 0 && $n[0] % $y === 0);
+            });
     }
 
     /** Наибольший общий делитель - для наименьшего общего кратного. */
@@ -347,8 +383,8 @@ class arithmetic_checker {
     private static function worded(string $text): ?array {
         $lower = mb_strtolower($text);
         $op = null;
-        foreach (self::WORD_OPS as $word => $sign) {
-            if (mb_strpos($lower, $word) !== false) {
+        foreach (self::WORD_OPS as $pattern => $sign) {
+            if (preg_match($pattern, $lower)) {
                 if ($op !== null && $op !== $sign) {
                     return null; // два разных действия в одном тексте - не наш случай
                 }
@@ -358,14 +394,25 @@ class arithmetic_checker {
         if ($op === null) {
             return null;
         }
-        if (!preg_match_all('~' . self::NUM . '~u', $text, $m) || count($m[0]) !== 2) {
+        if (!preg_match_all('~' . self::NUM . '~u', $text, $m, PREG_OFFSET_CAPTURE)
+                || count($m[0]) !== 2) {
             return null;
         }
-        $left = self::rational($m[0][0]);
-        $right = self::rational($m[0][1]);
-        if (!$left || !$right) {
+        $first = self::rational($m[0][0][0]);
+        $second = self::rational($m[0][1][0]);
+        if (!$first || !$second) {
             return null;
         }
+        // «Вычтите 1/4 из 3/4» и «отнимите 1/4 от 3/4»: уменьшаемое названо ВТОРЫМ, и без этой
+        // проверки верификатор выдавал -1/2 вместо 1/2 (ревью 2026-08-21).
+        // Смещения от preg_match БАЙТОВЫЕ, поэтому режем байтовой substr: mb_substr считает
+        // символы и на кириллице давала кусок не с того места.
+        $between = substr($text, $m[0][0][1] + strlen($m[0][0][0]),
+            $m[0][1][1] - $m[0][0][1] - strlen($m[0][0][0]));
+        $swapped = in_array($op, ['-', '/'], true)
+            && preg_match('~(?:^|\s)(?:из|от)(?:\s|$)~u', mb_strtolower($between));
+        $left = $swapped ? $second : $first;
+        $right = $swapped ? $first : $second;
         switch ($op) {
             case '+':
                 return [$left[0] * $right[1] + $right[0] * $left[1], $left[1] * $right[1]];

@@ -25,9 +25,11 @@ final class arithmetic_checker_test extends \advanced_testcase {
     }
 
     public function test_rational_does_not_glue_mixed_number(): void {
-        // «1 2/63» - смешанное число, а не «12/63». Раньше внутренние пробелы удалялись, и
-        // неверный ключ модели признавался равным правильному ответу (зонд 2026-08-21).
-        $this->assertNull(arithmetic_checker::rational('1 2/63'));
+        // «1 2/63» - смешанное число, то есть 65/63, а НЕ «12/63». Раньше внутренние пробелы
+        // удалялись, и неверный ключ модели признавался равным правильному ответу
+        // (зонд 2026-08-21).
+        $this->assertTrue(arithmetic_checker::equals(
+            arithmetic_checker::rational('1 2/63'), [65, 63]));
         $this->assertFalse(arithmetic_checker::equals(
             arithmetic_checker::rational('1 2/63'), [12, 63]));
     }
@@ -95,7 +97,7 @@ final class arithmetic_checker_test extends \advanced_testcase {
     /**
      * Шесть настоящих заданий зонда 2026-08-20: ключ модели неверен во всех.
      *
-     * @return array список [текст, варианты, ключ модели, наш ожидаемый индекс]
+     * @return array список [текст, варианты, ключ модели, наш ожидаемый индекс, вердикт]
      */
     private function probe_items(): array {
         return [
@@ -115,9 +117,9 @@ final class arithmetic_checker_test extends \advanced_testcase {
     }
 
     public function test_verdict_fixes_wrong_key_on_real_probe_items(): void {
-        foreach ($this->probe_items() as $i => list($text, $answers, $correct, $expected)) {
+        foreach ($this->probe_items() as $i => list($text, $answers, $correct, $expected, $verdict)) {
             $out = arithmetic_checker::verdict($text, $answers, $correct);
-            $this->assertSame('fixed', $out['verdict'], 'задание зонда #' . $i . ': ' . $text);
+            $this->assertSame($verdict, $out['verdict'], 'задание зонда #' . $i . ': ' . $text);
             $this->assertSame($expected, $out['correct'], 'задание зонда #' . $i);
         }
     }
@@ -147,7 +149,7 @@ final class arithmetic_checker_test extends \advanced_testcase {
     /**
      * Девять настоящих промахов зонда: модель формулирует словами, и проверка молчала.
      *
-     * @return array список [текст, варианты, ключ модели, наш ожидаемый индекс или -1 на drop]
+     * @return array список [текст, варианты, ключ модели, наш ожидаемый индекс, вердикт]
      */
     private function word_problems(): array {
         return [
@@ -200,6 +202,106 @@ final class arithmetic_checker_test extends \advanced_testcase {
             ['2/3 > 3/4', '2/3 < 3/4', '2/3 = 3/4', 'нельзя сравнить'], 2);
         $this->assertSame('fixed', $out['verdict']);
         $this->assertSame(1, $out['correct']);
+    }
+
+    // -----------------------------------------------------------------
+    // Где расширение обязано молчать или соглашаться (ревью 2026-08-21, второе)
+    // -----------------------------------------------------------------
+
+    public function test_verdict_keeps_silent_on_how_much_bigger(): void {
+        // «Насколько 5/6 больше 1/6» - вопрос про разность, а не про выбор большей дроби.
+        $out = arithmetic_checker::verdict('Насколько 5/6 больше 1/6?',
+            ['4/6', '2/3', '5/6', '1'], 0);
+        $this->assertNotSame('fixed', $out['verdict'], 'ключ 4/6 верен, трогать его нельзя');
+        $this->assertSame(0, $out['correct']);
+    }
+
+    public function test_verdict_keeps_silent_on_greatest_common_divisor(): void {
+        // «Наибольший общий делитель» содержит «больш», но сравнением не является.
+        $out = arithmetic_checker::verdict('Найдите наибольший общий делитель чисел 12 и 18.',
+            ['6', '18', '12', '36'], 0);
+        $this->assertSame('unverifiable', $out['verdict']);
+    }
+
+    public function test_verdict_checks_inequality_by_itself_not_by_text_order(): void {
+        // Варианты называют пару в обратном порядке: «5/6 > 2/3» - истина, и ключ модели верен.
+        $out = arithmetic_checker::verdict('Сравните дроби 2/3 и 5/6.',
+            ['5/6 > 2/3', '5/6 < 2/3', '5/6 = 2/3', 'нельзя'], 0);
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertSame(0, $out['correct']);
+    }
+
+    public function test_verdict_keeps_silent_when_two_inequalities_are_true(): void {
+        // Обманка про другую пару: истинных вариантов два, значит неизвестно, о чем вопрос.
+        $out = arithmetic_checker::verdict('Сравните дроби 2/3 и 3/4.',
+            ['1/2 < 5/6', '2/3 < 3/4', '2/3 > 3/4', 'нет'], 1);
+        $this->assertNotSame('fixed', $out['verdict'], 'ключ модели верен, трогать нельзя');
+        $this->assertSame(1, $out['correct']);
+    }
+
+    public function test_verdict_keeps_silent_when_several_answers_fit(): void {
+        // Ключ модели ложен, но истинных вариантов ДВА («1/2 < 5/6» и «2/3 < 3/4»): неизвестно,
+        // о какой паре вопрос, и выбирать первый попавшийся нельзя.
+        $out = arithmetic_checker::verdict('Сравните дроби 2/3 и 3/4.',
+            ['1/2 < 5/6', '2/3 > 3/4', '2/3 < 3/4', 'нет'], 1);
+        $this->assertSame('unverifiable', $out['verdict']);
+        $this->assertSame(1, $out['correct'], 'ключ не трогаем');
+    }
+
+    public function test_verdict_prefers_solution_over_loose_word_trigger(): void {
+        // «Сложная задача» - не сложение. Решение модели надежнее любого слова в тексте.
+        $out = arithmetic_checker::verdict('Сложная задача: путь 12 км, время 4 ч. Найдите скорость.',
+            ['3', '16', '48', '8'], 0, 'скорость 12 : 4 = 3');
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertSame(0, $out['correct']);
+    }
+
+    public function test_verdict_understands_subtract_a_from_b(): void {
+        // «Вычтите 1/4 из 3/4» - уменьшаемое названо ВТОРЫМ.
+        $out = arithmetic_checker::verdict('Вычтите 1/4 из 3/4.', ['1/2', '-1/2', '1', '4/4'], 0);
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertSame(0, $out['correct']);
+    }
+
+    public function test_verdict_keeps_silent_on_word_section(): void {
+        // «В разделе» - не деление, «в частности» - не частное, «сложная» - не сложение.
+        foreach ([
+            ['В разделе 3 учебника даны 4 задачи. Сколько всего задач в разделе?', ['4', '12', '7', '3']],
+            ['В частности, у Пети 3 яблока и 5 груш. Сколько всего фруктов?', ['8', '15', '2', '35']],
+        ] as list($text, $answers)) {
+            $out = arithmetic_checker::verdict($text, $answers, 0);
+            $this->assertSame('unverifiable', $out['verdict'], $text);
+        }
+    }
+
+    public function test_verdict_keeps_model_key_among_common_multiples(): void {
+        // «Общий знаменатель» без «наименьший»: и 18, и 36 годятся, ключ модели трогать незачем.
+        $out = arithmetic_checker::verdict('Найдите общий знаменатель для дробей 5/6 и 7/9.',
+            ['36', '18', '54', '15'], 1);
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertSame(1, $out['correct']);
+    }
+
+    public function test_verdict_keeps_silent_on_false_comparison_wording(): void {
+        // «Ложное сравнение» - то же отрицание, что и «неверное».
+        $out = arithmetic_checker::verdict('Укажите ложное сравнение дробей 2/3 и 3/4:',
+            ['2/3 < 3/4', '2/3 = 3/4', '2/3 > 3/4', 'нет'], 2);
+        $this->assertSame('unverifiable', $out['verdict']);
+    }
+
+    public function test_rational_reads_spaces_around_slash_and_mixed_numbers(): void {
+        // «3 / 8» - та же дробь, «1 1/2» - смешанное число, то есть три вторых.
+        $this->assertTrue(arithmetic_checker::equals(arithmetic_checker::rational('3 / 8'), [3, 8]));
+        $this->assertTrue(arithmetic_checker::equals(arithmetic_checker::rational('1 1/2'), [3, 2]));
+        $this->assertTrue(arithmetic_checker::equals(arithmetic_checker::rational('2 1/2'), [5, 2]));
+    }
+
+    public function test_verdict_keeps_silent_when_values_are_equal(): void {
+        // «Какая больше» при равных значениях: защитимого ответа нет.
+        $out = arithmetic_checker::verdict('Какая дробь больше: 1/2 или 0,5?',
+            ['они равны', '1/2', '0,5', 'нельзя'], 0);
+        $this->assertNotSame('fixed', $out['verdict']);
+        $this->assertSame(0, $out['correct']);
     }
 
     public function test_verdict_keeps_silent_on_negated_comparison(): void {
