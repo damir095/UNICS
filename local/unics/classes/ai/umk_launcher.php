@@ -56,6 +56,16 @@ class umk_launcher {
                 . ', потолок: ' . $limit . '.');
         }
 
+        // Элемент чужого предмета уводит задания в чужой пул, а калибровка считает по ним
+        // трудность чужой темы ([[element-course-match]]). Проверка стоит ЗДЕСЬ, потому что
+        // это единственное место, где element_id попадает в базу: страница - лишь один из
+        // возможных входов, и второй унаследовал бы дыру (найдено ревью).
+        $element_id = (int)($params['element_id'] ?? 0);
+        if (!\local_unics\codifier_manager::element_belongs_to_course($element_id, $course_id)) {
+            throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                'Элемент кодификатора относится к другому предмету, чем курс.');
+        }
+
         $builder    = $builder ?? new course_builder();
         $individual = !empty($params['individual']);
         $created    = 0;

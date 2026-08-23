@@ -24,14 +24,35 @@ class codifier_manager {
         return $rec ?: null;
     }
 
-    /** Резолв кодификатора курса через категорию курса. */
+    /**
+     * Резолв кодификатора курса через категорию курса, с подъемом по дереву категорий.
+     *
+     * Кодификатор заводится на дисциплину («Математика»), а курсы школы часто лежат уровнем
+     * ниже («Математика» -> «7 класс»). Без подъема такой курс не находил СВОЙ кодификатор, и
+     * после появления проверки принадлежности элемента ([[element-course-match]]) методист не
+     * смог бы привязать ни один элемент - причем молча (найдено ревью).
+     */
     public static function get_codifier_for_course(int $courseid): ?object {
         global $DB;
         $catid = (int)$DB->get_field('course', 'category', ['id' => $courseid]);
         if (!$catid) {
             return null;
         }
-        return self::get_codifier_for_category($catid);
+        $own = self::get_codifier_for_category($catid);
+        if ($own) {
+            return $own;
+        }
+        // path категории - это «/1/17/34/»: идем от ближайшего родителя к корню, первый
+        // найденный кодификатор и есть предмет курса.
+        $path = (string)$DB->get_field('course_categories', 'path', ['id' => $catid]);
+        $ids = array_reverse(array_filter(array_map('intval', explode('/', $path))));
+        foreach ($ids as $id) {
+            $up = self::get_codifier_for_category($id);
+            if ($up) {
+                return $up;
+            }
+        }
+        return null;
     }
 
     public static function create_codifier(int $categoryid, string $name, int $created_by): int {
@@ -47,7 +68,6 @@ class codifier_manager {
         ]);
     }
 
-    /** Список категорий-дисциплин (видимые категории курсов), id => name. */
     /**
      * Принадлежит ли элемент кодификатору предмета, которому принадлежит курс.
      *
@@ -56,11 +76,14 @@ class codifier_manager {
      * географии можно привязать к «Нахождению процента от числа»: оно уйдет в чужой пул, а
      * калибровка посчитает трудность чужой темы по этим ответам ([[element-course-match]]).
      *
-     * @param int $element_id 0 - «не привязывать», законный выбор
+     * @param int $element_id 0 - «не привязывать», законный выбор; отрицательный - мусор
      */
     public static function element_belongs_to_course(int $element_id, int $course_id): bool {
         global $DB;
-        if ($element_id <= 0) {
+        // Ровно ноль, а не «меньше или равно»: PARAM_INT пропускает минус, а дальше по коду
+        // стоят проверки вида !empty(), и отрицательный id доехал бы до unics_umk.element_id
+        // висячей ссылкой (найдено ревью).
+        if ($element_id === 0) {
             return true;
         }
         $codifier = self::get_codifier_for_course($course_id);
@@ -71,6 +94,7 @@ class codifier_manager {
             ['id' => $element_id, 'codifier_id' => (int)$codifier->id]);
     }
 
+    /** Список категорий-дисциплин (видимые категории курсов), id => name. */
     public static function list_subject_categories(): array {
         global $DB;
         return $DB->get_records_select_menu('course_categories', 'visible = 1',

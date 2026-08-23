@@ -96,11 +96,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     // к «Нахождению процента», ушло бы в чужой пул, а калибровка посчитала бы трудность чужой
     // темы по этим ответам ([[element-course-match]]).
     $element_id     = optional_param('element_id', 0, PARAM_INT);
-    $foreign_element = false;
-    if ($element_id > 0
+    $element_problem = '';
+    if ($element_id !== 0
             && !\local_unics\codifier_manager::element_belongs_to_course($element_id, (int)$course_id)) {
-        $foreign_element = true;
-        $element_id = 0;
+        // Три разных беды выглядели одинаково, и методист получал ложный диагноз (найдено
+        // ревью): у предмета может вовсе не быть кодификатора - тогда совет «выберите элемент
+        // своего предмета» бесполезен.
+        $element_problem = \local_unics\codifier_manager::get_codifier_for_course((int)$course_id)
+            ? 'Элемент кодификатора относится к другому предмету. Выберите элемент того предмета, '
+                . 'к которому относится курс, или оставьте «Не привязывать».'
+            : 'У предмета этого курса еще нет кодификатора. Заведите его в разделе «Кодификатор» '
+                . 'или оставьте «Не привязывать».';
     }
 
     if (empty($course_id) || empty($student_ids) || empty($title) || empty($topic)) {
@@ -132,12 +138,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
 
     // Молча сбросить чужой элемент в «не привязывать» нельзя: методист был бы уверен, что
     // задания копятся в пуле темы, а они копились бы нигде.
-    if ($foreign_element) {
+    if ($element_problem !== '') {
         redirect(
             new moodle_url('/local/unics/pages/generate_umk.php', ['course_id' => (int)$course_id]),
-            'Элемент кодификатора относится к другому предмету. Выберите элемент того предмета, '
-            . 'к которому относится курс, или оставьте «Не привязывать».',
-            null, \core\output\notification::NOTIFY_WARNING
+            $element_problem, null, \core\output\notification::NOTIFY_WARNING
         );
     }
 
@@ -457,7 +461,8 @@ $courses = array_filter($courses, fn($c) => $can_build_in_course((int)$c->id));
 // Предвыбор курса при переходе из шаблонов (course_templates.php)
 $preselect_course = optional_param('course_id', 0, PARAM_INT);
 $preselect_course_name = '';
-if ($preselect_course && isset($courses[$preselect_course])) {
+if ($preselect_course && isset($courses[$preselect_course])
+        && optional_param('from', '', PARAM_ALPHA) === 'templates') {
     $preselect_course_name = $courses[$preselect_course]->fullname;
 }
 
@@ -608,7 +613,15 @@ echo html_writer::end_tag('div'); // single-mode-fields (только title+topi
 // Поле необязательное - без него генерация работает ровно как раньше.
 $element_opts = html_writer::tag('option', 'Не привязывать', ['value' => '0']);
 // list_subject_categories() отдает menu-массив id => name, а не записи.
-foreach (\local_unics\codifier_manager::list_subject_categories() as $catid => $catname) {
+// Перебираем предметы ДОСТУПНЫХ курсов, а не все видимые категории сайта: сервер все равно
+// примет только элемент своего предмета, а лишние группы - это запросы на каждую категорию и
+// весь кодификатор сайта в одном списке. Заодно закрывается дыра при выключенном JS: методист
+// видит ровно то, что форма примет (найдено ревью).
+$element_categories = [];
+foreach ($courses as $c) {
+    $element_categories[(int)$c->category] = true;
+}
+foreach (array_keys($element_categories) as $catid) {
     $codifier = \local_unics\codifier_manager::get_codifier_for_category((int)$catid);
     if (!$codifier) {
         continue;

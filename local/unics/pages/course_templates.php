@@ -138,7 +138,9 @@ echo $OUTPUT->heading('Создание курса по шаблону');
 if ($created_course) {
     $course_url   = new moodle_url('/course/view.php', ['id' => $created_course->id]);
     $generate_url = new moodle_url('/local/unics/pages/generate_umk.php',
-        ['course_id' => $created_course->id]);
+        // from: подпись «курс выбран из шаблонов» показывается ТОЛЬКО по этому признаку.
+        // По одному course_id она появлялась и на обычном переходе, и после отказа формы.
+        ['course_id' => $created_course->id, 'from' => 'templates']);
     echo $OUTPUT->notification(
         'Курс создан: <strong>' . htmlspecialchars($created_course->fullname) . '</strong> - '
         . html_writer::link($course_url, 'Открыть курс', ['class' => 'alert-link', 'target' => '_blank']),
