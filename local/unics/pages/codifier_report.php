@@ -213,6 +213,15 @@ foreach ($rows_page as $r) {
             $mattrs = ['class' => "badge badge-$mcls",
                 'title' => 'балл ' . round($m->score) . '%, попыток ' . (int)$m->attempts_n];
             $masterycell = html_writer::tag('span', $mtext, $mattrs);
+            // Оценка могла не достичь заявленной точности: проверка кончилась не тогда, когда
+            // стало ясно, а когда кончились задания. Полоса при этом выглядит измеренной, и по
+            // ней строится маршрут ([[cat-honest-precision]]).
+            $senote = \local_unics\adaptive\estimate_precision::staff_note(
+                $m->theta_se !== null ? (float)$m->theta_se : null);
+            if ($senote !== '') {
+                $masterycell .= html_writer::tag('div', 'предварительно',
+                    ['class' => 'text-muted small', 'title' => $senote]);
+            }
             // IRT-способность (theta +- SE) - только персоналу и только когда посчитана.
             if ($is_staff && $m->theta !== null) {
                 $any_theta = true;

@@ -71,6 +71,48 @@ final class cat_readiness_test extends \advanced_testcase {
             'a = 1 означает, что дискриминация не оценена');
     }
 
+    /**
+     * Сколько ответов не хватает ближайшему заданию до оценки дискриминации.
+     *
+     * Ноль в колонке 2PL сам по себе не говорит, копится ли что-то: порог сервиса (двадцать
+     * ответов) вдвое выше нашего порога достоверности, и методист видел только ноль.
+     */
+    public function test_distance_to_2pl_is_reported(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.0, 12);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(item_irt_manager::MIN_N_FOR_2PL - 12, (int)$rows[0]->to_2pl_n);
+    }
+
+    public function test_distance_counts_the_richest_item(): void {
+        // Меряем по самому «богатому» заданию: именно оно дойдет до 2PL первым. Богатое стоит
+        // в середине намеренно - иначе проверку прошло бы и «взять последнее» (найдено мутацией).
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.0, 3);
+        $this->make_calibrated_item($eid, 1.0, 17);
+        $this->make_calibrated_item($eid, 1.0, 5);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(item_irt_manager::MIN_N_FOR_2PL - 17, (int)$rows[0]->to_2pl_n);
+    }
+
+    public function test_no_distance_without_tags(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(0, (int)$rows[0]->to_2pl_n, 'без тегов расстоянию неоткуда взяться');
+    }
+
     /** Наблюдений мало - доверия нет, сколько бы ни отличалась дискриминация. */
     public function test_low_observation_count_is_not_counted_as_2pl(): void {
         $this->resetAfterTest();

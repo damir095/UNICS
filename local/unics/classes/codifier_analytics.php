@@ -288,7 +288,8 @@ class codifier_analytics {
                     CASE WHEN i.id IS NOT NULL AND i.calibrated_n >= :mincal2
                          THEN 1 ELSE 0 END AS calibrated,
                     CASE WHEN i.model = '2pl' AND i.calibrated_n >= :mincal
-                              AND ABS(i.a - 1) > 0.01 THEN 1 ELSE 0 END AS is2pl
+                              AND ABS(i.a - 1) > 0.01 THEN 1 ELSE 0 END AS is2pl,
+                    COALESCE(i.calibrated_n, 0) AS answers_n
                FROM {unics_codifier_link} l
                LEFT JOIN {unics_item_irt} i ON i.item_ref = l.target_id
               WHERE l.target_type = :tq AND l.element_id $insql",
@@ -297,10 +298,15 @@ class codifier_analytics {
         $directTagged = [];
         $directCalib  = [];
         $direct2pl    = [];
+        // Сколько ответов набрало самое «богатое» задание, которому до 2PL еще далеко. Без этого
+        // числа колонка 2PL стоит нулем без объяснения, и методист не знает, копится ли что-то
+        // вообще: порог сервиса (двадцать ответов) вдвое выше нашего порога достоверности.
+        $directBest = [];
         foreach ($elementIds as $eid) {
             $directTagged[$eid] = 0;
             $directCalib[$eid]  = 0;
             $direct2pl[$eid]    = 0;
+            $directBest[$eid]   = 0;
         }
         foreach ($rows as $r) {
             $eid = (int)$r->element_id;
@@ -310,6 +316,8 @@ class codifier_analytics {
             }
             if ((int)$r->is2pl === 1) {
                 $direct2pl[$eid]++;
+            } else {
+                $directBest[$eid] = max($directBest[$eid], (int)$r->answers_n);
             }
         }
 
@@ -324,6 +332,7 @@ class codifier_analytics {
             $tagged = 0;
             $calib  = 0;
             $r2pl   = 0;
+            $best   = 0;
             foreach ($elements as $d) {
                 if (strpos((string)$d->path, (string)$e->path) !== 0) {
                     continue;
@@ -331,6 +340,7 @@ class codifier_analytics {
                 $tagged += $directTagged[(int)$d->id];
                 $calib  += $directCalib[(int)$d->id];
                 $r2pl   += $direct2pl[(int)$d->id];
+                $best    = max($best, $directBest[(int)$d->id]);
             }
             if ($tagged === 0) {
                 $verdict = 'no_tags';
@@ -349,6 +359,10 @@ class codifier_analytics {
                 'tagged_n'     => $tagged,
                 'calibrated_n' => $calib,
                 'ready_2pl_n'  => $r2pl,
+                // Сколько ответов не хватает ближайшему заданию до оценки дискриминации.
+                // 0 - либо 2PL уже есть, либо тегированных заданий нет вовсе.
+                'to_2pl_n'     => $tagged > 0
+                    ? max(0, item_irt_manager::MIN_N_FOR_2PL - $best) : 0,
                 'verdict'      => $verdict,
             ];
         }

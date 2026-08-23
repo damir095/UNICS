@@ -202,10 +202,15 @@ $readycell = function (?object $rr) {
     if ($rr->verdict === 'no_tags') {
         $counts = html_writer::tag('div', '-', ['class' => 'text-muted small']);
     } else {
-        $counts = html_writer::tag('div',
-            'тегов ' . (int)$rr->tagged_n . ' / калибр. ' . (int)$rr->calibrated_n
-            . ' / 2PL ' . (int)$rr->ready_2pl_n,
-            ['class' => 'text-muted small']);
+        $line = 'тегов ' . (int)$rr->tagged_n . ' / калибр. ' . (int)$rr->calibrated_n
+            . ' / 2PL ' . (int)$rr->ready_2pl_n;
+        // Ноль в колонке 2PL сам по себе ничего не говорит: копится ли что-то, методисту
+        // не видно. Порог оценки дискриминации у сервиса вдвое выше нашего порога
+        // достоверности, поэтому показываем, сколько ответов еще нужно.
+        if ((int)$rr->ready_2pl_n === 0 && (int)$rr->to_2pl_n > 0) {
+            $line .= ' (до 2PL еще ' . (int)$rr->to_2pl_n . ' ответов)';
+        }
+        $counts = html_writer::tag('div', $line, ['class' => 'text-muted small']);
     }
     return html_writer::tag('td', $badge . $counts);
 };

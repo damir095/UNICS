@@ -136,6 +136,14 @@ if ($slot !== null) {
     if ($score !== null) {
         echo html_writer::tag('p', 'Результат: ' . html_writer::tag('span', s($label),
             ['class' => 'badge badge-' . $cls]));
+        // Проверка могла кончиться не потому, что стало ясно, а потому, что кончились задания
+        // в банке или лимит вопросов. Ребенку про это надо сказать: иначе предварительная
+        // оценка выглядит измеренной ([[cat-honest-precision]]).
+        $note = \local_unics\adaptive\estimate_precision::child_note(
+            $session->theta_se !== null ? (float)$session->theta_se : null);
+        if ($note !== '') {
+            echo $OUTPUT->notification($note, 'info');
+        }
     }
     echo html_writer::start_tag('form', ['method' => 'post', 'style' => 'display:inline-block; margin-right:8px;',
         'action' => (new moodle_url('/local/unics/pages/cat.php',
