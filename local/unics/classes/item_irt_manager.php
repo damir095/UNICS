@@ -123,9 +123,25 @@ class item_irt_manager {
      * Собрать обезличенную матрицу ответов по привязанным к кодификатору вопросам, отправить
      * сервису, записать b. По сети - только числовые суррогаты. Возвращает число заданий.
      */
-    public static function calibrate_all(): int {
+    /**
+     * Наблюдения для калибровки: ПО ОДНОМУ на пару «ученик - задание».
+     *
+     * Зонд 2026-08-23: у задания было 42 ответа при 6 учениках - 36 из них повторные попытки тех
+     * же детей. Модель IRT считает, что у испытуемого одна способность, а тут один и тот же
+     * ребенок отвечал на одно задание то верно, то неверно; оценка 2PL от таких данных
+     * вырождалась - дискриминация упиралась в нижнюю границу. Число ответов росло, а число
+     * испытуемых нет ([[calibration-one-attempt]]).
+     *
+     * Берем ПОСЛЕДНЮЮ попытку: она отражает нынешнее состояние ребенка, а не первое знакомство
+     * с темой.
+     *
+     * @return array<int,array{student_ref:int,item_ref:int,correct:int}>
+     */
+    public static function response_matrix(): array {
         global $DB;
-        $rs = $DB->get_recordset_sql(
+        $rows = $DB->get_records_sql(
+            // Первым столбцом - уникальный id: get_records() требует этого, а пара
+            // «ученик-задание» повторяется по построению.
             "SELECT qa.id AS qaid, s.id AS student_ref, qv.questionbankentryid AS item_ref,
                     qas.fraction, l.element_id
                FROM {quiz_attempts} att
@@ -138,17 +154,32 @@ class item_irt_manager {
                        SELECT x.id FROM {question_attempt_steps} x
                         WHERE x.questionattemptid = qa.id AND x.fraction IS NOT NULL
                      ORDER BY x.sequencenumber DESC LIMIT 1)
-              WHERE att.state = 'finished'",
+              WHERE att.state = 'finished'
+           ORDER BY att.attempt ASC, att.id ASC",
             ['tq' => codifier_link_manager::TYPE_QUESTION]);
-        $matrix = [];
+
+        // Порядок по номеру попытки: последняя запись пары затирает предыдущие.
+        $byPair = [];
         $elementof = [];
-        foreach ($rs as $r) {
+        foreach ($rows as $r) {
             $ref = (int)$r->item_ref;
-            $matrix[] = ['student_ref' => (int)$r->student_ref, 'item_ref' => $ref,
-                'correct' => ((float)$r->fraction) >= 0.5 ? 1 : 0];
+            $byPair[(int)$r->student_ref . '-' . $ref] = [
+                'student_ref' => (int)$r->student_ref,
+                'item_ref' => $ref,
+                'correct' => ((float)$r->fraction) >= 0.5 ? 1 : 0,
+            ];
             $elementof[$ref] = $r->element_id !== null ? (int)$r->element_id : null;
         }
-        $rs->close();
+        self::$last_element_map = $elementof;
+        return array_values($byPair);
+    }
+
+    /** Элемент каждого задания из последнего сбора матрицы. */
+    private static array $last_element_map = [];
+
+    public static function calibrate_all(): int {
+        $matrix = self::response_matrix();
+        $elementof = self::$last_element_map;
         if (!$matrix) {
             return 0;
         }
