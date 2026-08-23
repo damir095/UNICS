@@ -42,8 +42,14 @@ class answer_judge {
     /** Судья не ответил: сеть, отказ, неразобранный ответ. Вердиктов нет. */
     public const STATUS_FAILED = 'failed';
 
-    /** Судья высказался, но себе противоречит: сработал предохранитель. Вердикты сняты. */
+    /** Судья спорит с большинством ключей: нужен переспрос, вердикты еще не решены. */
+    public const STATUS_SUSPECT = 'suspect';
+
+    /** Переспрос не подтвердил первый ответ: судья сбивается, вердикты сняты. */
     public const STATUS_DISTRUST = 'distrust';
+
+    /** Переспрос подтвердил первый ответ: массовое расхождение настоящее, вердикты в силе. */
+    public const STATUS_CONFIRMED = 'confirmed';
 
     /**
      * Доля расхождений, выше которой судье не верят вовсе.
@@ -144,6 +150,19 @@ class answer_judge {
     }
 
     /**
+     * Нормализованный текст выбора судьи со снятой ведущей нумерацией.
+     *
+     * Живой заход 2026-08-23: судья отвечает то «Полярный», то «4) Полярный» - формат гуляет
+     * между запросами. Пока номер не снимался, второй вид ответа не совпадал ни с одним
+     * вариантом, ярус молча принимал весь комплект, и мимо прошли неверные ключи, на которые
+     * судья ответил верно. Снимается ТОЛЬКО ведущая нумерация: ответ «1861» остается собой.
+     */
+    private static function choice_text(string $pick): string {
+        $stripped = preg_replace('~^\s*\d{1,2}\s*[).]\s+~u', '', $pick);
+        return question_sanity::normalize($stripped ?? $pick);
+    }
+
+    /**
      * Сверка выборов судьи с ключами. Чистая: ни сети, ни базы.
      *
      * Ключи входного массива сохраняются: судью спрашивают только про то, что дожило до него,
@@ -169,7 +188,7 @@ class answer_judge {
             }
             $answers = array_values(array_filter((array)($q['answers'] ?? []), 'is_scalar'));
             $norm = array_map([question_sanity::class, 'normalize'], $answers);
-            $choice = question_sanity::normalize((string)$pick);
+            $choice = self::choice_text((string)$pick);
             $at = array_search($choice, $norm, true);
             if ($at === false) {
                 // Судья назвал то, чего нет среди вариантов: это его сбой, а не брак задания.
@@ -191,21 +210,19 @@ class answer_judge {
             }
         }
 
+        // Массовое расхождение НЕ снимает вердикты само по себе: живой заход 2026-08-23 показал,
+        // что оно бывает настоящим. Модель выдала четыре вопроса по истории Петра I, из них три
+        // с заведомо неверными ключами (Казань вместо Петербурга, «запретил обучение грамоте»,
+        // Северная война с Финляндией) - судья ответил верно на все три, а прежний порог его
+        // вердикты снял и отправил негодные вопросы детям. Здесь только помечаем комплект
+        // подозрительным; решает переспрос в review().
         $total = $judged >= self::MIN_JUDGED_FOR_TOTAL && $disagreed === $judged;
         $share = $judged >= self::MIN_JUDGED_FOR_SHARE
             && $disagreed > $judged * self::DISTRUST_SHARE;
-        if ($total || $share) {
-            return [
-                'verdicts' => array_combine($keys, array_fill(0, count($keys), 'ok')),
-                'status' => self::STATUS_DISTRUST,
-                'judged' => $judged,
-                'disagreed' => $disagreed,
-            ];
-        }
 
         return [
             'verdicts' => array_combine($keys, $verdicts),
-            'status' => self::STATUS_JUDGED,
+            'status' => ($total || $share) ? self::STATUS_SUSPECT : self::STATUS_JUDGED,
             'judged' => $judged,
             'disagreed' => $disagreed,
         ];
@@ -228,11 +245,7 @@ class answer_judge {
                     'judged' => 0, 'disagreed' => 0];
         }
         try {
-            // Порог «пустого ответа» понижен: выбор по одному вопросу занимает 39 символов, и
-            // при обычном пороге в 50 ярус был мертв для малых комплектов.
-            $raw = $this->gen->generate_text(self::build_prompt($questions), 2048,
-                ai_generator::MIN_REPLY_LEN_SHORT);
-            $picks = self::parse($raw, count($questions));
+            $picks = $this->ask($questions);
         } catch (\Throwable $e) {
             // Ронять комплект из-за недоступности проверки нельзя: ребенок останется без теста
             // по причине, к его заданиям отношения не имеющей. Ловим Throwable, а не только
@@ -252,7 +265,60 @@ class answer_judge {
             // вместо текста или назвала свои варианты. Это НЕ отказ сети: путать их нельзя,
             // иначе устойчивое расхождение форматов читалось бы как перебои связи.
             $out['status'] = self::STATUS_UNUSABLE;
+            return $out;
         }
+        if ($out['status'] !== self::STATUS_SUSPECT) {
+            return $out;
+        }
+
+        // Массовое расхождение бывает двух родов, и по одному ответу они неразличимы: либо
+        // судья сбился (потерял нумерацию), либо генератор действительно наврал в большинстве
+        // ключей - на стенде это происходило не раз. Спрашиваем второй раз: варианты
+        // перемешиваются заново, поэтому сбитая нумерация повторно не воспроизведется, а
+        // настоящее знание - воспроизведется.
+        try {
+            $second = $this->ask($questions);
+        } catch (\Throwable $e) {
+            // Переспросить не вышло - остаемся при осторожном исходе: вердикты снимаем.
+            return self::without_verdicts($out, self::STATUS_DISTRUST);
+        }
+        if (!self::picks_agree($questions, $picks, $second)) {
+            return self::without_verdicts($out, self::STATUS_DISTRUST);
+        }
+        $out['status'] = self::STATUS_CONFIRMED;
+        return $out;
+    }
+
+    /** Один вызов модели с промтом судьи. */
+    private function ask(array $questions): array {
+        // Порог «пустого ответа» понижен: выбор по одному вопросу занимает 39 символов, и
+        // при обычном пороге в 50 ярус был мертв для малых комплектов.
+        $raw = $this->gen->generate_text(self::build_prompt($questions), 2048,
+            ai_generator::MIN_REPLY_LEN_SHORT);
+        return self::parse($raw, count($questions));
+    }
+
+    /** Совпадают ли два ответа судьи там, где он высказался оба раза. */
+    private static function picks_agree(array $questions, array $first, array $second): bool {
+        $n = count($questions);
+        $common = 0;
+        for ($i = 0; $i < $n; $i++) {
+            if (($first[$i] ?? null) === null || ($second[$i] ?? null) === null) {
+                continue;
+            }
+            $common++;
+            if (self::choice_text((string)$first[$i]) !== self::choice_text((string)$second[$i])) {
+                return false;
+            }
+        }
+        // Ни одного общего высказывания - подтверждения нет, и выдавать его за согласие нельзя.
+        return $common > 0;
+    }
+
+    /** Тот же ответ, но со снятыми вердиктами. */
+    private static function without_verdicts(array $out, string $status): array {
+        $out['verdicts'] = array_map(static fn(): string => 'ok', $out['verdicts']);
+        $out['status'] = $status;
         return $out;
     }
 }

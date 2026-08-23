@@ -101,21 +101,45 @@ final class answer_judge_test extends \advanced_testcase {
             'вердикт обязан остаться при своем вопросе');
     }
 
-    public function test_total_disagreement_trusts_nobody(): void {
-        // Судья, разошедшийся со ВСЕМИ своими высказываниями, почти наверняка сбился сам.
-        // Малые комплекты долевой порог не прикрывает: пул отдает воркеру и один вопрос.
+    public function test_choice_with_leading_number_is_understood(): void {
+        // Живой заход 2026-08-23: судья отвечает то «Полярный», то «4) Полярный». Во втором
+        // случае точный поиск не находил ничего, ярус молча пропускал весь комплект, и мимо
+        // прошли два неверных ключа, на которые судья ответил ВЕРНО.
+        $qs = [$this->q('Какой пояс полярный?', ['Тропический', 'Умеренный', 'Полярный'], 2)];
+        $this->assertSame(['ok'], answer_judge::verdicts($qs, ['3) Полярный'])['verdicts']);
+
+        $qs2 = [$this->q('Какой пояс полярный?', ['Тропический', 'Умеренный', 'Полярный'], 0)];
+        $out = answer_judge::verdicts($qs2, ['3. Полярный']);
+        $this->assertSame(['drop'], $out['verdicts'], 'номер не мешает увидеть расхождение');
+        $this->assertSame(1, $out['judged']);
+    }
+
+    public function test_number_inside_the_answer_is_kept(): void {
+        // Снимаем ТОЛЬКО ведущую нумерацию: ответ, который сам начинается с числа, обязан
+        // остаться собой. Ключ намеренно на другом варианте - иначе тест проходил бы и при
+        // вовсе потерянном ответе (проверено мутацией).
+        $qs = [$this->q('В каком году?', ['1861', '1905', '1917'], 1)];
+        $out = answer_judge::verdicts($qs, ['1861']);
+        $this->assertSame(['drop'], $out['verdicts']);
+        $this->assertSame(1, $out['judged'], 'ответ-число обязан быть узнан');
+    }
+
+    public function test_total_disagreement_is_marked_suspect(): void {
+        // Расхождение со ВСЕМИ высказываниями подозрительно, но вердикты снимать рано:
+        // решает переспрос. Малые комплекты долевой порог не прикрывает - пул отдает
+        // воркеру и один вопрос.
         $qs = [$this->q('Вопрос 1', ['А', 'Б', 'В', 'Г'], 0),
                $this->q('Вопрос 2', ['А', 'Б', 'В', 'Г'], 0)];
         $out = answer_judge::verdicts($qs, ['Б', 'Б']);
-        $this->assertSame(['ok', 'ok'], $out['verdicts']);
-        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
+        $this->assertSame(answer_judge::STATUS_SUSPECT, $out['status']);
+        $this->assertSame(['drop', 'drop'], $out['verdicts'],
+            'вердикты остаются при вопросах до переспроса');
     }
 
-    public function test_majority_disagreement_trusts_nobody(): void {
+    public function test_majority_disagreement_is_marked_suspect(): void {
         $out = answer_judge::verdicts($this->four(), ['Б', 'Б', 'Б', 'А']);
-        $this->assertSame(['ok', 'ok', 'ok', 'ok'], $out['verdicts'],
-            'предохранитель обязан спасти комплект');
-        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
+        $this->assertSame(answer_judge::STATUS_SUSPECT, $out['status']);
+        $this->assertSame(['drop', 'drop', 'drop', 'ok'], $out['verdicts']);
     }
 
     public function test_half_disagreement_is_trusted(): void {
@@ -145,8 +169,96 @@ final class answer_judge_test extends \advanced_testcase {
             $qs[] = $this->q('Вопрос ' . $i, ['А', 'Б', 'В', 'Г'], 0);
         }
         $out = answer_judge::verdicts($qs, [null, null, null, null, 'Б', 'Б', 'Б', 'А']);
-        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
+        $this->assertSame(answer_judge::STATUS_SUSPECT, $out['status']);
         $this->assertSame(4, $out['judged'], 'молчание не высказывание');
+    }
+
+    public function test_second_opinion_confirms_a_real_disagreement(): void {
+        // Живой заход 2026-08-23: модель выдала четыре вопроса по истории Петра I, три с
+        // заведомо неверными ключами, и судья ответил верно на все три. Прежний порог его
+        // вердикты снимал, отправляя негодные вопросы детям.
+        $gen = $this->stub(fn(): string => json_encode(['answers' => [
+            ['n' => 1, 'choice' => 'Б'], ['n' => 2, 'choice' => 'Б'],
+            ['n' => 3, 'choice' => 'Б'], ['n' => 4, 'choice' => 'А'],
+        ]], JSON_UNESCAPED_UNICODE));
+
+        $out = (new answer_judge($gen))->review($this->four());
+
+        $this->assertSame(answer_judge::STATUS_CONFIRMED, $out['status']);
+        $this->assertSame(['drop', 'drop', 'drop', 'ok'], $out['verdicts'],
+            'подтвержденное расхождение обязано убрать негодные вопросы');
+        $this->assertSame(2, $gen->calls, 'переспрос стоит ровно одного лишнего вызова');
+    }
+
+    public function test_second_opinion_rejects_a_wandering_judge(): void {
+        // Судья, отвечающий каждый раз иначе, сбивается сам - его вердиктам грош цена.
+        $replies = [
+            json_encode(['answers' => [['n' => 1, 'choice' => 'Б'], ['n' => 2, 'choice' => 'Б'],
+                ['n' => 3, 'choice' => 'Б'], ['n' => 4, 'choice' => 'А']]], JSON_UNESCAPED_UNICODE),
+            json_encode(['answers' => [['n' => 1, 'choice' => 'В'], ['n' => 2, 'choice' => 'Г'],
+                ['n' => 3, 'choice' => 'В'], ['n' => 4, 'choice' => 'А']]], JSON_UNESCAPED_UNICODE),
+        ];
+        $i = 0;
+        $gen = $this->stub(function () use ($replies, &$i): string {
+            return $replies[$i++] ?? '';
+        });
+
+        $out = (new answer_judge($gen))->review($this->four());
+
+        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
+        $this->assertSame(['ok', 'ok', 'ok', 'ok'], $out['verdicts'],
+            'сбивающийся судья не должен выкашивать комплект');
+    }
+
+    public function test_second_opinion_failure_keeps_questions(): void {
+        // Переспросить не вышло: осторожный исход - вердикты снять, комплект сохранить.
+        $i = 0;
+        $gen = $this->stub(function () use (&$i): string {
+            $i++;
+            if ($i === 1) {
+                return json_encode(['answers' => [['n' => 1, 'choice' => 'Б'],
+                    ['n' => 2, 'choice' => 'Б'], ['n' => 3, 'choice' => 'Б'],
+                    ['n' => 4, 'choice' => 'А']]], JSON_UNESCAPED_UNICODE);
+            }
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'сеть');
+        });
+
+        $out = (new answer_judge($gen))->review($this->four());
+
+        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
+        $this->assertSame(['ok', 'ok', 'ok', 'ok'], $out['verdicts']);
+    }
+
+    public function test_silent_second_opinion_confirms_nothing(): void {
+        // Переспрос, на котором судья промолчал по всем вопросам, ничего не подтверждает:
+        // общих высказываний ноль, и выдавать это за согласие нельзя.
+        $i = 0;
+        $gen = $this->stub(function () use (&$i): string {
+            $i++;
+            if ($i === 1) {
+                return json_encode(['answers' => [['n' => 1, 'choice' => 'Б'],
+                    ['n' => 2, 'choice' => 'Б'], ['n' => 3, 'choice' => 'Б'],
+                    ['n' => 4, 'choice' => 'А']]], JSON_UNESCAPED_UNICODE);
+            }
+            return '{"answers":[]}';
+        });
+
+        $out = (new answer_judge($gen))->review($this->four());
+
+        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
+        $this->assertSame(['ok', 'ok', 'ok', 'ok'], $out['verdicts']);
+    }
+
+    public function test_moderate_disagreement_needs_no_second_opinion(): void {
+        $gen = $this->stub(fn(): string => json_encode(['answers' => [
+            ['n' => 1, 'choice' => 'Б'], ['n' => 2, 'choice' => 'А'],
+            ['n' => 3, 'choice' => 'А'], ['n' => 4, 'choice' => 'А'],
+        ]], JSON_UNESCAPED_UNICODE));
+
+        $out = (new answer_judge($gen))->review($this->four());
+
+        $this->assertSame(answer_judge::STATUS_JUDGED, $out['status']);
+        $this->assertSame(1, $gen->calls, 'обычный комплект не стоит лишнего обращения к сети');
     }
 
     public function test_prompt_shuffles_answers(): void {

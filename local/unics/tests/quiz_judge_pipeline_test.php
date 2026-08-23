@@ -254,23 +254,62 @@ final class quiz_judge_pipeline_test extends \advanced_testcase {
         $this->assertStringContainsString('судьей 1', $trace);
     }
 
-    public function test_distrusted_judge_leaves_trace(): void {
-        // Предохранитель сработал: вердикты сняты, но молчать об этом нельзя.
+    public function test_confirmed_mass_disagreement_drops_questions(): void {
+        // Живой заход 2026-08-23: три неверных ключа из четырех - не сбой судьи, а правда.
         $qs = [];
         for ($i = 0; $i < 4; $i++) {
             $qs[] = ['text' => 'Вопрос ' . $i, 'answers' => ['А', 'Б', 'В', 'Г'], 'correct' => 0];
         }
-        $picks = [];
-        foreach ([1, 2, 3] as $n) {
-            $picks[] = ['n' => $n, 'choice' => 'Б'];
-        }
-        $picks[] = ['n' => 4, 'choice' => 'А'];
-        $gen = $this->generator($this->quiz_reply($qs),
-            json_encode(['answers' => $picks], JSON_UNESCAPED_UNICODE));
+        $judge = json_encode(['answers' => [
+            ['n' => 1, 'choice' => 'Б'], ['n' => 2, 'choice' => 'Б'],
+            ['n' => 3, 'choice' => 'Б'], ['n' => 4, 'choice' => 'А'],
+        ]], JSON_UNESCAPED_UNICODE);
+        $gen = $this->generator($this->quiz_reply($qs), $judge);
 
         $out = $this->quiet($gen, ['class_number' => 7], 'История', '', 4);
-        $trace = $this->trace;
-        $this->assertCount(4, $out, 'предохранитель обязан спасти комплект');
-        $this->assertStringContainsString('судья', mb_strtolower($trace));
+
+        $this->assertCount(1, $out, 'подтвержденное расхождение убирает негодные вопросы');
+        $this->assertSame(2, $gen->judge_calls, 'подозрительный комплект переспрашивается');
+        $this->assertStringContainsString('подтвердил это переспросом', $this->trace);
+    }
+
+    public function test_wandering_judge_does_not_cost_the_child_a_test(): void {
+        // Судья, отвечающий каждый раз иначе, сбивается сам: переспрос это вскрывает,
+        // вердикты снимаются, комплект остается при ребенке.
+        $qs = [];
+        for ($i = 0; $i < 4; $i++) {
+            $qs[] = ['text' => 'Вопрос ' . $i, 'answers' => ['А', 'Б', 'В', 'Г'], 'correct' => 0];
+        }
+        $answer = static function (array $choices): string {
+            $rows = [];
+            foreach ($choices as $n => $c) {
+                $rows[] = ['n' => $n + 1, 'choice' => $c];
+            }
+            return json_encode(['answers' => $rows], JSON_UNESCAPED_UNICODE);
+        };
+        $replies = [$answer(['Б', 'Б', 'Б', 'А']), $answer(['В', 'Г', 'В', 'А'])];
+
+        $gen = new class($this->quiz_reply($qs), $replies) extends ai_generator {
+            private string $quiz;
+            private array $replies;
+            public int $judge_calls = 0;
+            public function __construct(string $quiz, array $replies) {
+                $this->quiz = $quiz;
+                $this->replies = $replies;
+            }
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
+                if (str_contains($prompt, answer_judge::PROMPT_MARKER)) {
+                    return $this->replies[$this->judge_calls++] ?? '';
+                }
+                return $this->quiz;
+            }
+        };
+
+        $out = $this->quiet($gen, ['class_number' => 7], 'История', '', 4);
+
+        $this->assertCount(4, $out, 'сбивающийся судья не должен выкашивать комплект');
+        $this->assertSame(2, $gen->judge_calls);
+        $this->assertStringContainsString('при переспросе ответил иначе', $this->trace);
     }
 }
