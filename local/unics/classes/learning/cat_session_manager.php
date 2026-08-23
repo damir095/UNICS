@@ -184,11 +184,13 @@ class cat_session_manager {
 
     /** Текущие настройки CAT (с дефолтами). */
     private static function config(): array {
-        $se = (float)get_config('local_unics', 'cat_se_threshold');
+        // Порог точности берем из estimate_precision - там же его читает признак
+        // предварительной оценки. Два своих значения по умолчанию означали бы, что проверка
+        // останавливается по одной планке, а честность результата меряется по другой.
         $min = (int)get_config('local_unics', 'cat_min_items');
         $max = (int)get_config('local_unics', 'cat_max_items');
-        return ['se' => $se > 0 ? $se : 0.3, 'min' => $min > 0 ? $min : 5,
-                'max' => $max > 0 ? $max : 20];
+        return ['se' => \local_unics\adaptive\estimate_precision::threshold(),
+                'min' => $min > 0 ? $min : 5, 'max' => $max > 0 ? $max : 20];
     }
 
     /** item_ref вопроса, стоящего на слоте (по questionbankentryid версии вопроса слота). */

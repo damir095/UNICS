@@ -55,6 +55,30 @@ final class irt_model_label_test extends \advanced_testcase {
         $this->assertSame('rasch', $this->model_of(105));
     }
 
+    public function test_discrimination_returns_to_one_with_the_label(): void {
+        global $DB;
+        // Иначе строка с надписью «rasch» тащит прежнюю оценку 1.63, и отбор заданий в CAT
+        // считает по ней информацию Фишера - значение врет там, где надпись уже честна.
+        $this->resetAfterTest();
+        item_irt_manager::upsert(107, null, 0.2, 25, 1.63);
+        $this->assertSame('2pl', $this->model_of(107));
+
+        item_irt_manager::upsert(107, null, 0.2, 26);
+
+        $this->assertSame('rasch', $this->model_of(107));
+        $this->assertEqualsWithDelta(1.0,
+            (float)$DB->get_field('unics_item_irt', 'a', ['item_ref' => 107]), 0.0001);
+    }
+
+    public function test_label_agrees_with_the_stored_value(): void {
+        // Индикатор готовности читает из базы округленное значение. На сыром числе 1.01004
+        // надпись говорила бы «2pl», а колонка «не 2PL»: допуск один, но числа разные.
+        $this->resetAfterTest();
+        item_irt_manager::upsert(108, null, 0.0, 25, 1.01004);
+        $this->assertSame('rasch', $this->model_of(108),
+            'после округления до 1.0100 отличие от единицы ровно на границе допуска');
+    }
+
     public function test_clearly_different_discrimination_is_not_swallowed(): void {
         // Допуск не должен съедать настоящую оценку около единицы.
         $this->resetAfterTest();

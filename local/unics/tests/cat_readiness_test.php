@@ -113,6 +113,34 @@ final class cat_readiness_test extends \advanced_testcase {
         $this->assertSame(0, (int)$rows[0]->to_2pl_n, 'без тегов расстоянию неоткуда взяться');
     }
 
+    public function test_flat_discrimination_with_enough_answers_is_not_a_countdown(): void {
+        // Ответов набралось, а дискриминация оценена и вышла около единицы: это измеренный
+        // результат, а не нехватка данных, и «еще N ответов» тут было бы неправдой.
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.0, 30);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(0, (int)$rows[0]->to_2pl_n);
+        $this->assertSame(1, (int)$rows[0]->flat_2pl_n);
+    }
+
+    public function test_ready_2pl_element_has_no_countdown(): void {
+        // Контракт поля: ноль, когда ждать нечего. Раньше при полностью готовом элементе
+        // возвращался целый порог, и любой второй потребитель показал бы «еще 20 ответов».
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.7, item_pool::MIN_CALIBRATED_N);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(1, (int)$rows[0]->ready_2pl_n);
+        $this->assertSame(0, (int)$rows[0]->to_2pl_n);
+    }
+
     /** Наблюдений мало - доверия нет, сколько бы ни отличалась дискриминация. */
     public function test_low_observation_count_is_not_counted_as_2pl(): void {
         $this->resetAfterTest();

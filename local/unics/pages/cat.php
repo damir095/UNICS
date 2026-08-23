@@ -123,6 +123,14 @@ if ($slot !== null) {
         html_writer::tag('button', 'Ответить', ['type' => 'submit', 'class' => 'btn btn-primary']),
         ['class' => 'unics-cat-actions mt-3']);
     echo html_writer::end_tag('form');
+} else if ((int)$session->status === cat_session_manager::STATUS_ACTIVE) {
+    // Вопросов нет, а сессия жива: сервис оценки упал посреди проверки, следующее задание не
+    // выдано, владение не записано. Раньше сюда попадал экран «Проверка завершена» со старой
+    // способностью - незаконченная проверка выглядела законченной ([[cat-honest-precision]]).
+    echo $OUTPUT->notification('Проверка прервалась: сервис оценки не ответил. '
+        . 'Попробуйте продолжить позже - ответы сохранены.', 'warning');
+    echo html_writer::link(new moodle_url('/local/unics/pages/cat.php'),
+        'Пройти другую тему', ['class' => 'btn btn-secondary mt-2']);
 } else {
     // Экран результата.
     $score = $session->theta !== null

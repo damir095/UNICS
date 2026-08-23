@@ -216,11 +216,23 @@ foreach ($rows_page as $r) {
             // Оценка могла не достичь заявленной точности: проверка кончилась не тогда, когда
             // стало ясно, а когда кончились задания. Полоса при этом выглядит измеренной, и по
             // ней строится маршрут ([[cat-honest-precision]]).
-            $senote = \local_unics\adaptive\estimate_precision::staff_note(
-                $m->theta_se !== null ? (float)$m->theta_se : null);
-            if ($senote !== '') {
-                $masterycell .= html_writer::tag('div', 'предварительно',
-                    ['class' => 'text-muted small', 'title' => $senote]);
+            //
+            // Пометка ставится только на ОЦЕНКУ IRT: theta и theta_se переживают пересчет
+            // обычным путем, и без этой проверки балл, снятый процентами, объявлялся бы
+            // предварительным по стандартной ошибке давнего прохождения CAT.
+            $mtheta = $m->theta !== null ? (float)$m->theta : null;
+            $mse = $m->theta_se !== null ? (float)$m->theta_se : null;
+            $provisional = \local_unics\adaptive\estimate_precision::is_irt_estimate(
+                    $mtheta, (float)$m->score)
+                && \local_unics\adaptive\estimate_precision::is_provisional($mse);
+            if ($provisional) {
+                // Числа - только персоналу: страница намеренно не показывает родителю ни theta,
+                // ни стандартную ошибку, и подсказка не должна обходить это правило.
+                $attrs = ['class' => 'text-muted small'];
+                if ($is_staff) {
+                    $attrs['title'] = \local_unics\adaptive\estimate_precision::staff_note($mse);
+                }
+                $masterycell .= html_writer::tag('div', 'предварительно', $attrs);
             }
             // IRT-способность (theta +- SE) - только персоналу и только когда посчитана.
             if ($is_staff && $m->theta !== null) {

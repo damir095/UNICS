@@ -25,12 +25,29 @@ final class estimate_precision_test extends \advanced_testcase {
         $this->assertFalse(estimate_precision::is_provisional(0.28));
     }
 
-    public function test_error_exactly_at_threshold_is_final(): void {
-        // Порог остановки CAT - «se не больше порога», и признак обязан читать его так же,
-        // иначе достигнутая точность объявлялась бы недостигнутой.
+    public function test_error_exactly_at_threshold_is_provisional(): void {
+        // Сервис останавливается по «se СТРОГО меньше порога» (ai-service/app/cat.py), значит
+        // ровно на пороге точность НЕ достигнута и проверка кончилась по другой причине.
         $this->resetAfterTest();
         set_config('cat_se_threshold', 0.3, 'local_unics');
-        $this->assertFalse(estimate_precision::is_provisional(0.3));
+        $this->assertTrue(estimate_precision::is_provisional(0.3));
+    }
+
+    public function test_recomputed_score_is_not_an_irt_estimate(): void {
+        // theta и theta_se переживают пересчет обычным путем: после нескольких тестов в записи
+        // лежит балл, снятый процентами, и стандартная ошибка давнего прохождения CAT.
+        $this->assertFalse(estimate_precision::is_irt_estimate(0.5855, 91.0),
+            'балл 91 не может быть проекцией theta 0.59');
+    }
+
+    public function test_irt_score_is_recognized(): void {
+        $theta = 0.5855;
+        $score = \local_unics\adaptive\theta_scale::project($theta);
+        $this->assertTrue(estimate_precision::is_irt_estimate($theta, $score));
+    }
+
+    public function test_missing_theta_is_not_an_irt_estimate(): void {
+        $this->assertFalse(estimate_precision::is_irt_estimate(null, 64.23));
     }
 
     public function test_no_error_means_no_claim(): void {

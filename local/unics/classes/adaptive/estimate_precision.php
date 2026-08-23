@@ -22,7 +22,7 @@ class estimate_precision {
     /** Порог точности по умолчанию - тот же, что у CAT (cat_se_threshold). */
     const DEFAULT_SE_THRESHOLD = 0.3;
 
-    /** Настроенный порог точности. */
+    /** Настроенный порог точности. Единственный источник правды - зовет и сам CAT. */
     public static function threshold(): float {
         $se = (float)get_config('local_unics', 'cat_se_threshold');
         return $se > 0 ? $se : self::DEFAULT_SE_THRESHOLD;
@@ -31,6 +31,9 @@ class estimate_precision {
     /**
      * Предварительна ли оценка.
      *
+     * Сравнение нестрогое: сервис останавливается по «se СТРОГО меньше порога», значит ровно на
+     * пороге точность не достигнута, и называть такую оценку законченной нельзя.
+     *
      * @param float|null $se стандартная ошибка; null - оценка получена не через IRT
      *                       (обычный путь rolling_avg), и говорить о точности нечего
      */
@@ -38,7 +41,24 @@ class estimate_precision {
         if ($se === null) {
             return false;
         }
-        return $se > self::threshold();
+        return $se >= self::threshold();
+    }
+
+    /**
+     * Та ли это оценка, которую сняла IRT, или запись уже пересчитана обычным путем.
+     *
+     * `theta` и `theta_se` в записи владения ПЕРЕЖИВАЮТ обновления не-IRT путем: mastery_manager
+     * сохраняет их через `?? $row->theta`. Поэтому после нескольких обычных тестов в записи
+     * лежит балл, снятый процентами, и рядом - стандартная ошибка давнего прохождения CAT.
+     * Признак предварительности к такому баллу отношения не имеет.
+     *
+     * Отличаем без нового поля схемы: балл, снятый IRT, есть проекция theta и с ней совпадает.
+     */
+    public static function is_irt_estimate(?float $theta, ?float $score): bool {
+        if ($theta === null || $score === null) {
+            return false;
+        }
+        return abs(theta_scale::project($theta) - $score) < 0.01;
     }
 
     /**

@@ -258,7 +258,8 @@ class codifier_analytics {
      * вердикт по настройке cat_min_items. Роллап по поддереву через path, как
      * cohort_element_progress. [[cat-readiness-indicator-design]]. Read-only.
      *
-     * @return array<int,object> {id,code,title,parent_id,path,depth,tagged_n,calibrated_n,ready_2pl_n,verdict}
+     * @return array<int,object> {id,code,title,parent_id,path,depth,tagged_n,calibrated_n,
+     *         ready_2pl_n,to_2pl_n,flat_2pl_n,verdict}
      *         verdict in {'no_tags','low_calib','ready'}.
      */
     public static function element_bank_readiness(int $codifier_id): array {
@@ -283,12 +284,15 @@ class codifier_analytics {
         // item_pool::MIN_CALIBRATED_N, и отличие a от единицы.
         $params['mincal']  = item_irt_manager::MIN_CALIBRATED_N;
         $params['mincal2'] = item_irt_manager::MIN_CALIBRATED_N;
+        // Допуск общий с upsert: разъехавшись, база и индикатор говорили бы разное об одном
+        // задании - ровно то расхождение, которое эта задача и убирает.
+        $params['atol'] = item_irt_manager::A_TOLERANCE;
         $rows = $DB->get_records_sql(
             "SELECT l.id AS linkid, l.element_id,
                     CASE WHEN i.id IS NOT NULL AND i.calibrated_n >= :mincal2
                          THEN 1 ELSE 0 END AS calibrated,
                     CASE WHEN i.model = '2pl' AND i.calibrated_n >= :mincal
-                              AND ABS(i.a - 1) > 0.01 THEN 1 ELSE 0 END AS is2pl,
+                              AND ABS(i.a - 1) > :atol THEN 1 ELSE 0 END AS is2pl,
                     COALESCE(i.calibrated_n, 0) AS answers_n
                FROM {unics_codifier_link} l
                LEFT JOIN {unics_item_irt} i ON i.item_ref = l.target_id
@@ -302,11 +306,13 @@ class codifier_analytics {
         // числа колонка 2PL стоит нулем без объяснения, и методист не знает, копится ли что-то
         // вообще: порог сервиса (двадцать ответов) вдвое выше нашего порога достоверности.
         $directBest = [];
+        $directFlat = [];
         foreach ($elementIds as $eid) {
             $directTagged[$eid] = 0;
             $directCalib[$eid]  = 0;
             $direct2pl[$eid]    = 0;
             $directBest[$eid]   = 0;
+            $directFlat[$eid]   = 0;
         }
         foreach ($rows as $r) {
             $eid = (int)$r->element_id;
@@ -317,7 +323,13 @@ class codifier_analytics {
             if ((int)$r->is2pl === 1) {
                 $direct2pl[$eid]++;
             } else {
-                $directBest[$eid] = max($directBest[$eid], (int)$r->answers_n);
+                // Ответов уже хватает, а дискриминация вышла плоской - это не «мало данных»,
+                // а измеренный результат, и говорить про «еще N ответов» тут неверно.
+                if ((int)$r->answers_n >= item_irt_manager::MIN_N_FOR_2PL) {
+                    $directFlat[$eid]++;
+                } else {
+                    $directBest[$eid] = max($directBest[$eid], (int)$r->answers_n);
+                }
             }
         }
 
@@ -333,6 +345,7 @@ class codifier_analytics {
             $calib  = 0;
             $r2pl   = 0;
             $best   = 0;
+            $flat   = 0;
             foreach ($elements as $d) {
                 if (strpos((string)$d->path, (string)$e->path) !== 0) {
                     continue;
@@ -341,6 +354,7 @@ class codifier_analytics {
                 $calib  += $directCalib[(int)$d->id];
                 $r2pl   += $direct2pl[(int)$d->id];
                 $best    = max($best, $directBest[(int)$d->id]);
+                $flat   += $directFlat[(int)$d->id];
             }
             if ($tagged === 0) {
                 $verdict = 'no_tags';
@@ -359,10 +373,14 @@ class codifier_analytics {
                 'tagged_n'     => $tagged,
                 'calibrated_n' => $calib,
                 'ready_2pl_n'  => $r2pl,
-                // Сколько ответов не хватает ближайшему заданию до оценки дискриминации.
-                // 0 - либо 2PL уже есть, либо тегированных заданий нет вовсе.
-                'to_2pl_n'     => $tagged > 0
+                // Сколько ответов не хватает ближайшему заданию поддерева до оценки
+                // дискриминации. 0 означает «ждать нечего»: либо 2PL уже есть, либо тегированных
+                // заданий нет, либо ответов хватает и дискриминация оценена (см. flat_2pl_n).
+                'to_2pl_n'     => ($tagged > 0 && $r2pl === 0 && $best > 0)
                     ? max(0, item_irt_manager::MIN_N_FOR_2PL - $best) : 0,
+                // Заданий, где ответов достаточно, а дискриминация вышла плоской. Это не
+                // «мало данных», а измеренный результат, и ждать тут нечего.
+                'flat_2pl_n'   => $flat,
                 'verdict'      => $verdict,
             ];
         }

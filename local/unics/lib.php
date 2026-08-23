@@ -432,3 +432,29 @@ function local_unics_export_gradebook(int $course_id, int $filter_class, string 
 function local_unics_table_class(bool $compact = false): string {
     return 'table table-striped table-hover unics-table' . ($compact ? ' unics-compact' : '');
 }
+
+/**
+ * Русское склонение существительного при числе: «1 ответ», «2 ответа», «5 ответов».
+ *
+ * Заведено ради строки индикатора готовности: фиксированная форма давала «еще 1 ответов»
+ * ровно там, где элемент ближе всего к готовности и методист читает строку внимательнее всего.
+ *
+ * @param int $n число
+ * @param string $one форма для 1 («ответ»)
+ * @param string $few форма для 2-4 («ответа»)
+ * @param string $many форма для 5-20 и прочих («ответов»)
+ */
+function local_unics_plural(int $n, string $one, string $few, string $many): string {
+    $n = abs($n) % 100;
+    if ($n >= 11 && $n <= 14) {
+        return $many;
+    }
+    $last = $n % 10;
+    if ($last === 1) {
+        return $one;
+    }
+    if ($last >= 2 && $last <= 4) {
+        return $few;
+    }
+    return $many;
+}

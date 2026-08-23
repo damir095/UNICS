@@ -1,26 +1,45 @@
 <?php
 namespace local_unics;
 
-use local_unics\output\plural;
-
-defined('MOODLE_INTERNAL') || die();
-
 /**
- * Тест общего хелпера формы русского числительного ({@see plural::form}) -
- * используется и ученическим ({@see \local_unics\output\course_view}), и педагогским
- * ({@see \local_unics\output\course_staff_view}) видами страницы курса.
+ * Русское склонение существительного при числе.
+ *
+ * Заведено ради строки индикатора готовности: фиксированная форма давала «еще 1 ответов» ровно
+ * там, где элемент ближе всего к готовности ([[cat-honest-precision]]).
  *
  * @package local_unics
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(plural::class)]
 final class plural_test extends \advanced_testcase {
 
-    public function test_russian_plural_forms(): void {
-        $cases = [1 => 'one', 2 => 'few', 3 => 'few', 4 => 'few', 5 => 'many', 0 => 'many',
-                  11 => 'many', 12 => 'many', 13 => 'many', 14 => 'many', 21 => 'one', 22 => 'few',
-                  25 => 'many', 101 => 'one', 111 => 'many'];
-        foreach ($cases as $n => $expected) {
-            $this->assertSame($expected, plural::form($n), 'n = ' . $n);
-        }
+    private function ответов(int $n): string {
+        global $CFG;
+        require_once($CFG->dirroot . '/local/unics/lib.php');
+        return local_unics_plural($n, 'ответ', 'ответа', 'ответов');
+    }
+
+    public function test_one(): void {
+        $this->assertSame('ответ', $this->ответов(1));
+        $this->assertSame('ответ', $this->ответов(21));
+        $this->assertSame('ответ', $this->ответов(101));
+    }
+
+    public function test_few(): void {
+        $this->assertSame('ответа', $this->ответов(2));
+        $this->assertSame('ответа', $this->ответов(4));
+        $this->assertSame('ответа', $this->ответов(23));
+    }
+
+    public function test_many(): void {
+        $this->assertSame('ответов', $this->ответов(5));
+        $this->assertSame('ответов', $this->ответов(20));
+        $this->assertSame('ответов', $this->ответов(0));
+    }
+
+    public function test_teens_are_many(): void {
+        // Одиннадцать-четырнадцать - исключение: последняя цифра обманывает.
+        $this->assertSame('ответов', $this->ответов(11));
+        $this->assertSame('ответов', $this->ответов(12));
+        $this->assertSame('ответов', $this->ответов(14));
+        $this->assertSame('ответов', $this->ответов(111));
     }
 }

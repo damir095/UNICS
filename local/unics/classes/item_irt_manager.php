@@ -93,16 +93,22 @@ class item_irt_manager {
     public static function upsert(int $item_ref, ?int $element_id, float $b, int $n, ?float $a = null): void {
         global $DB;
         $now = time();
-        $model = ($a !== null && abs($a - 1.0) > self::A_TOLERANCE) ? '2pl' : 'rasch';
+        // Сравниваем в десятитысячных долях целыми числами - ровно так, как посчитает база на
+        // колонке NUMBER(6,4). На double граница обманывает: abs(round(1.01004, 4) - 1.0) дает
+        // 0.010000000000000009, то есть «больше допуска», а SQL на тех же числах скажет «не
+        // больше», и надпись разошлась бы с колонкой индикатора.
+        $units = $a === null ? 0 : (int)round(abs(round($a, 4) - 1.0) * 10000);
+        $model = ($a !== null && $units > (int)round(self::A_TOLERANCE * 10000)) ? '2pl' : 'rasch';
         $existing = $DB->get_record('unics_item_irt', ['item_ref' => $item_ref]);
         if ($existing) {
             $rec = (object)[
                 'id' => $existing->id, 'element_id' => $element_id, 'model' => $model,
                 'b' => round($b, 4), 'calibrated_n' => $n, 'updated_at' => $now,
             ];
-            if ($a !== null) {
-                $rec->a = round($a, 4);
-            }
+            // Дискриминацию пишем ВСЕГДА, в том числе возвращаем к единице: иначе строка с
+            // надписью «rasch» тащила бы прежнюю оценку 1.63, и отбор заданий в CAT считал бы
+            // по ней информацию Фишера, хотя сама строка объявляет дискриминацию неоцененной.
+            $rec->a = $a !== null ? round($a, 4) : 1;
             $DB->update_record('unics_item_irt', $rec);
         } else {
             $DB->insert_record('unics_item_irt', (object)[
