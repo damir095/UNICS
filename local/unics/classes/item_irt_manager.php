@@ -62,11 +62,28 @@ class item_irt_manager {
         return $out;
     }
 
-    /** Upsert параметра задания (по item_ref). $a !== null -> пишем дискриминацию и model='2pl'. */
+    /**
+     * Насколько дискриминация должна отличаться от единицы, чтобы считаться оцененной.
+     *
+     * Сервис при нехватке ответов включает гард Раша и подставляет ровно 1.0, но поле
+     * discrimination отдает ВСЕГДА. Точное сравнение с единицей ненадежно: число проходит через
+     * сеть, JSON и round(), - поэтому допуск. Тот же допуск стоит в индикаторе готовности
+     * ([[codifier_analytics::element_bank_readiness]]).
+     */
+    const A_TOLERANCE = 0.01;
+
+    /**
+     * Upsert параметра задания (по item_ref).
+     *
+     * Модель пишется по ФАКТУ, а не по наличию поля: зонд 2026-08-22 нашел на стенде девять
+     * заданий с надписью «2pl» при дискриминации ровно 1.000, то есть при калибровке Раша.
+     * Наружу это не выходило только потому, что индикатор готовности страховался своей
+     * проверкой, - но запись в базе врала.
+     */
     public static function upsert(int $item_ref, ?int $element_id, float $b, int $n, ?float $a = null): void {
         global $DB;
         $now = time();
-        $model = $a !== null ? '2pl' : 'rasch';
+        $model = ($a !== null && abs($a - 1.0) > self::A_TOLERANCE) ? '2pl' : 'rasch';
         $existing = $DB->get_record('unics_item_irt', ['item_ref' => $item_ref]);
         if ($existing) {
             $rec = (object)[
