@@ -121,4 +121,53 @@ final class cat_stop_reason_test extends \advanced_testcase {
         $this->assertNull($DB->get_field('unics_cat_session', 'stop_reason',
             ['id' => $session->id]));
     }
+    public function test_session_without_error_is_provisional(): void {
+        // Ни причины, ни стандартной ошибки: про такую проверку не известно ничего.
+        // У записи владения null означает «оценка не из IRT», но у СЕССИИ - «мерить нечем».
+        $this->resetAfterTest();
+        $s = $this->session(null, null, 0.0);
+        $s->theta_se = null;
+
+        $this->assertTrue(estimate_precision::session_is_provisional($s));
+    }
+
+    public function test_child_note_matches_the_reason(): void {
+        // «Вопросов пока мало» - неправда, когда проверка кончилась НА ЛИМИТЕ вопросов.
+        $this->resetAfterTest();
+        $exhausted = estimate_precision::child_note_for_session(
+            $this->session('bank_exhausted', 0.3, 0.7));
+        $limit = estimate_precision::child_note_for_session(
+            $this->session('max_items', 0.3, 0.7));
+
+        $this->assertStringContainsString('мало', $exhausted);
+        $this->assertStringNotContainsString('мало', $limit);
+        $this->assertNotSame($exhausted, $limit);
+    }
+
+    public function test_child_note_is_empty_for_a_complete_check(): void {
+        $this->resetAfterTest();
+        $this->assertSame('', estimate_precision::child_note_for_session(
+            $this->session('se_reached', 0.3, 0.2)));
+    }
+
+    public function test_staff_note_uses_the_saved_threshold(): void {
+        // Подсказка обязана говорить о пороге, действовавшем ТОГДА, иначе она спорит с
+        // вердиктом: при мягком нынешнем пороге прежняя версия вовсе пустела.
+        $this->resetAfterTest();
+        set_config('cat_se_threshold', 0.9, 'local_unics');
+        $note = estimate_precision::staff_note_for_session(
+            $this->session('bank_exhausted', 0.3, 0.5));
+
+        $this->assertStringContainsString('0,30', $note, 'порог из записи, а не нынешний');
+        $this->assertStringContainsString('0,50', $note);
+        $this->assertStringContainsString('кончились задания', $note);
+    }
+
+    public function test_staff_note_names_the_item_limit(): void {
+        $this->resetAfterTest();
+        $note = estimate_precision::staff_note_for_session(
+            $this->session('max_items', 0.3, 0.5));
+
+        $this->assertStringContainsString('лимит вопросов', $note);
+    }
 }

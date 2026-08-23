@@ -44,8 +44,16 @@ class estimate_precision {
         return $se >= self::threshold();
     }
 
-    /** Причина остановки, означающая, что заявленная точность ДОСТИГНУТА. */
+    /**
+     * Причины остановки, которые называет сервис (ai-service/app/cat.py).
+     *
+     * Строки дублируют контракт сервиса; незнакомое значение обрабатывается запасным путем,
+     * поэтому переименование на той стороне не ломает нас молча - оно лишь возвращает к
+     * сравнению с порогом.
+     */
     const REASON_PRECISION = 'se_reached';
+    const REASON_MAX_ITEMS = 'max_items';
+    const REASON_BANK_EXHAUSTED = 'bank_exhausted';
 
     /**
      * Предварительна ли оценка сессии CAT - по СОХРАНЕННОЙ причине остановки.
@@ -63,11 +71,60 @@ class estimate_precision {
         if ($reason === self::REASON_PRECISION) {
             return false;
         }
-        if ($reason === 'max_items' || $reason === 'bank_exhausted') {
+        if ($reason === self::REASON_MAX_ITEMS || $reason === self::REASON_BANK_EXHAUSTED) {
             return true;
         }
-        return self::is_provisional(
-            isset($session->theta_se) ? (float)$session->theta_se : null);
+        $se = isset($session->theta_se) ? (float)$session->theta_se : null;
+        if ($se === null) {
+            // Ни причины, ни ошибки: про такую проверку не известно ничего, и объявлять ее
+            // законченной нельзя. У обычной записи владения null означает «оценка не из IRT»,
+            // но у СЕССИИ CAT он означает «мерить нечем» (найдено ревью).
+            return true;
+        }
+        return self::is_provisional($se);
+    }
+
+    /**
+     * Пояснение ребенку по сохраненной причине остановки. Пустая строка - оценка полная.
+     *
+     * Текст живет здесь, а не на странице: раньше страница держала свою копию строки, и правка
+     * в этом классе не меняла бы ничего из того, что ребенок видит.
+     */
+    public static function child_note_for_session(object $session): string {
+        if (!self::session_is_provisional($session)) {
+            return '';
+        }
+        // «Вопросов пока мало» неправда, когда проверка кончилась НА ЛИМИТЕ вопросов.
+        if ((string)($session->stop_reason ?? '') === self::REASON_MAX_ITEMS) {
+            return 'Вопросов было много, но точного результата пока не получилось. '
+                . 'Попробуй эту тему позже.';
+        }
+        return 'Вопросов пока мало, поэтому результат предварительный.';
+    }
+
+    /**
+     * Пояснение персоналу по сессии - с порогом, который действовал ТОГДА.
+     *
+     * Прежний staff_note() сравнивал с нынешней настройкой, и подсказка спорила с вердиктом:
+     * при мягком пороге она вовсе пустела, оставляя пометку «предварительно» без объяснения.
+     */
+    public static function staff_note_for_session(object $session): string {
+        if (!self::session_is_provisional($session)) {
+            return '';
+        }
+        $se = isset($session->theta_se) ? (float)$session->theta_se : null;
+        $threshold = isset($session->se_threshold)
+            ? (float)$session->se_threshold : self::threshold();
+        $reasons = [
+            self::REASON_MAX_ITEMS => 'кончился лимит вопросов',
+            self::REASON_BANK_EXHAUSTED => 'кончились задания темы',
+        ];
+        $why = $reasons[(string)($session->stop_reason ?? '')] ?? 'точность не достигнута';
+        return 'Предварительная оценка: ' . $why
+            . ($se !== null
+                ? ' (стандартная ошибка ' . number_format($se, 2, ',', ' ')
+                    . ' при пороге ' . number_format($threshold, 2, ',', ' ') . ')'
+                : '');
     }
 
     /**

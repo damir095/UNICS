@@ -127,10 +127,22 @@ if ($slot !== null) {
     // Вопросов нет, а сессия жива: сервис оценки упал посреди проверки, следующее задание не
     // выдано, владение не записано. Раньше сюда попадал экран «Проверка завершена» со старой
     // способностью - незаконченная проверка выглядела законченной ([[cat-honest-precision]]).
-    echo $OUTPUT->notification('Проверка прервалась: сервис оценки не ответил. '
-        . 'Попробуйте продолжить позже - ответы сохранены.', 'warning');
+    echo $OUTPUT->notification('Проверка прервалась: сервис оценки сейчас не отвечает. '
+        . 'Можно начать эту тему заново или выбрать другую.', 'warning');
+    // Кнопка обязательна: продолжить прерванную сессию нечем - следующее задание не выдано и
+    // выдать его некому, - поэтому без «начать заново» тема становилась тупиком навсегда
+    // (найдено ревью). Обещание «продолжите позже» было неправдой.
+    echo html_writer::start_tag('form', ['method' => 'post',
+        'style' => 'display:inline-block; margin-right:8px;',
+        'action' => (new moodle_url('/local/unics/pages/cat.php',
+            ['element' => $element_id, 'action' => 'restart']))->out(false)]);
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey',
+        'value' => sesskey()]);
+    echo html_writer::tag('button', 'Начать заново',
+        ['type' => 'submit', 'class' => 'btn btn-primary unics-cta mt-2']);
+    echo html_writer::end_tag('form');
     echo html_writer::link(new moodle_url('/local/unics/pages/cat.php'),
-        'Пройти другую тему', ['class' => 'btn btn-secondary mt-2']);
+        'Пройти другую тему', ['class' => 'btn btn-secondary mt-2 ms-2']);
 } else {
     // Экран результата.
     $score = $session->theta !== null
@@ -149,9 +161,12 @@ if ($slot !== null) {
         // оценка выглядит измеренной ([[cat-honest-precision]]).
         // По СОХРАНЕННОЙ причине остановки, а не сравнением с нынешней настройкой: иначе
         // смена порога переписывала бы вердикт по всем прошлым проверкам.
-        if (\local_unics\adaptive\estimate_precision::session_is_provisional($session)) {
-            echo $OUTPUT->notification(
-                'Вопросов пока мало, поэтому результат предварительный.', 'info');
+        // Текст берем из класса, а не держим свою копию: иначе правка формулировки там не
+        // меняла бы ничего из того, что видит ребенок. И он зависит от ПРИЧИНЫ: «вопросов
+        // пока мало» - неправда, когда проверка кончилась на лимите вопросов.
+        $note = \local_unics\adaptive\estimate_precision::child_note_for_session($session);
+        if ($note !== '') {
+            echo $OUTPUT->notification($note, 'info');
         }
     }
     echo html_writer::start_tag('form', ['method' => 'post', 'style' => 'display:inline-block; margin-right:8px;',

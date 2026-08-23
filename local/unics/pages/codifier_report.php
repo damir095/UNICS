@@ -226,19 +226,28 @@ foreach ($rows_page as $r) {
             // путем внутри session_is_provisional() - для сессий до появления поля.
             $mtheta = $m->theta !== null ? (float)$m->theta : null;
             $mse = $m->theta_se !== null ? (float)$m->theta_se : null;
-            $lastcat = \local_unics\learning\cat_session_manager::latest_finished(
-                (int)$student_id, (int)$r->id);
-            $provisional = \local_unics\adaptive\estimate_precision::is_irt_estimate(
-                    $mtheta, (float)$m->score)
-                && ($lastcat
+            // Сессию ищем ТОЛЬКО когда балл действительно снят IRT: иначе запрос уходил на
+            // каждую строку таблицы, а результат выбрасывался (найдено ревью).
+            if (\local_unics\adaptive\estimate_precision::is_irt_estimate($mtheta, (float)$m->score)) {
+                $lastcat = \local_unics\learning\cat_session_manager::latest_finished(
+                    (int)$student_id, (int)$r->id);
+                $provisional = $lastcat
                     ? \local_unics\adaptive\estimate_precision::session_is_provisional($lastcat)
-                    : \local_unics\adaptive\estimate_precision::is_provisional($mse));
+                    : \local_unics\adaptive\estimate_precision::is_provisional($mse);
+            } else {
+                $lastcat = null;
+                $provisional = false;
+            }
             if ($provisional) {
                 // Числа - только персоналу: страница намеренно не показывает родителю ни theta,
-                // ни стандартную ошибку, и подсказка не должна обходить это правило.
+                // ни стандартную ошибку, и подсказка не должна обходить это правило. Подсказка
+                // берется по СЕССИИ - с порогом, действовавшим тогда, а не нынешним: иначе она
+                // спорила с вердиктом и при мягком пороге вовсе пустела.
                 $attrs = ['class' => 'text-muted small'];
                 if ($is_staff) {
-                    $attrs['title'] = \local_unics\adaptive\estimate_precision::staff_note($mse);
+                    $attrs['title'] = $lastcat
+                        ? \local_unics\adaptive\estimate_precision::staff_note_for_session($lastcat)
+                        : \local_unics\adaptive\estimate_precision::staff_note($mse);
                 }
                 $masterycell .= html_writer::tag('div', 'предварительно', $attrs);
             }
