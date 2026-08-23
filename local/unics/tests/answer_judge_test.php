@@ -179,6 +179,10 @@ final class answer_judge_test extends \advanced_testcase {
             $out = preg_split('~\R~u',
                 answer_judge::build_prompt([$this->q('Столица России?',
                     ['Москва', 'Тверь', 'Казань', 'Самара'], $correct)]));
+            // Номер варианта снимаем: он переставляется перемешиванием, а сравнивать надо
+            // содержание промта, а не порядок строк.
+            $out = array_map(static fn(string $s): string
+                => preg_replace('~^\s*\d+\)\s*~u', '', $s), $out);
             sort($out);
             return $out;
         };
