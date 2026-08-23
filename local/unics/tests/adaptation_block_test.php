@@ -81,7 +81,11 @@ final class adaptation_block_test extends \advanced_testcase {
                 $this->canned = $canned;
             }
             protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
-                $this->last_prompt = $prompt;
+                // Промт слепого судьи ([[answer-judge-design]]) идет последним и перебивал бы
+                // сохраненный промт генерации, ради которого заглушка и заведена.
+                if (!str_contains($prompt, 'решает тестовые задания')) {
+                    $this->last_prompt = $prompt;
+                }
                 return $this->canned;
             }
         };
@@ -104,7 +108,9 @@ final class adaptation_block_test extends \advanced_testcase {
         set_config('ai_api_key', 'FAKE_KEY_FOR_TEST', 'local_unics');
         $gen = $this->capturing('{"questions":[{"text":"Вопрос?","answers":["А","Б"],"correct":0}]}');
 
+        ob_start();
         $gen->generate_quiz($this->zpr_profile(), 'Дроби');
+        ob_end_clean();
 
         $p = $gen->last_prompt;
         $this->assertStringContainsString('уровень: стандартный', $p,
@@ -156,7 +162,9 @@ final class adaptation_block_test extends \advanced_testcase {
         $extra = 'предмет - биология, избегать латинских терминов без пояснений';
 
         $quiz = $this->capturing('{"questions":[{"text":"В?","answers":["А","Б"],"correct":0}]}');
+        ob_start();
         $quiz->generate_quiz($this->zpr_profile(), 'Клетка', '', 5, $extra);
+        ob_end_clean();
         $this->assertStringContainsString('Дополнительные указания от педагога:', $quiz->last_prompt);
         $this->assertStringContainsString($extra, $quiz->last_prompt);
 
@@ -175,7 +183,9 @@ final class adaptation_block_test extends \advanced_testcase {
         set_config('ai_api_key', 'FAKE_KEY_FOR_TEST', 'local_unics');
 
         $quiz = $this->capturing('{"questions":[{"text":"В?","answers":["А","Б"],"correct":0}]}');
+        ob_start();
         $quiz->generate_quiz($this->zpr_profile(), 'Клетка');
+        ob_end_clean();
 
         $this->assertStringNotContainsString('Дополнительные указания', $quiz->last_prompt);
     }

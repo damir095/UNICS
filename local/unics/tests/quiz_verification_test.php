@@ -20,6 +20,12 @@ final class quiz_verification_test extends \advanced_testcase {
                 $this->queue = $replies;
             }
             public function generate_text(string $prompt, int $max_tokens = 1024): string {
+                if (str_contains($prompt, 'решает тестовые задания')) {
+                    // Слепой судья ([[answer-judge-design]]) спрашивается отдельным вызовом.
+                    // Здесь он молчит: очередь ответов принадлежит проверке арифметики, и
+                    // счетчик попыток генерации не должен считать чужие обращения.
+                    return '';
+                }
                 $this->calls++;
                 return array_shift($this->queue) ?? '';
             }
@@ -58,14 +64,18 @@ final class quiz_verification_test extends \advanced_testcase {
             'answers' => ['часть целого', 'сумма', 'разность'],
             'correct' => 1,
         ]]], JSON_UNESCAPED_UNICODE);
+        ob_start();
         $out = $this->generator([$reply])->generate_quiz([], 'Дроби', '', 1);
+        ob_end_clean();
         $this->assertSame(1, $out[0]['correct'], 'непроверяемый вопрос не трогаем');
     }
 
     public function test_latex_is_stripped_from_text_and_answers(): void {
         $reply = '{"questions":[{"text":"Сложите $ \\\\frac{4}{7} $ и $ \\\\frac{3}{7} $",'
             . '"answers":["$ \\\\frac{7}{7} $","$ \\\\frac{7}{10} $"],"correct":0}]}';
+        ob_start();
         $out = $this->generator([$reply])->generate_quiz([], 'Дроби', '', 1);
+        ob_end_clean();
         $this->assertStringNotContainsString('frac', $out[0]['text']);
         $this->assertStringNotContainsString('$', $out[0]['text']);
         $this->assertStringNotContainsString('frac', $out[0]['answers'][0]);

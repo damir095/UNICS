@@ -745,9 +745,10 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         // ([[codifier-ai-proposal-design]], раздел 4).
         $data = json_reply::decode($raw, 'questions') ?? [];
 
-        $result = [];
+        $survived = [];
         $fixed = 0;
         $dropped = 0;
+        $bysigns = 0;
         foreach ((array)($data['questions'] ?? []) as $q) {
             if (!is_array($q) || empty($q['text']) || empty($q['answers']) || !is_array($q['answers'])) {
                 continue;
@@ -756,7 +757,11 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             $answers = array_map(static function ($a): string {
                 return output_style::strip_math_markup((string)$a);
             }, array_values($q['answers']));
-            $correct = max(0, min((int)($q['correct'] ?? 0), count($answers) - 1));
+            // Индекс ключа НЕ зажимаем: раньше correct = 7 при четырех вариантах молча
+            // объявлял верным последний, и ребенок получал «неверно» за верный ответ.
+            // Битый индекс - признак того, что модель потеряла соответствие ключа вариантам,
+            // и его ловит question_sanity ([[answer-judge-design]], раздел 2.1).
+            $correct = (int)($q['correct'] ?? 0);
 
             // Решение тоже чистим: иначе запасной источник выражения мертв ровно тогда, когда
             // модель шлет LaTeX или символы дробей - то есть в большинстве живых ответов.
@@ -769,15 +774,38 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             if ($check['verdict'] === 'fixed') {
                 $fixed++;
             }
-            $result[] = ['text' => $text, 'answers' => $answers, 'correct' => $check['correct']];
-            if (count($result) >= $num) {
+            $correct = $check['correct'];
+
+            // Второй ярус: то, что видно по самой разметке, без знания предмета.
+            $signs = question_sanity::verdict($text, $answers, $correct);
+            if ($signs['verdict'] === 'drop') {
+                $bysigns++;
+                $this->trace('  Признаки брака: ' . $signs['reason'], DEBUG_DEVELOPER);
+                continue;
+            }
+            foreach ($signs['notes'] as $note) {
+                $this->trace('  Подозрение: ' . $note, DEBUG_DEVELOPER);
+            }
+
+            $survived[] = ['text' => $text, 'answers' => $answers, 'correct' => $correct,
+                // Посчитанное расчетом судье не показываем: его мнение не отменяет
+                // арифметику. Иначе исправленный нами ключ отбрасывался бы догадкой модели.
+                'computed' => $check['verdict'] !== 'unverifiable'];
+            if (count($survived) >= $num) {
                 break;
             }
         }
 
-        if ($fixed || $dropped) {
+        // Третий ярус: один вызов судьи на пережившее. Спрашиваем в самом конце - и потому,
+        // что судья дорог (обращение к сети), и потому, что нет смысла спрашивать про вопросы,
+        // уже выбитые разметкой или решенные расчетом.
+        [$result, $byjudge] = $this->judge_survivors($survived);
+
+        if ($fixed || $dropped || $bysigns || $byjudge) {
             $this->trace('  Проверка заданий: исправлено ключей ' . $fixed
-                . ', отброшено вопросов ' . $dropped);
+                . ', отброшено арифметикой ' . $dropped
+                . ', признаками ' . $bysigns
+                . ', судьей ' . $byjudge);
         }
         if (empty($result)) {
             // Начало И хвост: по одному началу нельзя отличить обрыв ответа от порчи разметки,
@@ -787,6 +815,53 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         }
 
         return $result;
+    }
+
+    /**
+     * Спросить слепого судью про пережившие вопросы ([[answer-judge-design]], раздел 2.2).
+     *
+     * Отказ судьи и срабатывание предохранителя ОБЯЗАНЫ оставлять след: без него молчание
+     * проверки неотличимо от чистого прогона, и ярус мог бы годами не работать незаметно -
+     * ровно так проект уже обжегся на озвучке.
+     *
+     * @param array $survived вопросы, дожившие до третьего яруса
+     * @return array [оставшиеся вопросы, сколько отброшено судьей]
+     */
+    private function judge_survivors(array $survived): array {
+        // Судить нечего там, где посчитал расчет: вердикт арифметики надежнее догадки модели.
+        // Ключи сохраняем - вердикты вернутся с ними и не разъедутся с вопросами.
+        $ask = array_filter($survived, static fn(array $q): bool => empty($q['computed']));
+        $strip = static function (array $qs): array {
+            return array_map(static function (array $q): array {
+                unset($q['computed']);
+                return $q;
+            }, $qs);
+        };
+        if (!$ask) {
+            return [array_values($strip($survived)), 0];
+        }
+        $out = (new answer_judge($this))->review($ask);
+
+        if ($out['status'] === answer_judge::STATUS_FAILED) {
+            $this->trace('  [warn] Судья не ответил, вопросы приняты без его проверки');
+            return [array_values($strip($survived)), 0];
+        }
+        if ($out['status'] === answer_judge::STATUS_DISTRUST) {
+            $this->trace('  [warn] Судья спорит с ' . $out['disagreed'] . ' ответами из '
+                . $out['judged'] . ' - его вердикты сняты целиком');
+            return [array_values($strip($survived)), 0];
+        }
+
+        $kept = [];
+        $byjudge = 0;
+        foreach ($survived as $i => $q) {
+            if (($out['verdicts'][$i] ?? 'ok') === 'drop') {
+                $byjudge++;
+                continue;
+            }
+            $kept[] = $q;
+        }
+        return [array_values($strip($kept)), $byjudge];
     }
 
     // ----------------------------------------------------------------
