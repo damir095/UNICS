@@ -193,12 +193,85 @@ final class question_sanity_test extends \advanced_testcase {
         $out = question_sanity::verdict('Что не является не живым организмом?',
             ['Камень', 'Дерево', 'Вода', 'Песок'], 1);
         $this->assertSame('ok', $out['verdict']);
-        $this->assertContains('двойное отрицание', $out['notes']);
+        $this->assertContains('несколько отрицаний в вопросе', $out['notes']);
     }
 
     public function test_single_negation_is_not_double(): void {
         $out = question_sanity::verdict('Что не относится к млекопитающим?',
             ['Крокодил', 'Кит', 'Еж', 'Лиса'], 0);
-        $this->assertNotContains('двойное отрицание', $out['notes']);
+        $this->assertNotContains('несколько отрицаний в вопросе', $out['notes']);
+    }
+    // ------------------------------------------------------------------
+    // Ложные срабатывания правил формулировки (найдено ревью 2026-08-23)
+    // ------------------------------------------------------------------
+
+    public function test_counting_question_with_numeral_survives(): void {
+        // «Сколько будет два плюс три» - счетный вопрос с ОДНИМ ответом. Числительное само по
+        // себе требованием нескольких ответов не является, иначе гибнут целые комплекты.
+        $this->assertSame('ok', question_sanity::verdict('Сколько будет два плюс три?',
+            ['5', '4', '6', '7'], 0)['verdict']);
+        $this->assertSame('ok', question_sanity::verdict(
+            'Какое животное имеет три камеры сердца?',
+            ['Лягушка', 'Рыба', 'Собака', 'Голубь'], 0)['verdict']);
+    }
+
+    public function test_numeric_answers_are_not_containment(): void {
+        // «10» - слово внутри «10 000», но это разные числа, а не уточнение одного ответа.
+        // Ключ '10' - слово внутри дистрактора '10 000': без исключения чисел правило
+        // объявляло бы это неоднозначностью.
+        $this->assertSame('ok', question_sanity::verdict('Сколько десятков в сотне?',
+            ['10', '10 000', '1 000', '100'], 0)['verdict']);
+    }
+
+    public function test_overlapping_distractors_do_not_drop(): void {
+        // Перекрытие двух НЕВЕРНЫХ вариантов ребенку не мешает: он выбирает ключ.
+        $this->assertSame('ok', question_sanity::verdict('Какая рыба самая опасная?',
+            ['Акула', 'Кит', 'Синий кит', 'Дельфин'], 0)['verdict']);
+    }
+
+    public function test_digit_numeral_drops_like_the_spelled_one(): void {
+        $this->assertSame('drop', question_sanity::verdict(
+            'Какие 2 материка расположены в южном полушарии?',
+            ['Австралия', 'Антарктида', 'Африка', 'Азия'], 1)['verdict']);
+    }
+
+    public function test_yo_spelling_of_all_drops(): void {
+        // Букву «е» с точками в выходе ИИ не трогаем намеренно, и «отметьте всё» модель пишет
+        // именно так.
+        $this->assertSame('drop', question_sanity::verdict(
+            'Отметьте всё, что относится к млекопитающим',
+            ['Кит', 'Еж', 'Лиса', 'Крокодил'], 0)['verdict']);
+    }
+
+    public function test_numeral_before_punctuation_drops(): void {
+        $this->assertSame('drop', question_sanity::verdict(
+            'Материки южного полушария - назовите два.',
+            ['Австралия', 'Антарктида', 'Африка', 'Азия'], 1)['verdict']);
+    }
+
+    public function test_containment_sees_through_punctuation(): void {
+        $this->assertSame('drop', question_sanity::verdict('Столица России?',
+            ['Москва, столица', 'Москва', 'Тверь', 'Казань'], 1)['verdict']);
+    }
+
+    public function test_initials_are_not_several_sentences(): void {
+        $out = question_sanity::verdict('А. С. Пушкин родился в каком году?',
+            ['1799', '1800', '1801', '1802'], 0);
+        $this->assertNotContains('вопрос из нескольких предложений', $out['notes']);
+    }
+
+    public function test_two_separate_negations_are_noted(): void {
+        // Не «несколько отрицаний в вопросе», а именно несколько отрицаний: разбирать тяжело так же.
+        $out = question_sanity::verdict('Что не относится к рыбам и не живет в воде?',
+            ['Кит', 'Карп', 'Щука', 'Окунь'], 0);
+        $this->assertContains('несколько отрицаний в вопросе', $out['notes']);
+    }
+
+    public function test_adjacent_negations_are_counted(): void {
+        // Формулировка нарочито корявая: она проверяет СЧЕТЧИК. Прежний шаблон «(^|\s)не\s»
+        // на подряд идущих «не не» давал одно совпадение - пробел между ними съедался первым.
+        $out = question_sanity::verdict('Камень не не живой организм?',
+            ['Верно', 'Неверно', 'Не знаю', 'Иногда'], 1);
+        $this->assertContains('несколько отрицаний в вопросе', $out['notes']);
     }
 }

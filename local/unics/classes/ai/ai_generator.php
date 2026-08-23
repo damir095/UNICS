@@ -845,9 +845,23 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
                 . ', судьей ' . $byjudge);
         }
         if ($notes) {
-            $this->trace('  Подозрения (вопрос все равно принят): ' . implode('; ', $notes));
+            // Считаем повторы, а не печатаем список: на комплекте из пяти вопросов с четырьмя
+            // видами подозрений строка иначе разрасталась до двадцати одинаковых кусков.
+            $counted = [];
+            foreach (array_count_values($notes) as $note => $times) {
+                $counted[] = $times > 1 ? $note . ' (x' . $times . ')' : $note;
+            }
+            $this->trace('  Подозрения (вопросы все равно приняты): ' . implode('; ', $counted));
         }
         if (empty($result)) {
+            if ($dropped || $bysigns || $byjudge) {
+                // Ответ разобрался, вопросы выбили проверки. Называть это «некорректным
+                // форматом» - отправлять разбирающегося смотреть на разбор JSON, хотя
+                // причина в содержании (найдено ревью).
+                throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                    'Все вопросы отбракованы проверками: арифметикой ' . $dropped
+                    . ', признаками ' . $bysigns . ', судьей ' . $byjudge);
+            }
             // Начало И хвост: по одному началу нельзя отличить обрыв ответа от порчи разметки,
             // а причина всегда в конце ([[codifier-ai-proposal-design]], раздел 11).
             throw new \moodle_exception('generalexceptionmessage', 'error', '',

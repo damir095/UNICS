@@ -108,7 +108,10 @@ final class quiz_verification_test extends \advanced_testcase {
             $this->fail('после двух отбраковок обязано быть исключение');
         } catch (\moodle_exception $e) {
             ob_end_clean();
-            $this->assertStringContainsString('некорректный формат теста', $e->getMessage());
+            // Сообщение называет ЯРУС, а не формат: ответ разобрался, вопросы выбила проверка,
+            // и отправлять разбирающегося смотреть на JSON было бы ложным следом.
+            $this->assertStringContainsString('отбракованы проверками', $e->getMessage());
+            $this->assertStringContainsString('арифметикой 1', $e->getMessage());
         }
     }
 }
