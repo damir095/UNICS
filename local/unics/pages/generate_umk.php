@@ -90,8 +90,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     // Элемент кодификатора: 0 = методист не выбрал, привязки и пула не будет.
     // Существование проверяем: по этому id пойдут привязки заданий, и мусорное значение
     // развело бы пул вокруг несуществующего навыка, где его никто никогда не увидит.
+    //
+    // Мало существования: элемент обязан принадлежать предмету ЭТОГО курса. После разведения
+    // предметов в списке видны элементы всех кодификаторов, и задание по географии, привязанное
+    // к «Нахождению процента», ушло бы в чужой пул, а калибровка посчитала бы трудность чужой
+    // темы по этим ответам ([[element-course-match]]).
     $element_id     = optional_param('element_id', 0, PARAM_INT);
-    if ($element_id > 0 && !$DB->record_exists('unics_codifier_element', ['id' => $element_id])) {
+    $foreign_element = false;
+    if ($element_id > 0
+            && !\local_unics\codifier_manager::element_belongs_to_course($element_id, (int)$course_id)) {
+        $foreign_element = true;
         $element_id = 0;
     }
 
@@ -118,6 +126,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         redirect(
             new moodle_url('/local/unics/pages/generate_umk.php'),
             'У вас нет прав создавать материалы в этом курсе.',
+            null, \core\output\notification::NOTIFY_WARNING
+        );
+    }
+
+    // Молча сбросить чужой элемент в «не привязывать» нельзя: методист был бы уверен, что
+    // задания копятся в пуле темы, а они копились бы нигде.
+    if ($foreign_element) {
+        redirect(
+            new moodle_url('/local/unics/pages/generate_umk.php', ['course_id' => (int)$course_id]),
+            'Элемент кодификатора относится к другому предмету. Выберите элемент того предмета, '
+            . 'к которому относится курс, или оставьте «Не привязывать».',
             null, \core\output\notification::NOTIFY_WARNING
         );
     }
@@ -430,7 +449,9 @@ $letters_menu = ['' => '- все буквы -', 'А' => 'А', 'Б' => 'Б', 'В'
 // Курсы. Список фильтруется ТЕМ ЖЕ предикатом, что проверяет POST: страница не должна предлагать
 // то, что потом отвергнет, и оба пути обязаны спрашивать одно правило - раздвоение GET и POST
 // уже дало одну утечку (см. журнал за 2026-08-09).
-$courses = $DB->get_records_sql("SELECT id, fullname FROM {course} WHERE id <> 1 ORDER BY fullname");
+// category нужна форме: по ней прячутся элементы кодификаторов чужих предметов.
+$courses = $DB->get_records_sql(
+    "SELECT id, fullname, category FROM {course} WHERE id <> 1 ORDER BY fullname");
 $courses = array_filter($courses, fn($c) => $can_build_in_course((int)$c->id));
 
 // Предвыбор курса при переходе из шаблонов (course_templates.php)
@@ -599,7 +620,10 @@ foreach (\local_unics\codifier_manager::list_subject_categories() as $catid => $
         $items .= html_writer::tag('option', s($el->code . ' ' . $el->title), ['value' => (int)$el->id]);
     }
     if ($items !== '') {
-        $element_opts .= html_writer::tag('optgroup', $items, ['label' => $codifier->name]);
+        // data-category: по нему форма прячет элементы чужих предметов при выборе курса.
+        // Разметка, а не запрос к серверу: все элементы уже здесь.
+        $element_opts .= html_writer::tag('optgroup', $items,
+            ['label' => $codifier->name, 'data-category' => (int)$catid]);
     }
 }
 echo html_writer::start_tag('div', ['class' => 'form-group']);
@@ -615,7 +639,7 @@ echo html_writer::start_tag('div', ['class' => 'form-group']);
 echo html_writer::tag('label', 'Курс <span class="text-danger">*</span>', ['for' => 'course_id_select']);
 $course_opts = '';
 foreach ($courses as $c) {
-    $attrs = ['value' => $c->id];
+    $attrs = ['value' => $c->id, 'data-category' => (int)$c->category];
     if ($preselect_course && (int)$c->id === $preselect_course) {
         $attrs['selected'] = 'selected';
     }
@@ -666,13 +690,36 @@ echo html_writer::script("
             .catch(function() {});
     }
 
+    // Элементы кодификатора: показываем только предмет выбранного курса. Сервер это же
+    // проверяет при отправке - разметка тут для удобства, а не вместо проверки.
+    var elementSelect = document.getElementById('gen_element');
+
+    function filterElements() {
+        var opt = courseSelect.options[courseSelect.selectedIndex];
+        var cat = opt ? opt.getAttribute('data-category') : null;
+        var groups = elementSelect.querySelectorAll('optgroup');
+        for (var i = 0; i < groups.length; i++) {
+            var own = groups[i].getAttribute('data-category') === cat;
+            groups[i].hidden = !own;
+            groups[i].disabled = !own;
+        }
+        // Выбор мог остаться от прежнего курса: сбрасываем на «не привязывать», иначе методист
+        // отправил бы форму с элементом чужого предмета и получил отказ на ровном месте.
+        var chosen = elementSelect.selectedOptions[0];
+        if (chosen && chosen.parentElement.tagName === 'OPTGROUP' && chosen.parentElement.hidden) {
+            elementSelect.value = '0';
+        }
+    }
+
     courseSelect.addEventListener('change', function() {
         loadSections(this.value);
+        filterElements();
     });
 
     if (courseSelect.value) {
         loadSections(courseSelect.value);
     }
+    filterElements();
 })();
 ");
 

@@ -48,6 +48,29 @@ class codifier_manager {
     }
 
     /** Список категорий-дисциплин (видимые категории курсов), id => name. */
+    /**
+     * Принадлежит ли элемент кодификатору предмета, которому принадлежит курс.
+     *
+     * До разведения предметов кодификатор на стенде был один, и вопрос не возникал. Теперь форма
+     * генерации УМК показывает элементы ВСЕХ кодификаторов, и без этой проверки задание по
+     * географии можно привязать к «Нахождению процента от числа»: оно уйдет в чужой пул, а
+     * калибровка посчитает трудность чужой темы по этим ответам ([[element-course-match]]).
+     *
+     * @param int $element_id 0 - «не привязывать», законный выбор
+     */
+    public static function element_belongs_to_course(int $element_id, int $course_id): bool {
+        global $DB;
+        if ($element_id <= 0) {
+            return true;
+        }
+        $codifier = self::get_codifier_for_course($course_id);
+        if (!$codifier) {
+            return false;
+        }
+        return $DB->record_exists('unics_codifier_element',
+            ['id' => $element_id, 'codifier_id' => (int)$codifier->id]);
+    }
+
     public static function list_subject_categories(): array {
         global $DB;
         return $DB->get_records_select_menu('course_categories', 'visible = 1',
