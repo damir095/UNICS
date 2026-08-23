@@ -124,4 +124,81 @@ final class question_sanity_test extends \advanced_testcase {
         $this->assertSame('москва', question_sanity::normalize("  Москва.\n"));
         $this->assertSame('санкт петербург', question_sanity::normalize('Санкт   Петербург'));
     }
+    // ------------------------------------------------------------------
+    // Пригодность формулировки ([[question-wording-design]])
+    // ------------------------------------------------------------------
+
+    public function test_question_asking_for_several_answers_drops(): void {
+        // Живой заход 2026-08-23: «Какие два материка полностью расположены в южном
+        // полушарии?» с одним верным вариантом. Ребенок не может ответить верно НИКАК.
+        $out = question_sanity::verdict('Какие два материка расположены в южном полушарии?',
+            ['Австралия', 'Антарктида', 'Африка', 'Южная Америка'], 1);
+        $this->assertSame('drop', $out['verdict']);
+        $this->assertStringContainsString('несколько', $out['reason']);
+    }
+
+    public function test_select_all_drops(): void {
+        $this->assertSame('drop', question_sanity::verdict(
+            'Выберите все верные утверждения о клетке',
+            ['Есть ядро', 'Есть стенка', 'Есть хлоропласты', 'Есть жабры'], 0)['verdict']);
+    }
+
+    public function test_list_them_drops(): void {
+        $this->assertSame('drop', question_sanity::verdict(
+            'Перечислите органоиды растительной клетки',
+            ['Ядро', 'Стенка', 'Вакуоль', 'Все перечисленное'], 3)['verdict']);
+    }
+
+    public function test_singular_question_survives(): void {
+        // Проверка не должна цепляться за любое множественное число: «какие органоиды
+        // отвечают за фотосинтез» - законный вопрос с одним верным ответом.
+        $out = question_sanity::verdict('Какие органоиды отвечают за фотосинтез?',
+            ['Хлоропласты', 'Митохондрии', 'Рибосомы', 'Лизосомы'], 0);
+        $this->assertSame('ok', $out['verdict']);
+    }
+
+    public function test_answer_contained_in_another_drops(): void {
+        // Два варианта нельзя различить однозначно: понимающий тему ребенок промахнется.
+        $out = question_sanity::verdict('Столица России?',
+            ['Москва', 'Москва и область', 'Тверь', 'Казань'], 0);
+        $this->assertSame('drop', $out['verdict']);
+        $this->assertStringContainsString('входит в другой', $out['reason']);
+    }
+
+    public function test_short_answer_inside_a_long_word_is_not_containment(): void {
+        // «Рим» и «Кримпель» - разные слова, а не вложенные варианты: сверяем по словам.
+        $out = question_sanity::verdict('Столица Италии?',
+            ['Рим', 'Кримпель', 'Милан', 'Турин'], 0);
+        $this->assertSame('ok', $out['verdict']);
+    }
+
+    public function test_long_question_is_only_a_note(): void {
+        $long = 'Опираясь на изученный материал и вспоминая все, о чем говорилось на прошлом '
+            . 'занятии, определите, какой именно климатический пояс Земли характеризуется '
+            . 'наличием полярного дня и полярной ночи в течение года?';
+        $out = question_sanity::verdict($long, ['Полярный', 'Тропический', 'Умеренный'], 0);
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertContains('вопрос длинный - тяжело для ЗПР', $out['notes']);
+    }
+
+    public function test_multi_sentence_question_is_only_a_note(): void {
+        $out = question_sanity::verdict(
+            'Петр I правил с 1682 года. В каком году он основал Санкт-Петербург?',
+            ['1703', '1700', '1712', '1721'], 0);
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertContains('вопрос из нескольких предложений', $out['notes']);
+    }
+
+    public function test_double_negation_is_only_a_note(): void {
+        $out = question_sanity::verdict('Что не является не живым организмом?',
+            ['Камень', 'Дерево', 'Вода', 'Песок'], 1);
+        $this->assertSame('ok', $out['verdict']);
+        $this->assertContains('двойное отрицание', $out['notes']);
+    }
+
+    public function test_single_negation_is_not_double(): void {
+        $out = question_sanity::verdict('Что не относится к млекопитающим?',
+            ['Крокодил', 'Кит', 'Еж', 'Лиса'], 0);
+        $this->assertNotContains('двойное отрицание', $out['notes']);
+    }
 }
