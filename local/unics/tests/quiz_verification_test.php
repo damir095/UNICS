@@ -19,8 +19,9 @@ final class quiz_verification_test extends \advanced_testcase {
             public function __construct(array $replies) {
                 $this->queue = $replies;
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
-                if (str_contains($prompt, 'решает тестовые задания')) {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
+                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
                     // Слепой судья ([[answer-judge-design]]) спрашивается отдельным вызовом.
                     // Здесь он молчит: очередь ответов принадлежит проверке арифметики, и
                     // счетчик попыток генерации не должен считать чужие обращения.

@@ -30,8 +30,9 @@ final class quiz_judge_pipeline_test extends \advanced_testcase {
                 $this->quiz = $quiz;
                 $this->judge = $judge;
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
-                if (str_contains($prompt, 'решает тестовые задания')) {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
+                if (str_contains($prompt, answer_judge::PROMPT_MARKER)) {
                     $this->judge_calls++;
                     if ($this->judge === null) {
                         throw new \moodle_exception('generalexceptionmessage', 'error', '',
@@ -167,6 +168,60 @@ final class quiz_judge_pipeline_test extends \advanced_testcase {
         $out = $this->quiet($gen, ['class_number' => 7], 'Математика', '', 1);
         $this->assertCount(1, $out);
         $this->assertSame(0, $out[0]['correct'], 'ключ обязан переехать на верный вариант');
+    }
+
+    public function test_surplus_questions_backfill_after_judge(): void {
+        // Модель регулярно присылает больше, чем просили. Если обрезать комплект ДО судьи,
+        // добирать после его отбраковки будет нечем, и ребенок получит короткий тест.
+        $gen = $this->generator($this->quiz_reply([
+            ['text' => 'Столица России?', 'answers' => ['Москва', 'Тверь', 'Казань', 'Самара'],
+             'correct' => 1],
+            ['text' => 'Столица Франции?', 'answers' => ['Париж', 'Лион', 'Ницца', 'Тур'],
+             'correct' => 0],
+            ['text' => 'Столица Италии?', 'answers' => ['Рим', 'Милан', 'Турин', 'Генуя'],
+             'correct' => 0],
+        ]), '{"answers":[{"n":1,"choice":"Москва"},{"n":2,"choice":"Париж"},'
+            . '{"n":3,"choice":"Рим"}]}');
+
+        $out = $this->quiet($gen, ['class_number' => 7], 'География', '', 2);
+        $this->assertCount(2, $out, 'выбывшее место обязано занять запасное задание');
+        $this->assertSame('Столица Италии?', $out[1]['text']);
+    }
+
+    public function test_fixed_key_is_counted_only_when_it_reaches_the_child(): void {
+        // Ключ починили, но вопрос выбили признаки: в обеих колонках сразу он стоять не может.
+        $gen = $this->generator($this->quiz_reply([
+            ['text' => 'Найдите значение выражения: 2/5 + 1/5',
+             'answers' => ['3/5', '3/10', '3/5', '1/5'], 'correct' => 1, 'solution' => ''],
+            ['text' => 'Столица Франции?', 'answers' => ['Париж', 'Лион', 'Ницца', 'Тур'],
+             'correct' => 0],
+        ]), '{"answers":[{"n":1,"choice":"Париж"}]}');
+
+        $out = $this->quiet($gen, ['class_number' => 7], 'Математика', '', 2);
+        $this->assertCount(1, $out);
+        $this->assertStringContainsString('исправлено ключей 0', $this->trace);
+        $this->assertStringContainsString('признаками 1', $this->trace);
+
+        // Обратный случай в том же тесте: без него «ноль» проходил бы и при вовсе не
+        // работающем счетчике - проверено мутацией.
+        $good = $this->generator($this->quiz_reply([
+            ['text' => 'Найдите значение выражения: 2/5 + 1/5',
+             'answers' => ['3/5', '3/10', '2/10', '1/5'], 'correct' => 1, 'solution' => ''],
+        ]), '{"answers":[]}');
+        $this->quiet($good, ['class_number' => 7], 'Математика', '', 1);
+        $this->assertStringContainsString('исправлено ключей 1', $this->trace,
+            'дошедший до ребенка исправленный ключ обязан считаться');
+    }
+
+    public function test_trace_reports_successful_judging(): void {
+        // Молчание удачного яруса неотличимо от того, что его перестали звать вовсе.
+        $gen = $this->generator($this->quiz_reply([
+            ['text' => 'Столица России?', 'answers' => ['Москва', 'Тверь', 'Казань', 'Самара'],
+             'correct' => 0],
+        ]), '{"answers":[{"n":1,"choice":"Москва"}]}');
+
+        $this->quiet($gen, ['class_number' => 7], 'География', '', 1);
+        $this->assertStringContainsString('Судья проверил вопросов: 1', $this->trace);
     }
 
     public function test_trace_reports_judge_failure(): void {

@@ -150,7 +150,8 @@ final class codifier_proposer_test extends \advanced_testcase {
             public function __construct(string $canned) {
                 $this->canned = $canned;
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 return $this->canned;
             }
         };
@@ -168,7 +169,8 @@ final class codifier_proposer_test extends \advanced_testcase {
             public function __construct(string $first, string $second) {
                 $this->queue = [$first, $second];
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 $this->calls++;
                 return array_shift($this->queue) ?? '';
             }
@@ -183,7 +185,8 @@ final class codifier_proposer_test extends \advanced_testcase {
             public int $calls = 0;
             public function __construct() {
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 $this->calls++;
                 return 'мусор';
             }

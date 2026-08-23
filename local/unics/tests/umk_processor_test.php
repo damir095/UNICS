@@ -22,7 +22,8 @@ final class umk_processor_test extends \advanced_testcase {
             public function __construct(private bool $fail) {
                 parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 if ($this->fail) {
                     throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat недоступен (фейк)');
                 }
@@ -144,7 +145,8 @@ final class umk_processor_test extends \advanced_testcase {
             public function __construct(private bool $image_fails) {
                 parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 return "#### Круговорот\n\nВода испаряется.\n\n#### Осадки\n\nВода выпадает.";
             }
             public function generate_image(string $prompt): string {
@@ -237,7 +239,8 @@ final class umk_processor_test extends \advanced_testcase {
             public function __construct(private \stdClass $seen) {
                 parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 return "#### Круговорот\n\nВода испаряется.\n\n#### Осадки\n\nВода выпадает.";
             }
             public function generate_image(string $prompt): string {
@@ -278,7 +281,8 @@ final class umk_processor_test extends \advanced_testcase {
         $DB->set_field('unics_ai_queue', 'generate_audio', 1, ['id' => $queueid]);
 
         $generator = new class extends ai_generator {
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 return 'Учебный текст про воду длиной более пятидесяти символов для проверки.';
             }
             public function generate_audio(string $text): string {
@@ -321,7 +325,8 @@ final class umk_processor_test extends \advanced_testcase {
 
         $generator = new class extends ai_generator {
             public int $audio_calls = 0;
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 return 'Учебный текст про воду длиной более пятидесяти символов для проверки.';
             }
             public function generate_video_script(array $profile, string $topic,

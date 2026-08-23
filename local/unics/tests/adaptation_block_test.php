@@ -83,7 +83,7 @@ final class adaptation_block_test extends \advanced_testcase {
             protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
                 // Промт слепого судьи ([[answer-judge-design]]) идет последним и перебивал бы
                 // сохраненный промт генерации, ради которого заглушка и заведена.
-                if (!str_contains($prompt, 'решает тестовые задания')) {
+                if (!str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
                     $this->last_prompt = $prompt;
                 }
                 return $this->canned;

@@ -197,7 +197,8 @@ final class answer_judge_test extends \advanced_testcase {
             public function __construct(callable $reply) {
                 $this->reply = $reply;
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
                 $this->calls++;
                 return ($this->reply)($prompt);
             }
@@ -215,12 +216,46 @@ final class answer_judge_test extends \advanced_testcase {
             'иначе отказ сети неотличим от чистого прогона');
     }
 
-    public function test_review_reports_failure_when_reply_is_garbage(): void {
+    public function test_review_reports_unusable_reply_apart_from_outage(): void {
+        // Ответ пришел, но выбрать из него нечего. Путать это с отказом сети нельзя:
+        // устойчивое расхождение форматов лечится правкой промта, а не ожиданием связи.
         $gen = $this->stub(fn(): string => 'извините, не могу помочь');
         $out = (new answer_judge($gen))->review(
             [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)]);
         $this->assertSame(['ok'], $out['verdicts']);
+        $this->assertSame(answer_judge::STATUS_UNUSABLE, $out['status']);
+    }
+
+    public function test_review_survives_non_moodle_errors(): void {
+        // TypeError из сетевого слоя (curl_init вернул false) прошел бы насквозь и убил бы
+        // комплект, уже прошедший все три яруса.
+        $gen = $this->stub(function (): string {
+            throw new \TypeError('curl_setopt_array(): Argument #1 must be of type CurlHandle');
+        });
+        $out = (new answer_judge($gen))->review(
+            [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)]);
+        $this->assertSame(['ok'], $out['verdicts']);
         $this->assertSame(answer_judge::STATUS_FAILED, $out['status']);
+    }
+
+    public function test_review_lowers_the_empty_reply_threshold(): void {
+        // Выбор по одному вопросу занимает 39 символов, а обычный порог «пустого ответа» - 50:
+        // при нем ярус был мертв для малых комплектов и докладывал о себе как об отказе сети.
+        $seen = null;
+        $gen = new class($seen) extends \local_unics\ai\ai_generator {
+            public ?int $minlen = null;
+            public function __construct(&$seen) {
+            }
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
+                $this->minlen = $minlen;
+                return '{"answers":[{"n":1,"choice":"Москва"}]}';
+            }
+        };
+        (new answer_judge($gen))->review(
+            [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 0)]);
+        $this->assertNotNull($gen->minlen);
+        $this->assertLessThan(40, $gen->minlen, 'иначе короткий ответ судьи сочтут пустым');
     }
 
     public function test_review_drops_disagreed_question(): void {

@@ -35,6 +35,23 @@ final class course_builder_reuse_test extends \advanced_testcase {
              WHERE qs.quizid = ? ORDER BY qs.slot", [$quizid]));
     }
 
+    public function test_question_with_out_of_range_key_is_not_created(): void {
+        // У такого вопроса ВСЕ варианты получили бы долю 0.0: ребенок не смог бы ответить
+        // верно никак, а IRT посчитала бы это трудностью задания. Раньше от этого страховал
+        // зажим индекса в generate_quiz, снятый ради честной проверки ключей.
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+
+        $cmid = (new course_builder())->add_quiz_with_questions((int)$course->id, 0, 'Тест', [
+            ['text' => 'Годный вопрос', 'answers' => ['а', 'б', 'в'], 'correct' => 1],
+            ['text' => 'Ключ вне диапазона', 'answers' => ['а', 'б', 'в'], 'correct' => 7],
+        ]);
+
+        $this->assertCount(1, $this->slots_of($cmid),
+            'вопрос без достижимого верного ответа в тест не идет');
+    }
+
     public function test_new_questions_land_in_the_course_category_bank(): void {
         global $DB;
         $this->resetAfterTest();

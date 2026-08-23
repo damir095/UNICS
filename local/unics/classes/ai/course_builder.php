@@ -261,6 +261,16 @@ class course_builder {
         }
 
         foreach ($questions as $q) {
+            // Вопрос с ключом вне диапазона не создаем вовсе: у всех вариантов вышла бы доля
+            // 0.0, ребенок не смог бы ответить верно НИКАК, а IRT посчитала бы это трудностью
+            // задания. Раньше от такого страховал зажим индекса в generate_quiz, снятый ради
+            // честной проверки ([[answer-judge-design]], раздел 2.1); здесь нужна своя.
+            $answers = array_values((array)($q['answers'] ?? []));
+            $correct = (int)($q['correct'] ?? -1);
+            if ($correct < 0 || $correct >= count($answers)) {
+                continue;
+            }
+
             // question_bank_entries (Moodle 4.x)
             $qbe_id = null;
             if ($has_qbe) {

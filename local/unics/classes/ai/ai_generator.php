@@ -20,6 +20,22 @@ class ai_generator {
      */
     private string $last_finish_reason = '';
     /**
+     * Ниже скольки символов ответ считается пустым.
+     *
+     * Поле, а не константа: у выходов разная законная длина. Учебный текст короче полусотни
+     * символов - всегда сбой, а ответ слепого судьи на ОДИН вопрос занимает 39 символов, и
+     * жесткий порог делал третий ярус проверки мертвым для малых комплектов, докладывая о себе
+     * как об отказе сети (найдено ревью задачи 3). Сигнатуру шва generate_text_gigachat()
+     * менять нельзя - ее переопределяют тесты, - поэтому порог приходит полем.
+     */
+    private int $min_reply_len = self::MIN_REPLY_LEN;
+
+    /** Порог «пустого ответа» по умолчанию: рассчитан на связные тексты. */
+    public const MIN_REPLY_LEN = 50;
+
+    /** Порог для коротких служебных ответов вроде выбора судьи. */
+    public const MIN_REPLY_LEN_SHORT = 12;
+    /**
      * Кеш OAuth-токена GigaChat: сам токен и время истечения (секунды Unix).
      *
      * Токен живет 30 минут, а запрашивался на КАЖДЫЙ вызов ИИ - комплект с девятью
@@ -302,7 +318,9 @@ class ai_generator {
     // ----------------------------------------------------------------
     // Генерация текста
     // ----------------------------------------------------------------
-    public function generate_text(string $prompt, int $max_tokens = 1024): string {
+    public function generate_text(string $prompt, int $max_tokens = 1024,
+                                  int $minlen = self::MIN_REPLY_LEN): string {
+        $this->min_reply_len = $minlen;
         if (empty($this->api_key)) {
             throw new \moodle_exception('generalexceptionmessage', 'error', '', 'API key не настроен: Настройки сайта → УНИКС → API-ключ ИИ');
         }
@@ -507,7 +525,7 @@ class ai_generator {
         $decoded = json_decode($response, true);
         $this->last_finish_reason = (string)($decoded['choices'][0]['finish_reason'] ?? '');
         $text = $decoded['choices'][0]['message']['content'] ?? '';
-        if (mb_strlen(trim($text)) < 50) {
+        if (mb_strlen(trim($text)) < $this->min_reply_len) {
             throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat вернул пустой ответ');
         }
 
@@ -747,6 +765,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
 
         $survived = [];
         $fixed = 0;
+        $notes = [];
         $dropped = 0;
         $bysigns = 0;
         foreach ((array)($data['questions'] ?? []) as $q) {
@@ -771,41 +790,58 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
                 $dropped++;
                 continue;
             }
-            if ($check['verdict'] === 'fixed') {
-                $fixed++;
-            }
             $correct = $check['correct'];
 
             // Второй ярус: то, что видно по самой разметке, без знания предмета.
             $signs = question_sanity::verdict($text, $answers, $correct);
             if ($signs['verdict'] === 'drop') {
                 $bysigns++;
-                $this->trace('  Признаки брака: ' . $signs['reason'], DEBUG_DEVELOPER);
+                // Обычный уровень, а не DEBUG_DEVELOPER: на стенде debugdeveloper выключен, и
+                // причина отбраковки не попадала бы никуда - остался бы только общий счетчик.
+                $this->trace('  Признаки брака: ' . $signs['reason']);
                 continue;
             }
             foreach ($signs['notes'] as $note) {
-                $this->trace('  Подозрение: ' . $note, DEBUG_DEVELOPER);
+                $notes[] = $note;
             }
 
             $survived[] = ['text' => $text, 'answers' => $answers, 'correct' => $correct,
                 // Посчитанное расчетом судье не показываем: его мнение не отменяет
                 // арифметику. Иначе исправленный нами ключ отбрасывался бы догадкой модели.
-                'computed' => $check['verdict'] !== 'unverifiable'];
-            if (count($survived) >= $num) {
-                break;
-            }
+                'computed' => $check['verdict'] !== 'unverifiable',
+                'wasfixed' => $check['verdict'] === 'fixed'];
+            // Обрезать до $num здесь нельзя: судья отбросит часть, и добрать было бы уже
+            // неоткуда, хотя модель нередко присылает вопросов больше, чем просили.
         }
 
         // Третий ярус: один вызов судьи на пережившее. Спрашиваем в самом конце - и потому,
         // что судья дорог (обращение к сети), и потому, что нет смысла спрашивать про вопросы,
         // уже выбитые разметкой или решенные расчетом.
-        [$result, $byjudge] = $this->judge_survivors($survived);
+        [$kept, $byjudge] = $this->judge_survivors($survived);
+
+        // Считаем исправленными только те ключи, что ДОШЛИ до ребенка: вопрос, где ключ
+        // починили, а потом выбросили признаки или судья, попадал в обе колонки разом.
+        $result = [];
+        foreach ($kept as $q) {
+            if (!empty($q['wasfixed'])) {
+                $fixed++;
+            }
+            unset($q['wasfixed']);
+            $result[] = $q;
+            // Лишнее, что прислала модель, отсекаем в самом конце - когда добирать уже нечем.
+            if (count($result) >= $num) {
+                break;
+            }
+        }
 
         if ($fixed || $dropped || $bysigns || $byjudge) {
             $this->trace('  Проверка заданий: исправлено ключей ' . $fixed
                 . ', отброшено арифметикой ' . $dropped
                 . ', признаками ' . $bysigns
                 . ', судьей ' . $byjudge);
+        }
+        if ($notes) {
+            $this->trace('  Подозрения (вопрос все равно принят): ' . implode('; ', $notes));
         }
         if (empty($result)) {
             // Начало И хвост: по одному началу нельзя отличить обрыв ответа от порчи разметки,
@@ -831,37 +867,46 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         // Судить нечего там, где посчитал расчет: вердикт арифметики надежнее догадки модели.
         // Ключи сохраняем - вердикты вернутся с ними и не разъедутся с вопросами.
         $ask = array_filter($survived, static fn(array $q): bool => empty($q['computed']));
-        $strip = static function (array $qs): array {
-            return array_map(static function (array $q): array {
-                unset($q['computed']);
-                return $q;
-            }, $qs);
-        };
-        if (!$ask) {
-            return [array_values($strip($survived)), 0];
-        }
-        $out = (new answer_judge($this))->review($ask);
+        $verdicts = [];
+        $byjudge = 0;
 
-        if ($out['status'] === answer_judge::STATUS_FAILED) {
-            $this->trace('  [warn] Судья не ответил, вопросы приняты без его проверки');
-            return [array_values($strip($survived)), 0];
-        }
-        if ($out['status'] === answer_judge::STATUS_DISTRUST) {
-            $this->trace('  [warn] Судья спорит с ' . $out['disagreed'] . ' ответами из '
-                . $out['judged'] . ' - его вердикты сняты целиком');
-            return [array_values($strip($survived)), 0];
+        if (!$ask) {
+            $this->trace('  Судья не спрашивался: все вопросы решены расчетом');
+        } else {
+            $out = (new answer_judge($this))->review($ask);
+            switch ($out['status']) {
+                case answer_judge::STATUS_FAILED:
+                    $this->trace('  [warn] Судья не ответил, вопросы приняты без его проверки');
+                    break;
+                case answer_judge::STATUS_UNUSABLE:
+                    // Отдельно от отказа сети: устойчивое расхождение форматов лечится правкой
+                    // промта, а не ожиданием, когда связь наладится.
+                    $this->trace('  [warn] Судья ответил, но ни один выбор не сошелся с '
+                        . 'вариантами - проверка не состоялась');
+                    break;
+                case answer_judge::STATUS_DISTRUST:
+                    $this->trace('  [warn] Судья спорит с ' . $out['disagreed'] . ' ответами из '
+                        . $out['judged'] . ' - его вердикты сняты целиком');
+                    break;
+                default:
+                    // След нужен и на удачном исходе: молчание яруса иначе неотличимо от того,
+                    // что его перестали звать вовсе.
+                    $this->trace('  Судья проверил вопросов: ' . $out['judged']
+                        . ', спорных: ' . $out['disagreed']);
+                    $verdicts = $out['verdicts'];
+            }
         }
 
         $kept = [];
-        $byjudge = 0;
         foreach ($survived as $i => $q) {
-            if (($out['verdicts'][$i] ?? 'ok') === 'drop') {
+            if (($verdicts[$i] ?? 'ok') === 'drop') {
                 $byjudge++;
                 continue;
             }
+            unset($q['computed']);
             $kept[] = $q;
         }
-        return [array_values($strip($kept)), $byjudge];
+        return [$kept, $byjudge];
     }
 
     // ----------------------------------------------------------------
