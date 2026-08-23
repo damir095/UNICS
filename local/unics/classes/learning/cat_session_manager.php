@@ -257,19 +257,30 @@ class cat_session_manager {
             'theta_se' => round($res['se'], 4), 'items_administered' => $items]);
 
         if ($res['stop'] || $res['next_item_ref'] === null) {
-            self::finish($session, (float)$res['theta'], (float)$res['se'], $items);
+            // Причину остановки называет сам сервис - сохраняем ее, а не выводим потом
+            // сравнением с настройкой ([[cat-honest-precision]], раздел 3).
+            self::finish($session, (float)$res['theta'], (float)$res['se'], $items,
+                (string)($res['reason'] ?? ''), (float)$cfg['se']);
         } else {
             self::add_item($quba, (int)$res['next_item_ref']);
         }
     }
 
-    /** Финал: status=1, запись владения (advisory). */
-    public static function finish(object $session, float $theta, float $se, int $items): void {
+    /**
+     * Финал: status=1, запись владения (advisory).
+     *
+     * @param string $reason причина остановки от сервиса; пустая - если сервис ее не назвал
+     * @param float $threshold порог точности, действовавший в этой проверке
+     */
+    public static function finish(object $session, float $theta, float $se, int $items,
+                                  string $reason = '', ?float $threshold = null): void {
         global $DB;
         $DB->update_record('unics_cat_session', (object)[
             'id' => $session->id, 'status' => self::STATUS_FINISHED,
             'theta' => round($theta, 4), 'theta_se' => round($se, 4),
-            'items_administered' => $items, 'finished_at' => time()]);
+            'items_administered' => $items, 'finished_at' => time(),
+            'stop_reason' => $reason !== '' ? $reason : null,
+            'se_threshold' => $threshold !== null ? round($threshold, 3) : null]);
         mastery_manager::record_cat_mastery((int)$session->student_id,
             (int)$session->element_id, $theta, $se, $items);
     }

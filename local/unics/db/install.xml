@@ -806,6 +806,8 @@
         <FIELD NAME="theta" TYPE="number" LENGTH="7" DECIMALS="4" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="theta_se" TYPE="number" LENGTH="7" DECIMALS="4" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="items_administered" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="stop_reason" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" COMMENT="Почему проверка кончилась: se_reached | max_items | bank_exhausted. NULL - сессии до появления поля"/>
+        <FIELD NAME="se_threshold" TYPE="number" LENGTH="5" DECIMALS="3" NOTNULL="false" SEQUENCE="false" COMMENT="Порог точности, действовавший при завершении: без него смена настройки переклассифицировала бы прошлые проверки"/>
         <FIELD NAME="started_at" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="finished_at" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>

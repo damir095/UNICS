@@ -220,11 +220,19 @@ foreach ($rows_page as $r) {
             // Пометка ставится только на ОЦЕНКУ IRT: theta и theta_se переживают пересчет
             // обычным путем, и без этой проверки балл, снятый процентами, объявлялся бы
             // предварительным по стандартной ошибке давнего прохождения CAT.
+            //
+            // Вердикт берем из ПОСЛЕДНЕЙ проверки по этой теме: сервис назвал причину
+            // остановки, и она сохранена. Сравнение с текущей настройкой осталось запасным
+            // путем внутри session_is_provisional() - для сессий до появления поля.
             $mtheta = $m->theta !== null ? (float)$m->theta : null;
             $mse = $m->theta_se !== null ? (float)$m->theta_se : null;
+            $lastcat = \local_unics\learning\cat_session_manager::latest_finished(
+                (int)$student_id, (int)$r->id);
             $provisional = \local_unics\adaptive\estimate_precision::is_irt_estimate(
                     $mtheta, (float)$m->score)
-                && \local_unics\adaptive\estimate_precision::is_provisional($mse);
+                && ($lastcat
+                    ? \local_unics\adaptive\estimate_precision::session_is_provisional($lastcat)
+                    : \local_unics\adaptive\estimate_precision::is_provisional($mse));
             if ($provisional) {
                 // Числа - только персоналу: страница намеренно не показывает родителю ни theta,
                 // ни стандартную ошибку, и подсказка не должна обходить это правило.

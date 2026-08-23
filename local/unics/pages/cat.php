@@ -147,10 +147,11 @@ if ($slot !== null) {
         // Проверка могла кончиться не потому, что стало ясно, а потому, что кончились задания
         // в банке или лимит вопросов. Ребенку про это надо сказать: иначе предварительная
         // оценка выглядит измеренной ([[cat-honest-precision]]).
-        $note = \local_unics\adaptive\estimate_precision::child_note(
-            $session->theta_se !== null ? (float)$session->theta_se : null);
-        if ($note !== '') {
-            echo $OUTPUT->notification($note, 'info');
+        // По СОХРАНЕННОЙ причине остановки, а не сравнением с нынешней настройкой: иначе
+        // смена порога переписывала бы вердикт по всем прошлым проверкам.
+        if (\local_unics\adaptive\estimate_precision::session_is_provisional($session)) {
+            echo $OUTPUT->notification(
+                'Вопросов пока мало, поэтому результат предварительный.', 'info');
         }
     }
     echo html_writer::start_tag('form', ['method' => 'post', 'style' => 'display:inline-block; margin-right:8px;',

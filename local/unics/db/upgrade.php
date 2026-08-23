@@ -1647,5 +1647,29 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026081901, 'local', 'unics');
     }
 
+    if ($oldversion < 2026082400) {
+        // Причина остановки проверки и действовавший порог точности. Раньше признак
+        // «оценка предварительная» выводился сравнением с ТЕКУЩЕЙ настройкой, и смена
+        // порога задним числом переклассифицировала прошлые проверки
+        // ([[cat-honest-precision]], раздел 3).
+        $table = new xmldb_table('unics_cat_session');
+
+        $field = new xmldb_field('stop_reason', XMLDB_TYPE_CHAR, '20', null, null, null, null,
+            'items_administered');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $field = new xmldb_field('se_threshold', XMLDB_TYPE_NUMBER, '5, 3', null, null, null, null,
+            'stop_reason');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Задним числом причину не восстановить: для старых сессий поле остается пустым,
+        // и признак считается по-старому - это отдельная ветка в estimate_precision.
+        upgrade_plugin_savepoint(true, 2026082400, 'local', 'unics');
+    }
+
     return true;
 }
