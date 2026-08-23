@@ -17,6 +17,15 @@ final class answer_judge_test extends \advanced_testcase {
         return ['text' => $text, 'answers' => $answers, 'correct' => $correct];
     }
 
+    /** Четыре вопроса с ключом на первом варианте. */
+    private function four(): array {
+        $qs = [];
+        for ($i = 0; $i < 4; $i++) {
+            $qs[] = $this->q('Вопрос ' . $i, ['А', 'Б', 'В', 'Г'], 0);
+        }
+        return $qs;
+    }
+
     public function test_parses_reply(): void {
         $raw = '{"answers":[{"n":1,"choice":"Москва"},{"n":2,"choice":"1861"}]}';
         $out = answer_judge::parse($raw, 2);
@@ -35,69 +44,109 @@ final class answer_judge_test extends \advanced_testcase {
         $this->assertNull($out[0]);
     }
 
+    public function test_first_choice_wins_over_echoed_sample(): void {
+        // Модель дописывает к ответу образец формата из промта - тогда второй выбор на тот же
+        // номер затирал бы настоящий ответ.
+        $raw = '{"answers":[{"n":1,"choice":"Москва"},{"n":1,"choice":"дословный текст варианта"}]}';
+        $this->assertSame('Москва', answer_judge::parse($raw, 1)[0]);
+    }
+
+    public function test_non_scalar_choice_is_ignored(): void {
+        // Без гейта (string) на массиве дает предупреждение и литерал «Array».
+        $raw = '{"answers":[{"n":1,"choice":["Москва"]}]}';
+        $this->assertNull(answer_judge::parse($raw, 1)[0]);
+    }
+
     public function test_agreement_keeps_question(): void {
         $qs = [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 0)];
-        $this->assertSame(['ok'], answer_judge::verdicts($qs, ['москва']));
+        $out = answer_judge::verdicts($qs, ['москва']);
+        $this->assertSame(['ok'], $out['verdicts']);
+        $this->assertSame(answer_judge::STATUS_JUDGED, $out['status']);
     }
 
     public function test_disagreement_drops_question(): void {
         $qs = [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)];
-        $this->assertSame(['drop'], answer_judge::verdicts($qs, ['Москва']));
+        $this->assertSame(['drop'], answer_judge::verdicts($qs, ['Москва'])['verdicts']);
     }
 
     public function test_silent_judge_keeps_question(): void {
         // Отказ проверки не может стоить ребенку теста.
         $qs = [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)];
-        $this->assertSame(['ok'], answer_judge::verdicts($qs, [null]));
+        $this->assertSame(['ok'], answer_judge::verdicts($qs, [null])['verdicts']);
     }
 
     public function test_unknown_choice_keeps_question(): void {
         // Судья назвал то, чего нет среди вариантов - это его сбой, а не брак задания.
-        $qs = [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 0)];
-        $this->assertSame(['ok'], answer_judge::verdicts($qs, ['Петербург']));
+        // Ключ намеренно НЕ нулевой: при correct = 0 тест был тавтологией, потому что
+        // (int)false === 0 и отсутствие проверки давало тот же «ok» (найдено ревью).
+        $qs = [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 2)];
+        $out = answer_judge::verdicts($qs, ['Петербург']);
+        $this->assertSame(['ok'], $out['verdicts']);
+        $this->assertSame(0, $out['judged'], 'сбой судьи не считается высказыванием');
+    }
+
+    public function test_duplicate_answer_text_is_not_a_disagreement(): void {
+        // Выбранный текст встречается дважды: какой имел в виду судья - неизвестно, и
+        // «расхождение» было бы выдумкой.
+        $qs = [$this->q('Столица России?', ['Москва', 'Москва', 'Тверь', 'Казань'], 1)];
+        $this->assertSame(['ok'], answer_judge::verdicts($qs, ['Москва'])['verdicts']);
+    }
+
+    public function test_keys_of_filtered_list_are_preserved(): void {
+        // Судью спрашивают только про дожившее до него, поэтому массив приходит с дырами.
+        $qs = [2 => $this->q('Столица России?', ['Москва', 'Тверь'], 0),
+               5 => $this->q('Столица Франции?', ['Париж', 'Лион'], 0)];
+        $out = answer_judge::verdicts($qs, ['Тверь', 'Париж']);
+        $this->assertSame([2 => 'drop', 5 => 'ok'], $out['verdicts'],
+            'вердикт обязан остаться при своем вопросе');
+    }
+
+    public function test_total_disagreement_trusts_nobody(): void {
+        // Судья, разошедшийся со ВСЕМИ своими высказываниями, почти наверняка сбился сам.
+        // Малые комплекты долевой порог не прикрывает: пул отдает воркеру и один вопрос.
+        $qs = [$this->q('Вопрос 1', ['А', 'Б', 'В', 'Г'], 0),
+               $this->q('Вопрос 2', ['А', 'Б', 'В', 'Г'], 0)];
+        $out = answer_judge::verdicts($qs, ['Б', 'Б']);
+        $this->assertSame(['ok', 'ok'], $out['verdicts']);
+        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
     }
 
     public function test_majority_disagreement_trusts_nobody(): void {
-        // Судья, расходящийся чаще чем в половине случаев, скорее сбился сам.
-        $qs = [];
-        for ($i = 0; $i < 4; $i++) {
-            $qs[] = $this->q('Вопрос ' . $i, ['А', 'Б', 'В', 'Г'], 0);
-        }
-        $out = answer_judge::verdicts($qs, ['Б', 'Б', 'Б', 'А']);
-        $this->assertSame(['ok', 'ok', 'ok', 'ok'], $out, 'предохранитель обязан спасти комплект');
+        $out = answer_judge::verdicts($this->four(), ['Б', 'Б', 'Б', 'А']);
+        $this->assertSame(['ok', 'ok', 'ok', 'ok'], $out['verdicts'],
+            'предохранитель обязан спасти комплект');
+        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
     }
 
     public function test_half_disagreement_is_trusted(): void {
         // Ровно половина - еще доверяем: порог именно «больше половины».
-        $qs = [];
-        for ($i = 0; $i < 4; $i++) {
-            $qs[] = $this->q('Вопрос ' . $i, ['А', 'Б', 'В', 'Г'], 0);
-        }
-        $out = answer_judge::verdicts($qs, ['Б', 'Б', 'А', 'А']);
-        $this->assertSame(['drop', 'drop', 'ok', 'ok'], $out);
+        $out = answer_judge::verdicts($this->four(), ['Б', 'Б', 'А', 'А']);
+        $this->assertSame(['drop', 'drop', 'ok', 'ok'], $out['verdicts']);
+        $this->assertSame(answer_judge::STATUS_JUDGED, $out['status']);
     }
 
-    public function test_silence_is_not_counted_as_disagreement(): void {
-        // Молчание судьи не должно копиться в счетчик расхождений: три молчания и одно
-        // расхождение - это не «сбился на большинстве», а одно найденное спорное задание.
-        $qs = [];
-        for ($i = 0; $i < 4; $i++) {
-            $qs[] = $this->q('Вопрос ' . $i, ['А', 'Б', 'В', 'Г'], 0);
-        }
-        $out = answer_judge::verdicts($qs, [null, null, null, 'Б']);
-        $this->assertSame(['ok', 'ok', 'ok', 'drop'], $out);
-    }
-
-    public function test_distrust_needs_enough_verdicts(): void {
-        // На одном-двух высказываниях доли нет: одно расхождение из одного - сразу «сто
-        // процентов», и предохранитель глушил бы судью всегда, обессмысливая ярус.
+    public function test_share_threshold_needs_enough_verdicts(): void {
+        // Три высказывания, два расхождения - доля выше половины, но высказываний мало.
         $qs = [];
         for ($i = 0; $i < 3; $i++) {
             $qs[] = $this->q('Вопрос ' . $i, ['А', 'Б', 'В', 'Г'], 0);
         }
-        $out = answer_judge::verdicts($qs, ['Б', 'Б', 'Б']);
-        $this->assertSame(['drop', 'drop', 'drop'], $out,
-            'предохранитель не должен включаться, пока судья высказался слишком мало');
+        $out = answer_judge::verdicts($qs, ['Б', 'Б', 'А']);
+        $this->assertSame(['drop', 'drop', 'ok'], $out['verdicts'],
+            'долевой порог не должен включаться на трех высказываниях');
+    }
+
+    public function test_silence_is_not_counted_in_the_denominator(): void {
+        // Восемь вопросов, судья высказался по четырем и разошелся на трех: доля 3/4 выше
+        // половины, предохранитель обязан сработать. Если бы молчание попадало в знаменатель,
+        // доля стала бы 3/8 и три годных вопроса были бы отброшены.
+        $qs = [];
+        for ($i = 0; $i < 8; $i++) {
+            $qs[] = $this->q('Вопрос ' . $i, ['А', 'Б', 'В', 'Г'], 0);
+        }
+        $out = answer_judge::verdicts($qs, [null, null, null, null, 'Б', 'Б', 'Б', 'А']);
+        $this->assertSame(answer_judge::STATUS_DISTRUST, $out['status']);
+        $this->assertSame(4, $out['judged'], 'молчание не высказывание');
     }
 
     public function test_prompt_shuffles_answers(): void {
@@ -123,52 +172,68 @@ final class answer_judge_test extends \advanced_testcase {
         }
     }
 
-    public function test_review_returns_ok_when_model_fails(): void {
-        $gen = new class extends \local_unics\ai\ai_generator {
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
-                throw new \moodle_exception('generalexceptionmessage', 'error', '', 'сеть недоступна');
-            }
+    public function test_prompt_does_not_depend_on_the_key(): void {
+        // Слепота судьи - весь смысл яруса: промт для одного и того же вопроса обязан быть
+        // неотличим при любом ключе. Иначе ярус тихо схлопывается в одного свидетеля.
+        $lines = function (int $correct): array {
+            $out = preg_split('~\R~u',
+                answer_judge::build_prompt([$this->q('Столица России?',
+                    ['Москва', 'Тверь', 'Казань', 'Самара'], $correct)]));
+            sort($out);
+            return $out;
         };
-        $judge = new answer_judge($gen);
-        $qs = [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)];
-        $this->assertSame(['ok'], $judge->review($qs));
+        $this->assertSame($lines(0), $lines(3));
     }
 
-    public function test_review_returns_ok_when_reply_is_garbage(): void {
-        $gen = new class extends \local_unics\ai\ai_generator {
+    /** Заглушка генератора: родительский конструктор не зовем - он читает ключ API из настроек. */
+    private function stub(callable $reply): \local_unics\ai\ai_generator {
+        return new class($reply) extends \local_unics\ai\ai_generator {
+            private $reply;
+            public int $calls = 0;
+            public function __construct(callable $reply) {
+                $this->reply = $reply;
+            }
             public function generate_text(string $prompt, int $max_tokens = 1024): string {
-                return 'извините, не могу помочь';
+                $this->calls++;
+                return ($this->reply)($prompt);
             }
         };
-        $judge = new answer_judge($gen);
-        $qs = [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)];
-        $this->assertSame(['ok'], $judge->review($qs));
+    }
+
+    public function test_review_reports_failure_when_model_fails(): void {
+        $gen = $this->stub(function (): string {
+            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'сеть недоступна');
+        });
+        $out = (new answer_judge($gen))->review(
+            [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)]);
+        $this->assertSame(['ok'], $out['verdicts'], 'отказ судьи не может стоить ребенку теста');
+        $this->assertSame(answer_judge::STATUS_FAILED, $out['status'],
+            'иначе отказ сети неотличим от чистого прогона');
+    }
+
+    public function test_review_reports_failure_when_reply_is_garbage(): void {
+        $gen = $this->stub(fn(): string => 'извините, не могу помочь');
+        $out = (new answer_judge($gen))->review(
+            [$this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 1)]);
+        $this->assertSame(['ok'], $out['verdicts']);
+        $this->assertSame(answer_judge::STATUS_FAILED, $out['status']);
     }
 
     public function test_review_drops_disagreed_question(): void {
-        $gen = new class extends \local_unics\ai\ai_generator {
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
-                return '{"answers":[{"n":1,"choice":"Москва"},{"n":2,"choice":"Париж"}]}';
-            }
-        };
-        $judge = new answer_judge($gen);
-        $out = $judge->review([
+        $gen = $this->stub(fn(): string =>
+            '{"answers":[{"n":1,"choice":"Москва"},{"n":2,"choice":"Париж"}]}');
+        $out = (new answer_judge($gen))->review([
             $this->q('Столица России?', ['Москва', 'Тверь', 'Казань', 'Самара'], 2),
             $this->q('Столица Франции?', ['Париж', 'Лион', 'Ницца', 'Тур'], 0),
         ]);
-        $this->assertSame(['drop', 'ok'], $out);
+        $this->assertSame(['drop', 'ok'], $out['verdicts']);
+        $this->assertSame(answer_judge::STATUS_JUDGED, $out['status']);
     }
 
     public function test_review_of_empty_list_makes_no_call(): void {
-        $gen = new class extends \local_unics\ai\ai_generator {
-            public int $calls = 0;
-            public function generate_text(string $prompt, int $max_tokens = 1024): string {
-                $this->calls++;
-                return '{"answers":[]}';
-            }
-        };
-        $judge = new answer_judge($gen);
-        $this->assertSame([], $judge->review([]));
+        $gen = $this->stub(fn(): string => '{"answers":[]}');
+        $out = (new answer_judge($gen))->review([]);
+        $this->assertSame([], $out['verdicts']);
         $this->assertSame(0, $gen->calls, 'пустой комплект не стоит обращения к сети');
     }
 }
