@@ -89,6 +89,11 @@ class mastery_manager {
         }
     }
 
+    /** Прогнать рекомендатель и создать предложения - точка входа для проверки проводки. */
+    public static function regenerate_suggestions(int $student_id): void {
+        self::generate_suggestions($student_id);
+    }
+
     /** S2: прогнать рекомендатель и создать предложения (дедуп/уведомление - в suggestion_service). */
     private static function generate_suggestions(int $student_id): void {
         $days = (int)get_config('local_unics', 'adaptive_autoapply_days');
@@ -103,7 +108,9 @@ class mastery_manager {
                     isset($c['element_id']) ? (int)$c['element_id'] : null,
                     json_encode(['target_level' => $c['target_level'] ?? null, 'reason' => $c['reason'] ?? '']),
                     $auto_after,
-                    null
+                    // rationale - поле педагога: оговорки о точности оценки идут сюда, а не в
+                    // reason, который уезжает в note шага маршрута и читается ребенком.
+                    ($c['rationale'] ?? '') !== '' ? (string)$c['rationale'] : null
                 );
             }
         } catch (\Throwable $e) {
@@ -131,24 +138,62 @@ class mastery_manager {
         $out = [];
         foreach ($cands as $c) {
             $eid = isset($c['element_id']) ? (int)$c['element_id'] : 0;
+            $advancement = (int)($c['kind'] ?? 0) === suggestion_service::KIND_ADVANCEMENT;
             if ($eid <= 0) {
-                // Предложение без привязки к элементу проверять не по чему.
+                // Продвижение без элемента применить все равно нечем (suggestion_service::apply
+                // требует element_id) - и правило честности на нем не проверить. Такое
+                // предложение не создаем вовсе, вместо того чтобы пропускать мимо фильтра.
+                if (!$advancement) {
+                    $out[] = $c;
+                }
+                continue;
+            }
+            if (!self::element_estimate_is_provisional($student_id, $eid)) {
                 $out[] = $c;
                 continue;
             }
-            if (!\local_unics\adaptive\estimate_precision::is_element_provisional($student_id, $eid)) {
-                $out[] = $c;
+            if ($advancement) {
                 continue;
             }
-            if ((int)($c['kind'] ?? 0) === suggestion_service::KIND_ADVANCEMENT) {
-                continue;
-            }
-            $c['reason'] = trim((string)($c['reason'] ?? ''));
-            $c['reason'] .= ($c['reason'] !== '' ? '. ' : '') . 'Оценка предварительная';
+            // Оговорка идет в rationale - поле ПЕДАГОГА. В reason ее класть нельзя: он уезжает
+            // в note шага маршрута, а его читает ребенок, и вместо понятной подсказки получал
+            // бы оценочный жаргон (найдено ревью).
+            $c['rationale'] = trim((string)($c['rationale'] ?? ''));
+            $c['rationale'] .= ($c['rationale'] !== '' ? ' ' : '')
+                . 'Оценка предварительная: последняя проверка по теме не дошла до точности.';
             $out[] = $c;
         }
         return $out;
     }
+
+    /**
+     * Предварительна ли нынешняя оценка ученика по элементу.
+     *
+     * Два условия, и оба нужны. Во-первых, балл должен быть снят IRT: theta и theta_se
+     * переживают пересчет обычным путем, и без этой проверки элемент с ОДНОЙ давней оборванной
+     * проверкой блокировал бы продвижение навсегда - даже когда полоса давно набрана обычными
+     * тестами (найдено ревью). Во-вторых, решает ПОСЛЕДНЯЯ завершенная проверка: ребенок мог
+     * пройти тему заново и довести ее до точности.
+     *
+     * Тот же предикат зовет отчет по элементам - иначе экран и маршрут разошлись бы в оценке
+     * одного и того же ([[provisional-suggestions]]).
+     */
+    public static function element_estimate_is_provisional(int $student_id, int $element_id): bool {
+        $m = self::current_mastery($student_id, $element_id);
+        if (!$m) {
+            return false;
+        }
+        $theta = $m->theta !== null ? (float)$m->theta : null;
+        if (!\local_unics\adaptive\estimate_precision::is_irt_estimate($theta, (float)$m->score)) {
+            return false;
+        }
+        $session = cat_session_manager::latest_finished($student_id, $element_id);
+        return $session
+            ? \local_unics\adaptive\estimate_precision::session_is_provisional($session)
+            : \local_unics\adaptive\estimate_precision::is_provisional(
+                $m->theta_se !== null ? (float)$m->theta_se : null);
+    }
+
     /** Текущая строка владения по паре (ученик, элемент) или null. */
     public static function current_mastery(int $student_id, int $element_id): ?object {
         global $DB;

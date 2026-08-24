@@ -149,8 +149,18 @@ class suggestion_service {
                     $ok = true; // если уровень уже такой, apply_level вернёт null - предложение всё равно закрываем
                 }
                 break;
-            case self::KIND_REMEDIATION:
             case self::KIND_ADVANCEMENT:
+                // Между созданием предложения и его применением ребенок мог пройти проверку,
+                // которая оборвалась: отложенное автоприменение построило бы маршрут по
+                // неизмеренному, обойдя фильтр на входе ([[provisional-suggestions]]).
+                if (!empty($s->element_id)
+                        && \local_unics\learning\mastery_manager::element_estimate_is_provisional(
+                            (int)$s->student_id, (int)$s->element_id)) {
+                    self::set_status($id, self::STATUS_REJECTED, $decided_by);
+                    return false;
+                }
+                // Дальше - общая ветка с повторением.
+            case self::KIND_REMEDIATION:
                 if (!empty($s->element_id)) {
                     $note = ($payload['reason'] ?? '') !== '' ? $payload['reason'] : null;
                     \local_unics\path_manager::add_adaptive_skill_step((int)$s->student_id, (int)$by,

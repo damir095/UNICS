@@ -84,18 +84,6 @@ class estimate_precision {
         return self::is_provisional($se);
     }
 
-    /**
-     * Предварительна ли нынешняя оценка ученика по этому элементу.
-     *
-     * Решает ПОСЛЕДНЯЯ завершенная проверка: ребенок мог пройти тему заново и довести ее до
-     * точности. Проверки не было вовсе - значит оценка получена обычным путем, о точности
-     * говорить нечего, и ограничивать по ней нечего ([[provisional-suggestions]]).
-     */
-    public static function is_element_provisional(int $student_id, int $element_id): bool {
-        $session = \local_unics\learning\cat_session_manager::latest_finished(
-            $student_id, $element_id);
-        return $session ? self::session_is_provisional($session) : false;
-    }
 
     /**
      * Пояснение ребенку по сохраненной причине остановки. Пустая строка - оценка полная.

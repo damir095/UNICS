@@ -224,20 +224,16 @@ foreach ($rows_page as $r) {
             // Вердикт берем из ПОСЛЕДНЕЙ проверки по этой теме: сервис назвал причину
             // остановки, и она сохранена. Сравнение с текущей настройкой осталось запасным
             // путем внутри session_is_provisional() - для сессий до появления поля.
-            $mtheta = $m->theta !== null ? (float)$m->theta : null;
             $mse = $m->theta_se !== null ? (float)$m->theta_se : null;
-            // Сессию ищем ТОЛЬКО когда балл действительно снят IRT: иначе запрос уходил на
-            // каждую строку таблицы, а результат выбрасывался (найдено ревью).
-            if (\local_unics\adaptive\estimate_precision::is_irt_estimate($mtheta, (float)$m->score)) {
-                $lastcat = \local_unics\learning\cat_session_manager::latest_finished(
-                    (int)$student_id, (int)$r->id);
-                $provisional = $lastcat
-                    ? \local_unics\adaptive\estimate_precision::session_is_provisional($lastcat)
-                    : \local_unics\adaptive\estimate_precision::is_provisional($mse);
-            } else {
-                $lastcat = null;
-                $provisional = false;
-            }
+            // Один предикат на экран и на маршрут: две живые копии этого решения уже начали
+            // расходиться (найдено ревью). Внутри - гейт «балл снят IRT» и разбор последней
+            // проверки, поэтому здесь остается только показ.
+            $provisional = mastery_manager::element_estimate_is_provisional(
+                (int)$student_id, (int)$r->id);
+            $lastcat = $provisional
+                ? \local_unics\learning\cat_session_manager::latest_finished(
+                    (int)$student_id, (int)$r->id)
+                : null;
             if ($provisional) {
                 // Числа - только персоналу: страница намеренно не показывает родителю ни theta,
                 // ни стандартную ошибку, и подсказка не должна обходить это правило. Подсказка
