@@ -117,7 +117,11 @@ final class adaptation_block_test extends \advanced_testcase {
             'Уровень эффективный (3 понижен до 2), а не сырой');
         $this->assertStringNotContainsString('продвинутый', $p);
         $this->assertStringContainsString('Профиль учащегося:', $p);
-        $this->assertStringContainsString('Очень короткие абзацы', $p, 'Инструкция по ЗПР доехала');
+        // Инструкция по ЗПР доехала, но в редакции ДЛЯ ЗАДАНИЙ ([[item-adaptation-design]]).
+        // Раньше здесь стояло «Очень короткие абзацы» - формулировка про учебный текст, которая
+        // генератору вопросов ничего не говорит; это и было предметом отдельной задачи.
+        $this->assertStringContainsString('Один вопрос - одна мысль', $p);
+        $this->assertStringNotContainsStringIgnoringCase('абзац', $p);
         $this->assertStringContainsString('нужен перерыв каждые 10 минут', $p);
     }
 
