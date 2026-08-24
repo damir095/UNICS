@@ -286,6 +286,20 @@ class cat_session_manager {
             'se_threshold' => $threshold !== null ? round($threshold, 3) : null]);
         mastery_manager::record_cat_mastery((int)$session->student_id,
             (int)$session->element_id, $theta, $se, $items);
+
+        // Пересчет предложений - здесь же, где меняется оценка ([[cat-finish-suggestions-design]]).
+        //
+        // Фильтр честности снимает продвижение, пока оценка предварительная
+        // ([[provisional-suggestions]]), а вернуть его должна очередная проверка, доведенная до
+        // точности. Но рекомендатель запускался ТОЛЬКО из mastery_manager::on_attempt(), то есть
+        // по попытке обычного теста Moodle: завершение CAT-сессии его не запускало, ночная
+        // задача тоже. Выходило наоборот - именно та проверка, которая обязана разблокировать
+        // продвижение, его и не разблокировала, и ребенок оставался ниже своего уровня до
+        // ближайшего обычного теста по этому элементу (найдено ревью 2026-08-24).
+        //
+        // Повторные вызовы безопасны: suggestion_service::create() молча выходит, если открытое
+        // предложение той же пары уже есть, и уведомление педагогу уходит только при вставке.
+        mastery_manager::regenerate_suggestions((int)$session->student_id);
     }
 
     public static function abandon(int $session_id): void {
