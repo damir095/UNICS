@@ -13,6 +13,38 @@ defined('MOODLE_INTERNAL') || die();
 class cleanup {
 
     /**
+     * Снять роли родителей с контекста ЭТОГО ребенка (связи еще не удалены).
+     *
+     * @param int $student_id unics_students.id
+     * @param int $child_mdl_user_id пользователь ребенка
+     */
+    private static function drop_parent_roles_for_student(int $student_id, int $child_mdl_user_id): void {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $parents = $DB->get_fieldset_select('unics_parent_student', 'parent_mdl_user_id',
+            'student_id = ?', [$student_id]);
+        foreach ($parents as $pid) {
+            $DB->delete_records('unics_parent_student',
+                ['student_id' => $student_id, 'parent_mdl_user_id' => (int)$pid]);
+            \unics_user_manager::sync_parent_role((int)$pid, $child_mdl_user_id);
+        }
+    }
+
+    /** Снять роли удаляемого родителя по всем его детям (связи еще не удалены). */
+    private static function drop_parent_roles_for_parent(int $parent_mdl_user_id): void {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $children = $DB->get_records_sql(
+            "SELECT ps.id, s.mdl_user_id AS child
+               FROM {unics_parent_student} ps
+               JOIN {unics_students} s ON s.id = ps.student_id
+              WHERE ps.parent_mdl_user_id = ?", [$parent_mdl_user_id]);
+        foreach ($children as $row) {
+            $DB->delete_records('unics_parent_student', ['id' => (int)$row->id]);
+            \unics_user_manager::sync_parent_role($parent_mdl_user_id, (int)$row->child);
+        }
+    }
+    /**
      * Удаление модуля курса: метаданные активности, привязки кодификатора к активности,
      * материалы УМК, пересдачи и возвраты к теме этого модуля.
      */
@@ -93,6 +125,11 @@ class cleanup {
                 [$insql, $params] = $DB->get_in_or_equal($sessionids);
                 $DB->delete_records_select('unics_cat_step', "session_id $insql", $params);
             }
+            // Роль родителя живет в контексте ребенка и держится на связи: снимаем ее ДО
+            // удаления строк, пока еще известно, кто был привязан. Иначе право пережило бы
+            // связь - ровно та беда, ради которой роль и переехала ([[parent-role-scope]]).
+            self::drop_parent_roles_for_student($sid, $userid);
+
             foreach (['unics_teacher_student', 'unics_parent_student', 'unics_umk_students',
                 'unics_achievements', 'unics_points_log', 'unics_purchases', 'unics_equipped',
                 'unics_learning_path', 'unics_skill_mastery', 'unics_mastery_history',
@@ -110,12 +147,17 @@ class cleanup {
             }
         }
 
+        // Удаляемый пользователь мог быть РОДИТЕЛЕМ: снимаем его роли по всем детям, пока
+        // связи еще на месте.
+        self::drop_parent_roles_for_parent($userid);
+
         // Прямые субъектные строки.
         foreach (['unics_user_org' => 'mdl_user_id', 'unics_students' => 'mdl_user_id',
             'unics_teachers' => 'mdl_user_id', 'unics_retakes' => 'mdl_user_id',
             'unics_topic_retries' => 'mdl_user_id', 'unics_notifications' => 'mdl_user_id',
             'unics_comment_seen' => 'mdl_user_id', 'unics_level_history' => 'mdl_user_id',
             'unics_stats_student_course' => 'mdl_user_id',
+            // Роли по детям сняты чуть выше, до удаления строк связи.
             'unics_parent_student' => 'parent_mdl_user_id',
             'unics_comments' => 'teacher_mdl_user_id'] as $table => $col) {
             $DB->delete_records($table, [$col => $userid]);

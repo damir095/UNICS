@@ -1679,10 +1679,8 @@ function xmldb_local_unics_upgrade($oldversion) {
         // всех пользователей сайта: родитель открывал журнал оценок и логи ЧУЖОГО ребенка
         // обычным адресом Moodle - наши страницы проверяют unics_parent_student, ядровые о ней
         // не знают (воспроизведено живьем 2026-08-24, [[parent-role-scope]]).
-        // global $CFG: в этой функции объявлен только $DB, и без объявления путь к файлу
-        // класса собирался из пустоты - шаг падал целиком.
-        global $CFG;
-        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        // Шаг самодостаточен: живой код плагина не зовем. Замороженная миграция не должна
+        // ломаться от того, что метод переименовали годом позже (найдено ревью).
         $roleid = (int)$DB->get_field('role', 'id', ['shortname' => 'parent']);
         if ($roleid) {
             // Уровень контекста пользователя: без него назначение нелегально, и интерфейс
@@ -1699,16 +1697,31 @@ function xmldb_local_unics_upgrade($oldversion) {
             role_unassign_all(['roleid' => $roleid,
                 'contextid' => context_system::instance()->id]);
 
-            // И раздаем права по фактическим привязкам.
+            // И раздаем права по фактическим привязкам. Удаленные и исчезнувшие пользователи
+            // отсеиваются ЗАПРОСОМ: role_assign() на такого бросает исключение, и один битый
+            // ряд оставил бы сайт в «upgrade pending» - уже без системных ролей, то есть без
+            // прав у всех родителей разом (найдено ревью).
             $links = $DB->get_records_sql(
                 "SELECT ps.id, ps.parent_mdl_user_id, s.mdl_user_id AS child
                    FROM {unics_parent_student} ps
-                   JOIN {unics_students} s ON s.id = ps.student_id");
+                   JOIN {unics_students} s ON s.id = ps.student_id
+                   JOIN {user} up ON up.id = ps.parent_mdl_user_id AND up.deleted = 0
+                   JOIN {user} uc ON uc.id = s.mdl_user_id AND uc.deleted = 0");
+            $done = 0;
             foreach ($links as $l) {
-                unics_user_manager::sync_parent_role((int)$l->parent_mdl_user_id, (int)$l->child);
+                $ctx = context_user::instance((int)$l->child, IGNORE_MISSING);
+                if (!$ctx) {
+                    continue;
+                }
+                role_assign($roleid, (int)$l->parent_mdl_user_id, $ctx->id);
+                // Переписка родителя с ребенком держалась на moodle/site:messageanyuser с
+                // системного контекста: без взаимного контакта после переезда роли родитель не
+                // может написать даже своему ребенку (messagingallusers = 0).
+                \local_unics\social\social_manager::add_contact(
+                    (int)$l->parent_mdl_user_id, (int)$l->child);
+                $done++;
             }
-            mtrace('local_unics: роль родителя переведена на контекст ребенка, привязок: '
-                . count($links));
+            mtrace('local_unics: роль родителя переведена на контекст ребенка, привязок: ' . $done);
         }
 
         upgrade_plugin_savepoint(true, 2026082401, 'local', 'unics');

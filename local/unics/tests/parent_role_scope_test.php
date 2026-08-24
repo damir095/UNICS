@@ -160,4 +160,104 @@ final class parent_role_scope_test extends \advanced_testcase {
              'contextid' => \context_system::instance()->id]),
             'пока ребенка нет, назначать роль не на что');
     }
+
+    public function test_other_roles_still_get_the_system_role(): void {
+        // Половина «не должно сработать»: инверсия условия оставила бы без ролей ВСЕХ, кроме
+        // родителей, и ни один прежний тест этого не заметил бы (найдено ревью).
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $roleid = (int)$DB->get_field('role', 'id', ['shortname' => 'student']);
+        if (!$roleid) {
+            $roleid = create_role('Учащийся', 'student', 'Учащийся', 'student');
+        }
+
+        $uid = \unics_user_manager::create_user([
+            'username' => 'pupil.test', 'firstname' => 'Ученик', 'lastname' => 'Тестовый',
+            'email' => 'pupil.test@demo.unics.local', 'password' => 'F&2gR@Gf#6',
+            'unics_role' => \local_unics\identity\role_manager::ROLE_STUDENT,
+            // organization_id обязателен для ученика: код читает ключ без страховки.
+            'organization_id' => 0, 'class_number' => 7, 'difficulty_level' => 2,
+        ]);
+        $this->resetDebugging();
+
+        $this->assertTrue($DB->record_exists('role_assignments',
+            ['roleid' => $roleid, 'userid' => (int)$uid,
+             'contextid' => \context_system::instance()->id]),
+            'у остальных ролей системное назначение осталось');
+    }
+
+    public function test_link_makes_parent_and_child_contacts(): void {
+        // Переписка держалась на moodle/site:messageanyuser с системного контекста: после
+        // переезда роли родитель не мог написать даже своему ребенку.
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $this->parent_role_id();
+        $parent = $this->getDataGenerator()->create_user();
+        [$sid, $childuid] = $this->student();
+
+        \unics_user_manager::assign_parent_student((int)$parent->id, $sid);
+
+        $this->assertTrue(
+            $DB->record_exists_select('message_contacts',
+                '(userid = :p AND contactid = :c) OR (userid = :c2 AND contactid = :p2)',
+                ['p' => $parent->id, 'c' => $childuid, 'c2' => $childuid, 'p2' => $parent->id]),
+            'родитель и ребенок обязаны стать контактами');
+    }
+
+    public function test_deleted_child_gets_no_role(): void {
+        // Контекст пользователя переживает удаление аккаунта, поэтому одной проверки контекста
+        // мало.
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $roleid = $this->parent_role_id();
+        $parent = $this->getDataGenerator()->create_user();
+        [$sid, $childuid] = $this->student();
+        $DB->set_field('user', 'deleted', 1, ['id' => $childuid]);
+
+        \unics_user_manager::assign_parent_student((int)$parent->id, $sid);
+
+        $this->assertFalse($DB->record_exists('role_assignments',
+            ['roleid' => $roleid, 'userid' => (int)$parent->id,
+             'contextid' => \context_user::instance($childuid)->id]));
+    }
+
+    public function test_repeated_link_repairs_a_lost_role(): void {
+        // Связь есть, роль потерялась: повторная привязка обязана вылечить, другого пути через
+        // интерфейс нет.
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $roleid = $this->parent_role_id();
+        $parent = $this->getDataGenerator()->create_user();
+        [$sid, $childuid] = $this->student();
+        \unics_user_manager::assign_parent_student((int)$parent->id, $sid);
+        role_unassign($roleid, (int)$parent->id, \context_user::instance($childuid)->id);
+
+        \unics_user_manager::assign_parent_student((int)$parent->id, $sid);
+
+        $this->assertTrue($DB->record_exists('role_assignments',
+            ['roleid' => $roleid, 'userid' => (int)$parent->id,
+             'contextid' => \context_user::instance($childuid)->id]));
+    }
+
+    public function test_purging_a_child_drops_parent_roles(): void {
+        // Чистка данных удаляет связи напрямую - роль обязана уйти вместе с ними, иначе право
+        // переживает отношение.
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $roleid = $this->parent_role_id();
+        $parent = $this->getDataGenerator()->create_user();
+        [$sid, $childuid] = $this->student();
+        \unics_user_manager::assign_parent_student((int)$parent->id, $sid);
+
+        \local_unics\cleanup::purge_user_data($childuid);
+
+        $this->assertFalse($DB->record_exists('role_assignments',
+            ['roleid' => $roleid, 'userid' => (int)$parent->id,
+             'contextid' => \context_user::instance($childuid)->id]));
+    }
 }

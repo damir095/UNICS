@@ -427,6 +427,13 @@ class unics_user_manager {
         if (!$roleid) {
             return;
         }
+        // Контекст пользователя переживает удаление аккаунта (delete_user чистит содержимое, но
+        // не саму строку контекста), поэтому одной проверки контекста мало - иначе роль легла бы
+        // на удаленного ребенка (найдено ревью).
+        if (!$DB->record_exists('user', ['id' => $child_mdl_user_id, 'deleted' => 0])
+                || !$DB->record_exists('user', ['id' => $parent_mdl_user_id, 'deleted' => 0])) {
+            return;
+        }
         $ctx = \context_user::instance($child_mdl_user_id, IGNORE_MISSING);
         if (!$ctx) {
             return;
@@ -452,6 +459,11 @@ class unics_user_manager {
         global $DB;
 
         if ($DB->record_exists('unics_parent_student', ['parent_mdl_user_id' => $parent_mdl_user_id, 'student_id' => $student_id])) {
+            // Связь есть, а роль могла потеряться (миграция пропустила, админ снял руками).
+            // sync_parent_role идемпотентен, поэтому лечение дешевое - и другого пути через
+            // интерфейс нет: повторная привязка раньше просто выходила молча (найдено ревью).
+            $uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+            self::sync_parent_role($parent_mdl_user_id, $uid);
             return false;
         }
 
@@ -463,15 +475,28 @@ class unics_user_manager {
         // Аудит (этап 4.4): привязка родитель-ученик.
         $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
 
-        // Права родителя действуют ровно на этого ребенка: роль вешается в контексте его
-        // пользователя, а не на систему ([[parent-role-scope]]).
-        self::sync_parent_role($parent_mdl_user_id, $s_uid);
+        // Событие раньше синхронизации роли: связь уже записана, и сбой назначения не должен
+        // оставлять ее без следа в аудите (найдено ревью).
         \local_unics\event\parent_student_assigned::create([
             'context'       => \context_system::instance(),
             'objectid'      => $student_id,
             'relateduserid' => $s_uid ?: null,
             'other'         => ['parent_mdl_user_id' => $parent_mdl_user_id, 'student_id' => $student_id],
         ])->trigger();
+
+        // Права родителя действуют ровно на этого ребенка: роль вешается в контексте его
+        // пользователя, а не на систему ([[parent-role-scope]]).
+        self::sync_parent_role($parent_mdl_user_id, $s_uid);
+
+        // Переписка держалась на moodle/site:messageanyuser с СИСТЕМНОГО контекста, и после
+        // переезда роли родитель не мог написать даже своему ребенку: при messagingallusers = 0
+        // Moodle пускает только контактов и однокурсников, а родитель не записан на курсы.
+        // Взаимный контакт - тот же прием, что для педагога (social_manager). Ставится здесь, а
+        // не в sync_parent_role: тот зовется и повторно, и из чистки, и добавление контакта
+        // второй раз упиралось бы в уникальный ключ.
+        if ($s_uid) {
+            \local_unics\social\social_manager::add_contact($parent_mdl_user_id, $s_uid);
+        }
 
         return true;
     }
