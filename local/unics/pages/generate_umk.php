@@ -345,9 +345,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
         echo '<li>' . $lvl_line . '</li>';
         echo '<li>Полоса среднего балла: ' . s($crit['avg_band']) . '</li>';
         echo '<li>Объем: ' . s($crit['word_count']) . ' слов</li>';
+        // Оба набора: указания к учебному тексту и к формулировке заданий теста уходят в разные
+        // промты ([[item-adaptation-design]]). Превью - источник правды о том, что реально
+        // получит модель, поэтому показывать только первый набор нельзя: педагог не увидел бы
+        // половину адаптации.
         if (!empty($crit['special_parts'])) {
-            echo '<li>Особые указания:<ul>';
+            echo '<li>Особые указания к учебному тексту:<ul>';
             foreach ($crit['special_parts'] as $p) {
+                echo '<li>' . s($p) . '</li>';
+            }
+            echo '</ul></li>';
+        }
+        if (!empty($crit['special_parts_items'])) {
+            echo '<li>Особые указания к заданиям теста:<ul>';
+            foreach ($crit['special_parts_items'] as $p) {
                 echo '<li>' . s($p) . '</li>';
             }
             echo '</ul></li>';
