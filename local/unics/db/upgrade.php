@@ -1727,5 +1727,26 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026082401, 'local', 'unics');
     }
 
+    if ($oldversion < 2026082402) {
+        // Страховка для стендов, выросших апгрейдами: если какая-то роль когда-то не создалась
+        // (шаг упал, роль удалили руками), ensure_roles заведет недостающее. Для чистой
+        // установки то же самое делает db/install.php ([[roles-on-fresh-install]]).
+        global $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/role_manager.php');
+        $made = \local_unics\identity\role_manager::ensure_roles();
+        $new = array_keys(array_filter($made, static fn(string $v): bool => $v === 'created'));
+        if ($new) {
+            mtrace('local_unics: заведены недостающие роли: ' . implode(', ', $new));
+            try {
+                \local_unics\identity\role_manager::apply_matrix();
+            } catch (\Throwable $e) {
+                debugging('local_unics: apply_matrix не удался: ' . $e->getMessage(),
+                    DEBUG_DEVELOPER);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026082402, 'local', 'unics');
+    }
+
     return true;
 }

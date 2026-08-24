@@ -29,6 +29,81 @@ class role_manager {
     public const ROLE_REGION_METHODIST  = 10; // региональный методист (v3)
 
     /**
+     * Роли УНИКС, которых нет в стандартной поставке Moodle.
+     *
+     * Уровни контекста: наши административные роли скоупятся через unics_user_org, а права им
+     * нужны системные, иначе apply_matrix() не сможет их назначить. Родитель - исключение: его
+     * роль живет в контексте своего ребенка ([[parent-role-scope]]).
+     */
+    private const OWN_ROLES = [
+        'region_admin' => [
+            'name' => 'Региональный администратор',
+            'archetype' => 'manager',
+            'levels' => [CONTEXT_SYSTEM],
+            'description' => 'Администратор уровня региона (скоуп задается в unics_user_org). '
+                . 'Управляет методистами, педагогами и учащимися своего скоупа через '
+                . 'capability local/unics:manageorg.',
+        ],
+        'region_methodist' => [
+            'name' => 'Региональный методист',
+            'archetype' => 'manager',
+            'levels' => [CONTEXT_SYSTEM],
+            'description' => 'Методист уровня региона (скоуп - unics_user_org.region_id). '
+                . 'Ведет курсы региона, назначает учащихся, готовит отчетность.',
+        ],
+        'district_methodist' => [
+            'name' => 'Районный методист',
+            'archetype' => 'editingteacher',
+            'levels' => [CONTEXT_SYSTEM],
+            'description' => 'Методист уровня муниципалитета (скоуп - unics_user_org.district_id). '
+                . 'Права совпадают с методистом организации, разница только в скоупе.',
+        ],
+        'methodist' => [
+            'name' => 'Методист организации',
+            'archetype' => 'editingteacher',
+            'levels' => [CONTEXT_SYSTEM],
+            'description' => 'Методист организации (скоуп - unics_user_org.organization_id). '
+                . 'Создает курсы и УМК, ведет пользователей своей организации.',
+        ],
+        'parent' => [
+            'name' => 'Родитель',
+            'archetype' => 'student',
+            'levels' => [CONTEXT_USER],
+            'description' => 'Родитель учащегося. Роль назначается в контексте СВОЕГО ребенка: '
+                . 'на системном контексте ее права открывали данные чужих детей '
+                . '([[parent-role-scope]]).',
+        ],
+    ];
+
+    /**
+     * Завести недостающие роли УНИКС. Идемпотентно.
+     *
+     * Роли создавались только шагами db/upgrade.php, а установка плагина идет из install.xml -
+     * ни один шаг апгрейда при этом не выполняется. На развернутой с нуля копии не было ни
+     * ролей, ни прав ([[roles-on-fresh-install]]).
+     *
+     * Существующие роли НЕ трогаем: на живом сайте их могли переименовать или перенастроить
+     * руками, и «доводка до образца» затерла бы чужую работу.
+     *
+     * @return array<string,string> shortname => 'created' | 'exists'
+     */
+    public static function ensure_roles(): array {
+        global $DB, $CFG;
+        require_once($CFG->libdir . '/accesslib.php');
+
+        $out = [];
+        foreach (self::OWN_ROLES as $shortname => $def) {
+            if ($DB->record_exists('role', ['shortname' => $shortname])) {
+                $out[$shortname] = 'exists';
+                continue;
+            }
+            $roleid = create_role($def['name'], $shortname, $def['description'], $def['archetype']);
+            set_role_contextlevels($roleid, $def['levels']);
+            $out[$shortname] = 'created';
+        }
+        return $out;
+    }
+    /**
      * Применяет матрицу прав ко всем ролям из get_matrix().
      * Безопасно вызывать многократно — assign_capability перезаписывает существующие назначения.
      *

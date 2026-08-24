@@ -221,8 +221,15 @@ final class parent_access_test extends \advanced_testcase {
         $this->resetAfterTest();
         global $DB;
 
-        $roleid = create_role('Родитель', 'parent', '');
-        set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
+        // Роль теперь заводится установкой плагина ([[roles-on-fresh-install]]), поэтому
+        // создаем ее только если почему-то нет: повторный create_role упирается в уникальный
+        // ключ shortname.
+        $roleid = (int)$DB->get_field('role', 'id', ['shortname' => 'parent']);
+        if (!$roleid) {
+            $roleid = create_role('Родитель', 'parent', '');
+        }
+        // Матрица прав назначается в системном контексте - уровень нужен именно для нее.
+        set_role_contextlevels($roleid, [CONTEXT_SYSTEM, CONTEXT_USER]);
 
         \local_unics\identity\role_manager::apply_matrix();
 
