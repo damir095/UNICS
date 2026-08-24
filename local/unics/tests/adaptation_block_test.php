@@ -152,7 +152,10 @@ final class adaptation_block_test extends \advanced_testcase {
         $this->assertStringContainsString('уровень: продвинутый', $p,
             'Одаренный с баллом выше 85% получает повышенный уровень');
         $this->assertStringContainsString('Категория: одарённый', $p);
-        $this->assertStringContainsString('исследовательский вопрос', $p);
+        // Корень слова, а не именительный падеж: формулировка переехала в творительный
+        // («закончи исследовательским вопросом») вместе с разведением осей
+        // ([[criteria-conflicts-design]]).
+        $this->assertStringContainsString('исследовательск', $p);
     }
 
     /**
