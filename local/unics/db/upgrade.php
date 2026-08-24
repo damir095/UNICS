@@ -1671,5 +1671,48 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026082400, 'local', 'unics');
     }
 
+    if ($oldversion < 2026082401) {
+        // Роль родителя переезжает с СИСТЕМНОГО контекста на контекст своего ребенка.
+        //
+        // Ее архетип - «студент», а с ним приходят moodle/user:viewalldetails,
+        // moodle/site:viewreports и report/log:view. На системном контексте они действуют на
+        // всех пользователей сайта: родитель открывал журнал оценок и логи ЧУЖОГО ребенка
+        // обычным адресом Moodle - наши страницы проверяют unics_parent_student, ядровые о ней
+        // не знают (воспроизведено живьем 2026-08-24, [[parent-role-scope]]).
+        // global $CFG: в этой функции объявлен только $DB, и без объявления путь к файлу
+        // класса собирался из пустоты - шаг падал целиком.
+        global $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
+        $roleid = (int)$DB->get_field('role', 'id', ['shortname' => 'parent']);
+        if ($roleid) {
+            // Уровень контекста пользователя: без него назначение нелегально, и интерфейс
+            // ролей такую пару даже не покажет.
+            $levels = $DB->get_fieldset_select('role_context_levels', 'contextlevel',
+                'roleid = ?', [$roleid]);
+            $levels = array_map('intval', $levels);
+            if (!in_array(CONTEXT_USER, $levels, true)) {
+                $levels[] = CONTEXT_USER;
+                set_role_contextlevels($roleid, $levels);
+            }
+
+            // Снимаем глобальные назначения.
+            role_unassign_all(['roleid' => $roleid,
+                'contextid' => context_system::instance()->id]);
+
+            // И раздаем права по фактическим привязкам.
+            $links = $DB->get_records_sql(
+                "SELECT ps.id, ps.parent_mdl_user_id, s.mdl_user_id AS child
+                   FROM {unics_parent_student} ps
+                   JOIN {unics_students} s ON s.id = ps.student_id");
+            foreach ($links as $l) {
+                unics_user_manager::sync_parent_role((int)$l->parent_mdl_user_id, (int)$l->child);
+            }
+            mtrace('local_unics: роль родителя переведена на контекст ребенка, привязок: '
+                . count($links));
+        }
+
+        upgrade_plugin_savepoint(true, 2026082401, 'local', 'unics');
+    }
+
     return true;
 }

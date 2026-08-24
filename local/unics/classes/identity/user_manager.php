@@ -108,9 +108,18 @@ class unics_user_manager {
                 break;
         }
 
-        // 4. Назначаем роль Moodle
+        // 4. Назначаем роль Moodle.
+        //
+        // Родитель - исключение: его роль наследует архетип «студент», а с ним права
+        // moodle/user:viewalldetails, moodle/site:viewreports и report/log:view. На СИСТЕМНОМ
+        // контексте они действуют на всех пользователей сайта, и родитель открывал журнал
+        // оценок ЧУЖОГО ребенка обычным адресом Moodle - наши страницы проверяют
+        // unics_parent_student, ядровые о ней не знают (воспроизведено живьем 2026-08-24).
+        // Роль вешается в контексте КАЖДОГО своего ребенка при создании привязки
+        // ([[parent-role-scope]]).
         $moodle_role_id = self::get_moodle_role_id($data['unics_role']);
-        if ($moodle_role_id) {
+        if ($moodle_role_id
+                && (int)$data['unics_role'] !== \local_unics\identity\role_manager::ROLE_PARENT) {
             $context = context_system::instance();
             role_assign($moodle_role_id, $mdl_user_id, $context->id);
         }
@@ -400,6 +409,43 @@ class unics_user_manager {
     }
 
     /**
+     * Привести роль родителя в контексте ребенка в соответствие с привязкой.
+     *
+     * Есть привязка - роль в контексте ЭТОГО пользователя; нет - роли нет. Системный контекст
+     * не используется вовсе: роль наследует архетип «студент» с правами
+     * moodle/user:viewalldetails и moodle/site:viewreports, и глобально они открывают журнал
+     * оценок и логи ЛЮБОГО ученика ([[parent-role-scope]]).
+     *
+     * Метод идемпотентен: зовется и на привязку, и на отвязку, и из миграции.
+     */
+    public static function sync_parent_role(int $parent_mdl_user_id, int $child_mdl_user_id): void {
+        global $DB;
+        if ($parent_mdl_user_id <= 0 || $child_mdl_user_id <= 0) {
+            return;
+        }
+        $roleid = self::get_moodle_role_id(\local_unics\identity\role_manager::ROLE_PARENT);
+        if (!$roleid) {
+            return;
+        }
+        $ctx = \context_user::instance($child_mdl_user_id, IGNORE_MISSING);
+        if (!$ctx) {
+            return;
+        }
+        // Привязка ищется по mdl_user_id ребенка: у одного родителя бывает несколько детей,
+        // и снятие роли по одному не должно задевать остальных.
+        $linked = $DB->record_exists_sql(
+            "SELECT 1 FROM {unics_parent_student} ps
+               JOIN {unics_students} s ON s.id = ps.student_id
+              WHERE ps.parent_mdl_user_id = :pid AND s.mdl_user_id = :cid",
+            ['pid' => $parent_mdl_user_id, 'cid' => $child_mdl_user_id]);
+
+        if ($linked) {
+            role_assign($roleid, $parent_mdl_user_id, $ctx->id);
+        } else {
+            role_unassign($roleid, $parent_mdl_user_id, $ctx->id);
+        }
+    }
+    /**
      * Привязать родителя к учащемуся
      */
     public static function assign_parent_student(int $parent_mdl_user_id, int $student_id): bool {
@@ -416,6 +462,10 @@ class unics_user_manager {
 
         // Аудит (этап 4.4): привязка родитель-ученик.
         $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+
+        // Права родителя действуют ровно на этого ребенка: роль вешается в контексте его
+        // пользователя, а не на систему ([[parent-role-scope]]).
+        self::sync_parent_role($parent_mdl_user_id, $s_uid);
         \local_unics\event\parent_student_assigned::create([
             'context'       => \context_system::instance(),
             'objectid'      => $student_id,
@@ -460,6 +510,10 @@ class unics_user_manager {
 
         // Аудит (этап 4.4, отвязка).
         $s_uid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $row->student_id]);
+
+        // Отвязали ребенка - права на него уходят вместе с привязкой.
+        self::sync_parent_role((int)$row->parent_mdl_user_id, $s_uid);
+
         \local_unics\event\parent_student_unassigned::create([
             'context'       => \context_system::instance(),
             'objectid'      => (int)$row->student_id,
