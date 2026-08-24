@@ -94,7 +94,8 @@ class mastery_manager {
         $days = (int)get_config('local_unics', 'adaptive_autoapply_days');
         $auto_after = $days > 0 ? time() + $days * 86400 : null;
         try {
-            $cands = self::recommender()->recommend($student_id);
+            $cands = self::drop_unsupported_suggestions($student_id,
+                self::recommender()->recommend($student_id));
             foreach ($cands as $c) {
                 suggestion_service::create(
                     $student_id,
@@ -110,6 +111,44 @@ class mastery_manager {
         }
     }
 
+    /**
+     * Убрать предложения, которые не выдержаны оценкой, и оговорить оставшиеся.
+     *
+     * Честность оценки была доведена до экранов, но не до потребителя: рекомендатель предлагал
+     * «навык освоен, можно продвигаться» по полосе из ОБОРВАННОЙ проверки, и ребенка вели дальше
+     * по теме, которую на деле не измерили ([[provisional-suggestions]]).
+     *
+     * Асимметрия намеренная: лишнее повторение ребенку безвредно, поэтому remediation остается -
+     * с пометкой для педагога; продвижение по неизмеренному вредно и снимается.
+     *
+     * Фильтр стоит ЗДЕСЬ, а не внутри рекомендателей: их два (сервисный и запасной по правилам),
+     * и правило честности должно быть общим - иначе запасной путь унаследует дыру.
+     *
+     * @param array $cands кандидаты рекомендателя
+     * @return array отфильтрованные кандидаты
+     */
+    public static function drop_unsupported_suggestions(int $student_id, array $cands): array {
+        $out = [];
+        foreach ($cands as $c) {
+            $eid = isset($c['element_id']) ? (int)$c['element_id'] : 0;
+            if ($eid <= 0) {
+                // Предложение без привязки к элементу проверять не по чему.
+                $out[] = $c;
+                continue;
+            }
+            if (!\local_unics\adaptive\estimate_precision::is_element_provisional($student_id, $eid)) {
+                $out[] = $c;
+                continue;
+            }
+            if ((int)($c['kind'] ?? 0) === suggestion_service::KIND_ADVANCEMENT) {
+                continue;
+            }
+            $c['reason'] = trim((string)($c['reason'] ?? ''));
+            $c['reason'] .= ($c['reason'] !== '' ? '. ' : '') . 'Оценка предварительная';
+            $out[] = $c;
+        }
+        return $out;
+    }
     /** Текущая строка владения по паре (ученик, элемент) или null. */
     public static function current_mastery(int $student_id, int $element_id): ?object {
         global $DB;

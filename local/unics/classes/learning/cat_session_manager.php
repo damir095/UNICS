@@ -55,9 +55,12 @@ class cat_session_manager {
     /** Последняя завершенная сессия по (ученик, элемент) или null. */
     public static function latest_finished(int $student_id, int $element_id): ?object {
         global $DB;
+        // id DESC как второй ключ: две проверки могут закончиться в одну секунду (ребенок
+        // прошел тему заново на маленьком банке), и без него база вправе вернуть любую -
+        // а от этой строки теперь зависит вердикт «предварительная оценка» и маршрут.
         $rows = $DB->get_records('unics_cat_session',
             ['student_id' => $student_id, 'element_id' => $element_id, 'status' => self::STATUS_FINISHED],
-            'finished_at DESC', '*', 0, 1);
+            'finished_at DESC, id DESC', '*', 0, 1);
         return $rows ? reset($rows) : null;
     }
 
