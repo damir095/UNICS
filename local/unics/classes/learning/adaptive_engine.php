@@ -12,6 +12,9 @@ class adaptive_engine {
     /** Минимум тестов для оценки уровня. */
     const MIN_GRADES = 3;
 
+    /** Категория «одарённый» в unics_student_category - те же коды, что в build_criteria(). */
+    const CATEGORY_GIFTED = 4;
+
     /** Стартовая диагностика: >= PLACE_HIGH % -> уровень 3 (продвинутый). */
     const PLACE_HIGH = 80;
     /** Стартовая диагностика: < PLACE_LOW % -> уровень 1 (базовый); между - уровень 2. */
@@ -245,6 +248,12 @@ class adaptive_engine {
 
         self::record_level_history($student_id, (int)$student->mdl_user_id, $cur_lvl, $new_lvl, $avg);
 
+        // unics_user_manager - глобальный класс БЕЗ автозагрузки, и подключают его страницы.
+        // Под cron таких подключений нет: применение уровня падало с «Class not found», а
+        // вызывающий гасил это в catch - оставалась строка в логе задачи и неприменённый уровень
+        // (найдено тестом 2026-08-25, дефект старше выноса пересчёта в очередь).
+        global $CFG;
+        require_once($CFG->dirroot . '/local/unics/classes/identity/user_manager.php');
         \unics_user_manager::set_student_level((int)$student->mdl_user_id, $new_lvl);
 
         // Событие в штатный журнал (этап 2.4 аудита).
@@ -310,9 +319,32 @@ class adaptive_engine {
      *
      * @return array{action:string, target:?int} action: 'none'|'apply'|'suggest'
      */
-    public static function gate_decision(int $cur, ?int $proposed, ?float $avg, int $autoapply_days): array {
+    /**
+     * Понижение уровня одаренному ребенку автоматика не применяет
+     * ([[gifted-level-drop-design]]).
+     *
+     * Довод содержательный. У одаренного низкий балл чаще означает не «не тянет», а «не включен»:
+     * скука, отсутствие вызова, потеря интереса. Автоматическое упрощение замыкает порочный круг -
+     * материал становится еще скучнее, балл падает дальше, система понижает снова. Отдельно есть
+     * дважды исключительные (одаренность плюс ОВЗ), где низкий балл идет от нарушения и лечится
+     * формой подачи, а не снижением сложности.
+     *
+     * ПОВЫШЕНИЕ одаренному применяется как раньше, и понижение всем прочим - тоже: там автоматика
+     * уместна.
+     */
+    private const GIFTED_DROP_REASON =
+        'Балл снизился у ребенка с категорией «одаренный». Это чаще сигнал о потере интереса или '
+        . 'о пробеле, чем о неспособности, и понижение уровня может усугубить: материал станет '
+        . 'еще менее интересным. Решение оставлено вам.';
+
+    public static function gate_decision(int $cur, ?int $proposed, ?float $avg, int $autoapply_days,
+                                         bool $gifted = false): array {
         if ($proposed === null || $proposed === $cur) {
             return ['action' => 'none', 'target' => null];
+        }
+        if ($gifted && $proposed < $cur) {
+            return ['action' => 'suggest', 'target' => $proposed,
+                    'rationale' => self::GIFTED_DROP_REASON];
         }
         return ['action' => $autoapply_days <= 0 ? 'apply' : 'suggest', 'target' => $proposed];
     }
@@ -328,20 +360,26 @@ class adaptive_engine {
     public static function gate_level_change(int $student_id): ?int {
         $p = self::preview_student($student_id);
         $days = (int)get_config('local_unics', 'adaptive_autoapply_days');
-        $decision = self::gate_decision((int)$p['cur'], $p['proposed'], $p['avg'], $days);
+        $gifted = in_array(self::CATEGORY_GIFTED,
+            \local_unics\identity\student_helper::categories_of($student_id), true);
+        $decision = self::gate_decision((int)$p['cur'], $p['proposed'], $p['avg'], $days, $gifted);
 
         if ($decision['action'] === 'apply') {
             return self::apply_level($student_id, (int)$decision['target'], $p['avg']);
         }
         if ($decision['action'] === 'suggest') {
-            $auto_after = $days > 0 ? time() + $days * 86400 : null;
+            // Одаренному при понижении отсрочки нет: авто-применение здесь и отключается, а
+            // непустой auto_apply_after означал бы «применится само через N дней»
+            // ([[gifted-level-drop-design]]).
+            $auto_after = ($days > 0 && empty($decision['rationale']))
+                ? time() + $days * 86400 : null;
             suggestion_service::create(
                 $student_id,
                 suggestion_service::KIND_LEVEL_CHANGE,
                 null,
                 json_encode(['target_level' => (int)$decision['target'], 'avg' => $p['avg']]),
                 $auto_after,
-                null
+                $decision['rationale'] ?? null
             );
         }
         return null;
