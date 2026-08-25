@@ -176,24 +176,80 @@ final class refresh_suggestions_task_test extends \advanced_testcase {
     // Попытка обычного теста
     // ---------------------------------------------------------------
 
-    public function test_attempt_path_also_queues_the_task(): void {
-        // Тот же случай: ребенок отправил тест, и в ЕГО запросе крутился рекомендатель со
-        // всеми письмами педагогам.
+    public function test_attempt_path_queues_exactly_one_task(): void {
+        // Первая редакция этого теста звала regenerate_suggestions_later() напрямую - то есть
+        // проверяла сама себя и не касалась on_attempt() вовсе. Мутация «ставить задачу дважды»
+        // ее не роняла (найдено ревью 2026-08-25). Теперь идем настоящим путем: оцененная
+        // попытка ученика.
         $this->resetAfterTest();
         $this->setAdminUser();
         $s = $this->student();
-        $e = $this->element();
-        global $DB;
-        $DB->insert_record('unics_skill_mastery', (object)[
-            'student_id' => $s, 'element_id' => $e, 'score' => 90.0, 'band' => 3,
-            'attempts_n' => 3, 'last_score' => 90.0, 'updated_at' => time(),
-        ]);
+        $mdluser = $this->mdl_user_of($s);
+        $cmid = $this->graded_quiz_for($mdluser);
 
-        \local_unics\learning\mastery_manager::regenerate_suggestions_later($s);
+        \local_unics\learning\mastery_manager::on_attempt($cmid, (int)$mdluser->id);
 
         $queued = $this->queued();
-        $this->assertCount(1, $queued);
+        $this->assertCount(1, $queued, 'ровно одна задача на попытку');
         $this->assertSame($s, (int)json_decode($queued[0]->customdata)->student_id);
-        $this->assertSame(0, $this->advancements($s, $e), 'синхронно ничего не создается');
+    }
+
+    public function test_quiz_without_codifier_links_skips_the_recommender(): void {
+        // Краевой случай из шапки mastery_manager: тест БЕЗ привязок навыкам ничего не дает.
+        // После выноса в очередь задача сначала гоняла рекомендатель и на нем тоже - лишний
+        // поход в сеть и возможная карточка педагогу на пустом месте (найдено ревью).
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $s = $this->student();
+        $mdluser = $this->mdl_user_of($s);
+        $cmid = $this->graded_quiz_for($mdluser);
+
+        \local_unics\learning\mastery_manager::on_attempt($cmid, (int)$mdluser->id);
+
+        $queued = $this->queued();
+        $this->assertCount(1, $queued, 'глобальный гейт уровня нужен и здесь');
+        $this->assertFalse((bool)json_decode($queued[0]->customdata)->suggestions,
+            'по тесту без привязок рекомендатель гоняться не должен');
+    }
+
+    public function test_repeated_attempts_do_not_pile_up_tasks(): void {
+        // Три теста подряд давали три одинаковые задачи: три похода к рекомендателю по 5 секунд
+        // и три прохода уведомлений, а два параллельных воркера могли выдать педагогу две
+        // одинаковые карточки - уникального индекса на таблице нет (найдено ревью).
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $s = $this->student();
+        $mdluser = $this->mdl_user_of($s);
+        $cmid = $this->graded_quiz_for($mdluser);
+
+        \local_unics\learning\mastery_manager::on_attempt($cmid, (int)$mdluser->id);
+        \local_unics\learning\mastery_manager::on_attempt($cmid, (int)$mdluser->id);
+        \local_unics\learning\mastery_manager::on_attempt($cmid, (int)$mdluser->id);
+
+        $this->assertCount(1, $this->queued(), 'одинаковые задачи обязаны схлопываться');
+    }
+
+    /** Moodle-пользователь ученика УНИКС. */
+    private function mdl_user_of(int $student_id): object {
+        global $DB;
+        $mdlid = (int)$DB->get_field('unics_students', 'mdl_user_id', ['id' => $student_id]);
+        return $DB->get_record('user', ['id' => $mdlid], '*', MUST_EXIST);
+    }
+
+    /** Тест в курсе с выставленной оценкой - то, на что реагирует on_attempt(). */
+    private function graded_quiz_for(object $user): int {
+        global $DB;
+        $course = $this->getDataGenerator()->create_course();
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        $item = $DB->get_record('grade_items',
+            ['itemmodule' => 'quiz', 'iteminstance' => $quiz->id], '*', MUST_EXIST);
+        $DB->insert_record('grade_grades', (object)[
+            'itemid' => $item->id, 'userid' => $user->id, 'rawgrade' => 8.0,
+            'finalgrade' => 8.0, 'rawgrademax' => 10.0, 'rawgrademin' => 0.0,
+            'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        return (int)$quiz->cmid;
     }
 }

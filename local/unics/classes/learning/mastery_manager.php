@@ -10,11 +10,15 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Оркестратор адаптива по навыкам (S1) [[adaptive-ai-design]]. На оцененной попытке:
  * cmid -> элементы кодификатора (unics_codifier_link) -> оценщик (за швом
- * mastery_estimator) -> запись unics_skill_mastery + unics_mastery_history -> глобальный
- * rollup (делегируем существующему adaptive_engine::evaluate_student - DRY, без регресса).
+ * mastery_estimator) -> запись unics_skill_mastery + unics_mastery_history.
  *
- * Краевые случаи: тест без привязки -> навыкам ничего, только глобальный пересчет;
- * нет оценки по cmid -> навыкам ничего.
+ * Дальше СИНХРОННОЙ работы нет: предложения педагогу и глобальный гейт уровня уехали в задачу
+ * refresh_suggestions ([[refresh-suggestions-task-design]]) - рекомендатель ходит в сеть, а гейт
+ * при нулевой отсрочке применяет смену уровня с уведомлениями, и все это происходило в запросе,
+ * где ребенок ждал свою оценку.
+ *
+ * Краевые случаи: тест без привязки -> навыкам ничего и рекомендатель не гоняется, но глобальный
+ * гейт нужен (он считает по среднему баллу); нет оценки по cmid -> навыкам ничего.
  */
 class mastery_manager {
 
@@ -47,9 +51,12 @@ class mastery_manager {
             return;
         }
         $sid = (int)$student->id;
-        // Задачу пересчета ставим РОВНО один раз на попытку: она делает и предложения, и
-        // глобальный гейт уровня.
-        $queued = false;
+        // Считать ли предложения. Краевой случай задокументирован в шапке класса: тест БЕЗ
+        // привязок к кодификатору навыкам ничего не дает, и рекомендатель по нему не гоняется -
+        // иначе каждая попытка по непривязанному тесту тянула бы поход в Python-сервис и могла
+        // родить педагогу карточку на пустом месте (найдено ревью 2026-08-25). Глобальный гейт
+        // уровня при этом нужен всегда: он считает по среднему баллу, а не по навыкам.
+        $with_suggestions = false;
 
         // Ответы по отдельным заданиям {a,b,correct} собираем, ТОЛЬКО если активный оценщик
         // их потребляет (маркер item_response_consumer). Ядро не знает имен реализаций, а
@@ -66,8 +73,7 @@ class mastery_manager {
             foreach ($scores as $eid => $pct) {
                 self::apply_to_element($sid, (int)$eid, (float)$pct, $cmid, null, $irtmap[(int)$eid] ?? []);
             }
-            self::regenerate_suggestions_later($sid);
-            $queued = true;
+            $with_suggestions = true;
         } else {
             $pct = self::attempt_pct($cmid, $userid);
             $links = self::element_links_for_cmid($cmid);
@@ -79,21 +85,17 @@ class mastery_manager {
                         $lnk['weight'], $irtmap[(int)$lnk['element_id']] ?? []);
                 }
                 // S2: пробелы/освоенное -> предложения педагогу (дедуп/уведомление - в
-                // suggestion_service). Отложенно: рекомендатель ходит в сеть, а ребенок в этот
-                // момент ждет свою оценку ([[refresh-suggestions-task-design]]).
-                self::regenerate_suggestions_later($sid);
-                $queued = true;
+                // suggestion_service).
+                $with_suggestions = true;
             }
         }
 
-        // Глобальный rollup (difficulty_level + unics_level_history + уведомления) уехал в ту
-        // же отложенную задачу: gate_level_change при N=0 применяет уровень сразу и шлет
-        // уведомления, то есть тоже не работа для запроса ребенка
-        // ([[refresh-suggestions-task-design]]). Постановка уже сделана выше, повторной не надо -
-        // а если привязок не было и предложения не считались, ставим здесь.
-        if (!$queued) {
-            self::regenerate_suggestions_later($sid);
-        }
+        // Одна постановка на попытку - и предложения, и глобальный rollup (difficulty_level +
+        // unics_level_history + уведомления). Отложенно, потому что рекомендатель ходит в сеть, а
+        // gate_level_change при N=0 еще и применяет смену уровня с уведомлениями - все это не
+        // работа для запроса, в котором ребенок ждет свою оценку
+        // ([[refresh-suggestions-task-design]]).
+        self::regenerate_suggestions_later($sid, $with_suggestions);
     }
 
     /**
@@ -116,11 +118,16 @@ class mastery_manager {
      * Сбой постановки подавляется: он не должен ронять то, ради чего ребенок пришел (найдено по
      * образцу observer::course_module_created).
      */
-    public static function regenerate_suggestions_later(int $student_id): void {
+    public static function regenerate_suggestions_later(int $student_id, bool $suggestions = true): void {
         try {
             $task = new \local_unics\task\refresh_suggestions();
-            $task->set_custom_data(['student_id' => $student_id]);
-            \core\task\manager::queue_adhoc_task($task);
+            $task->set_custom_data(['student_id' => $student_id, 'suggestions' => $suggestions]);
+            // Второй аргумент - схлопывание дублей. Ребенок, сдавший три теста подряд, иначе
+            // ставил бы три одинаковых задачи: три похода к рекомендателю по 5 секунд и три
+            // прохода уведомлений, а два параллельных воркера успели бы пройти has_open() до
+            // вставки друг друга и выдать педагогу две одинаковые карточки - уникального
+            // индекса на unics_adaptive_suggestion нет (найдено ревью 2026-08-25).
+            \core\task\manager::queue_adhoc_task($task, true);
         } catch (\Throwable $e) {
             debugging('local_unics: не удалось поставить пересчет предложений: ' . $e->getMessage(),
                 DEBUG_DEVELOPER);

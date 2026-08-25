@@ -9,8 +9,7 @@ defined('MOODLE_INTERNAL') || die();
  * Шесть throw в ai_generator передавали техническую фразу ПЕРВЫМ аргументом moodle_exception, а он
  * трактуется как идентификатор языковой строки. Наружу выходило
  * «error/GigaChat HTTP 402: Payment Required» - префикс от несостоявшегося поиска строки плюс
- * сообщение, из которого педагогу неясно, что делать. На странице статуса УМК префикс срезали
- * регуляркой, и в комментарии там прямо стояло: настоящее лечение - отдельная задача.
+ * сообщение, из которого педагогу неясно, что делать.
  *
  * Сообщение состоит из двух частей: что делать (для педагога) и техническая деталь в скобках
  * (для разбора и для страницы здоровья, которая по ней узнает неоплаченный пакет).
@@ -44,7 +43,10 @@ class ai_error {
         if ($code === 429) {
             return 'слишком много запросов подряд. Повторите позже.';
         }
-        if ($code >= 500) {
+        // Код 0 означает, что ответа не было вовсе (curl_getinfo отдает ноль, когда не пришла
+        // даже строка статуса). Говорить при нем «запрос отклонен» - утверждать, будто сервис
+        // отверг то, чего не получал (найдено ревью 2026-08-25).
+        if ($code >= 500 || $code <= 0) {
             return 'сбой на стороне поставщика. Повторите позже.';
         }
         return 'запрос отклонен.';
@@ -60,6 +62,28 @@ class ai_error {
      */
     public static function message(string $service, int $code, string $detail = '',
                                    bool $auth = false): string {
+        return self::compose($service, $auth ? ' (авторизация)' : '', 'HTTP ' . $code,
+            $detail, self::advice($code, $auth));
+    }
+
+    /**
+     * Сообщение о том, что до сервиса не удалось достучаться.
+     *
+     * Отдельный вход, потому что кода ответа тут нет вовсе: сеть легла, DNS не разрешился,
+     * истек таймаут. Раньше такие throw оставались с голой строкой вида
+     * «GigaChat cURL ошибка: Could not resolve host» - то есть ровно тем, что этот класс и
+     * заведен убрать, а сетевой отказ как раз самый вероятный (найдено ревью 2026-08-25).
+     */
+    public static function transport(string $service, string $detail = '',
+                                     bool $auth = false): string {
+        return self::compose($service, $auth ? ' (авторизация)' : '', 'нет связи', $detail,
+            'сервис недоступен: не удалось установить соединение. Проверьте интернет на сервере '
+            . 'и повторите позже.');
+    }
+
+    /** Сборка сообщения: совет для педагога плюс техническая часть в скобках. */
+    private static function compose(string $service, string $stage, string $kind, string $detail,
+                                    string $advice): string {
         $detail = trim($detail);
         if (mb_strlen($detail) > self::DETAIL_MAX) {
             $detail = mb_substr($detail, 0, self::DETAIL_MAX) . '...';
@@ -69,24 +93,33 @@ class ai_error {
         // пакет, а без него увела бы администратора в ветку «проверьте ключ и интернет»
         // (такой промах уже был - тогда проверка смотрела на код, а в тексте лежало только
         // «Payment Required»).
-        $tech = $service . ($auth ? ' (авторизация)' : '') . ' HTTP ' . $code;
+        $tech = $service . $stage . ' ' . $kind;
         if ($detail !== '') {
             $tech .= ': ' . $detail;
         }
 
-        return 'Сервис ' . $service . ' не ответил: ' . self::advice($code, $auth)
-             . ' (' . $tech . ')';
+        return 'Сервис ' . $service . ' не ответил: ' . $advice . ' (' . $tech . ')';
     }
 
     /**
      * Готовое исключение с этим сообщением.
      *
-     * generalexceptionmessage первым аргументом - именно ради этого задача и делалась: любая
-     * другая строка ушла бы в поиск языковой строки и вернулась с префиксом «error/».
+     * Языковая строка СВОЯ (`aiservicefailed` = «{$a}»), а не ядровая generalexceptionmessage:
+     * та подставляет текст в «Исключение - {$a}», и педагог видел бы жаргонный префикс - другой,
+     * но такой же бесполезный, как прежний «error/» (найдено ревью 2026-08-25).
      */
     public static function exception(string $service, int $code, string $detail = '',
                                      bool $auth = false): \moodle_exception {
-        return new \moodle_exception('generalexceptionmessage', 'error', '',
-            self::message($service, $code, $detail, $auth));
+        return self::wrap(self::message($service, $code, $detail, $auth));
+    }
+
+    /** Готовое исключение о недоступности сервиса. */
+    public static function transport_exception(string $service, string $detail = '',
+                                               bool $auth = false): \moodle_exception {
+        return self::wrap(self::transport($service, $detail, $auth));
+    }
+
+    private static function wrap(string $message): \moodle_exception {
+        return new \moodle_exception('aiservicefailed', 'local_unics', '', $message);
     }
 }

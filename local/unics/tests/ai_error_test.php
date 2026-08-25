@@ -113,12 +113,43 @@ final class ai_error_test extends \advanced_testcase {
     // Как это выглядит наружу
     // ---------------------------------------------------------------
 
-    public function test_exception_has_no_langstring_prefix(): void {
-        // Ровно тот дефект, ради которого задача и делается.
+    public function test_exception_starts_with_the_message_itself(): void {
+        // Ровно тот дефект, ради которого задача и делается - и ровно то место, где первая
+        // редакция его НЕ дочинила: `generalexceptionmessage` подставляет текст в «Исключение -
+        // {$a}», и педагог видел жаргонный префикс, только другой. Утверждение про отсутствие
+        // «error/» это пропускало (найдено ревью 2026-08-25), поэтому проверяем начало строки.
         $e = ai_error::exception('GigaChat', 402, 'Payment Required');
 
+        $this->assertStringStartsWith('Сервис GigaChat не ответил:', $e->getMessage());
         $this->assertStringNotContainsString('error/', $e->getMessage());
+        $this->assertStringNotContainsString('Исключение', $e->getMessage());
         $this->assertStringContainsString('402', $e->getMessage());
+    }
+
+    public function test_transport_failure_gets_advice_too(): void {
+        // Сеть легла - самый вероятный реальный отказ, и до правки он оставался голой строкой
+        // «GigaChat cURL ошибка: Could not resolve host» без единого слова о том, что делать.
+        $m = ai_error::transport('GigaChat', 'Could not resolve host: gigachat.devices.sberbank.ru');
+
+        $this->assertStringContainsString('недоступен', mb_strtolower($m));
+        $this->assertStringContainsString('Could not resolve host', $m, 'деталь для разбора');
+        $this->assertStringNotContainsString('HTTP', $m, 'кода ответа тут нет вовсе');
+    }
+
+    public function test_transport_exception_has_no_prefix_either(): void {
+        $e = ai_error::transport_exception('SaluteSpeech', 'timeout', true);
+
+        $this->assertStringStartsWith('Сервис SaluteSpeech не ответил:', $e->getMessage());
+        $this->assertStringContainsString('авторизация', $e->getMessage());
+    }
+
+    public function test_no_response_is_not_called_a_rejection(): void {
+        // curl_getinfo отдает 0, когда ответа не было вовсе. «Запрос отклонен» тут утверждает,
+        // будто сервис отверг то, чего не получал (найдено ревью 2026-08-25).
+        $m = ai_error::message('GigaChat', 0, '');
+
+        $this->assertStringNotContainsString('отклонен', mb_strtolower($m));
+        $this->assertStringContainsString('позже', mb_strtolower($m));
     }
 
     public function test_health_page_still_recognises_unpaid_package(): void {

@@ -538,7 +538,7 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat auth cURL ошибка: ' . $curl_err);
+            throw ai_error::transport_exception('GigaChat', (string)$curl_err, true);
         }
         if ($auth_code !== 200) {
             throw ai_error::exception('GigaChat', (int)$auth_code, (string)$auth_resp, true);
@@ -653,7 +653,7 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat cURL ошибка: ' . $curl_err);
+            throw ai_error::transport_exception('GigaChat', (string)$curl_err);
         }
         if ($http_code !== 200) {
             // 401 = токен негоден раньше вычисленного срока (перекос часов, отзыв, смена
@@ -749,7 +749,7 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech auth cURL ошибка: ' . $curl_err);
+            throw ai_error::transport_exception('SaluteSpeech', (string)$curl_err, true);
         }
         if ($auth_code !== 200) {
             throw ai_error::exception('SaluteSpeech', (int)$auth_code, (string)$auth_resp, true);
@@ -788,7 +788,7 @@ class ai_generator {
         curl_close($ch);
 
         if ($curl_err) {
-            throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech cURL ошибка: ' . $curl_err);
+            throw ai_error::transport_exception('SaluteSpeech', (string)$curl_err);
         }
         return [$http_code, (string)$audio];
     }
