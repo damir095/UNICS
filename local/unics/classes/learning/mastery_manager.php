@@ -47,6 +47,9 @@ class mastery_manager {
             return;
         }
         $sid = (int)$student->id;
+        // Задачу пересчета ставим РОВНО один раз на попытку: она делает и предложения, и
+        // глобальный гейт уровня.
+        $queued = false;
 
         // Ответы по отдельным заданиям {a,b,correct} собираем, ТОЛЬКО если активный оценщик
         // их потребляет (маркер item_response_consumer). Ядро не знает имен реализаций, а
@@ -63,7 +66,8 @@ class mastery_manager {
             foreach ($scores as $eid => $pct) {
                 self::apply_to_element($sid, (int)$eid, (float)$pct, $cmid, null, $irtmap[(int)$eid] ?? []);
             }
-            self::generate_suggestions($sid);
+            self::regenerate_suggestions_later($sid);
+            $queued = true;
         } else {
             $pct = self::attempt_pct($cmid, $userid);
             $links = self::element_links_for_cmid($cmid);
@@ -74,30 +78,53 @@ class mastery_manager {
                     self::apply_to_element($sid, (int)$lnk['element_id'], $pct, $cmid,
                         $lnk['weight'], $irtmap[(int)$lnk['element_id']] ?? []);
                 }
-                // S2: пробелы/освоенное -> предложения педагогу (дедуп/уведомление - в suggestion_service).
-                self::generate_suggestions($sid);
+                // S2: пробелы/освоенное -> предложения педагогу (дедуп/уведомление - в
+                // suggestion_service). Отложенно: рекомендатель ходит в сеть, а ребенок в этот
+                // момент ждет свою оценку ([[refresh-suggestions-task-design]]).
+                self::regenerate_suggestions_later($sid);
+                $queued = true;
             }
         }
 
-        // Глобальный rollup: difficulty_level + unics_level_history + уведомления.
-        // S2: через гибридный гейт (gate_level_change) - смена уровня становится
-        // предложением педагогу или применяется сразу при N=0.
-        try {
-            adaptive_engine::gate_level_change($sid);
-        } catch (\Throwable $e) {
-            debugging('local_unics: глобальный rollup не удался: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        // Глобальный rollup (difficulty_level + unics_level_history + уведомления) уехал в ту
+        // же отложенную задачу: gate_level_change при N=0 применяет уровень сразу и шлет
+        // уведомления, то есть тоже не работа для запроса ребенка
+        // ([[refresh-suggestions-task-design]]). Постановка уже сделана выше, повторной не надо -
+        // а если привязок не было и предложения не считались, ставим здесь.
+        if (!$queued) {
+            self::regenerate_suggestions_later($sid);
         }
     }
 
     /**
-     * Прогнать рекомендатель и создать предложения.
+     * Прогнать рекомендатель и создать предложения ПРЯМО СЕЙЧАС.
      *
-     * Боевая точка входа, а не тестовая: ее зовет cat_session_manager::finish() после каждой
-     * завершенной CAT-проверки. Раньше докблок называл ее «точкой входа для проверки проводки»,
-     * и уборка «неиспользуемой обертки» тихо снесла бы пересчет предложений после CAT.
+     * Зовется из задачи refresh_suggestions, то есть уже вне запроса ребенка. Из боевого кода
+     * напрямую звать не надо - для этого есть regenerate_suggestions_later().
      */
     public static function regenerate_suggestions(int $student_id): void {
         self::generate_suggestions($student_id);
+    }
+
+    /**
+     * Поставить пересчет предложений в очередь ([[refresh-suggestions-task-design]]).
+     *
+     * Работа отложена намеренно: рекомендатель ходит в Python-сервис с таймаутом 5 секунд, а
+     * следом рассылает по письму каждому привязанному педагогу - и все это происходило в том
+     * запросе, где ребенок отвечал на задание. Ему эта работа не нужна.
+     *
+     * Сбой постановки подавляется: он не должен ронять то, ради чего ребенок пришел (найдено по
+     * образцу observer::course_module_created).
+     */
+    public static function regenerate_suggestions_later(int $student_id): void {
+        try {
+            $task = new \local_unics\task\refresh_suggestions();
+            $task->set_custom_data(['student_id' => $student_id]);
+            \core\task\manager::queue_adhoc_task($task);
+        } catch (\Throwable $e) {
+            debugging('local_unics: не удалось поставить пересчет предложений: ' . $e->getMessage(),
+                DEBUG_DEVELOPER);
+        }
     }
 
     /** S2: прогнать рекомендатель и создать предложения (дедуп/уведомление - в suggestion_service). */

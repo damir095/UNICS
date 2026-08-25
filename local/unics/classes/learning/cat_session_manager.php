@@ -299,18 +299,12 @@ class cat_session_manager {
         //
         // Повторные вызовы безопасны: suggestion_service::create() молча выходит, если открытое
         // предложение той же пары уже есть, и уведомление педагогу уходит только при вставке.
-        mastery_manager::regenerate_suggestions((int)$session->student_id);
-
-        // Вторая половина того же: on_attempt() после генерации предложений зовет глобальный
-        // гейт уровня, и без него ребенок, который проверяется ТОЛЬКО через CAT, копит освоенные
-        // элементы, получает карточки продвижения, но предложения сменить общий уровень
-        // сложности не видит никогда (найдено ревью 2026-08-25).
-        try {
-            adaptive_engine::gate_level_change((int)$session->student_id);
-        } catch (\Throwable $e) {
-            debugging('local_unics: глобальный rollup после CAT не удался: ' . $e->getMessage(),
-                DEBUG_DEVELOPER);
-        }
+        // Пересчет предложений и глобальный гейт уровня уезжают в отложенную задачу
+        // ([[refresh-suggestions-task-design]]): это последний шаг проверки, и ребенок в этот
+        // момент ждет свой результат, а рекомендатель ходит в Python-сервис с таймаутом 5 секунд
+        // и рассылает письма педагогам. Запись владения выше остается синхронной - ее ребенок
+        // видит сразу на экране итога.
+        mastery_manager::regenerate_suggestions_later((int)$session->student_id);
     }
 
     public static function abandon(int $session_id): void {

@@ -54,6 +54,25 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
         return $DB->get_record('unics_cat_session', ['id' => $id], '*', MUST_EXIST);
     }
 
+    /**
+     * Выполнить поставленные задачи пересчета, как это сделал бы cron.
+     *
+     * С 2026-08-25 finish() не считает предложения сам, а ставит задачу
+     * ([[refresh-suggestions-task-design]]): рекомендатель ходит в сеть и шлет письма
+     * педагогам, а ребенок в этот момент ждет свой результат.
+     */
+    private function run_queued(): void {
+        global $DB;
+        $cls = '\\' . \local_unics\task\refresh_suggestions::class;
+        foreach ($DB->get_records('task_adhoc', ['classname' => $cls], 'id ASC') as $rec) {
+            $task = new \local_unics\task\refresh_suggestions();
+            $task->set_custom_data(json_decode($rec->customdata));
+            ob_start();
+            $task->execute();
+            ob_end_clean();
+        }
+    }
+
     private function advancements(int $student, int $element): int {
         global $DB;
         return $DB->count_records('unics_adaptive_suggestion', [
@@ -73,6 +92,7 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
 
         cat_session_manager::finish($session, self::THETA_MASTERED, 0.2, 5,
             \local_unics\adaptive\estimate_precision::REASON_PRECISION, 0.3);
+        $this->run_queued();
 
         $this->assertSame(1, $this->advancements($s, $e),
             'проверка, доведенная до точности, обязана вернуть продвижение');
@@ -89,6 +109,7 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
 
         cat_session_manager::finish($session, self::THETA_MASTERED, 0.9, 5,
             \local_unics\adaptive\estimate_precision::REASON_BANK_EXHAUSTED, 0.3);
+        $this->run_queued();
 
         $this->assertSame(0, $this->advancements($s, $e),
             'по оборванной проверке продвижение предлагать нельзя');
@@ -104,8 +125,10 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
 
         cat_session_manager::finish($this->open_session($s, $e), self::THETA_MASTERED, 0.2, 5,
             \local_unics\adaptive\estimate_precision::REASON_PRECISION, 0.3);
+        $this->run_queued();
         cat_session_manager::finish($this->open_session($s, $e), self::THETA_MASTERED, 0.2, 6,
             \local_unics\adaptive\estimate_precision::REASON_PRECISION, 0.3);
+        $this->run_queued();
 
         $this->assertSame(1, $this->advancements($s, $e), 'дублей быть не должно');
     }
@@ -121,10 +144,12 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
 
         cat_session_manager::finish($this->open_session($s, $e), self::THETA_MASTERED, 0.9, 4,
             \local_unics\adaptive\estimate_precision::REASON_BANK_EXHAUSTED, 0.3);
+        $this->run_queued();
         $this->assertSame(0, $this->advancements($s, $e), 'предпосылка: продвижение снято');
 
         cat_session_manager::finish($this->open_session($s, $e), self::THETA_MASTERED, 0.2, 7,
             \local_unics\adaptive\estimate_precision::REASON_PRECISION, 0.3);
+        $this->run_queued();
 
         $this->assertSame(1, $this->advancements($s, $e),
             'доведенная до точности проверка обязана вернуть снятое продвижение');
@@ -144,6 +169,7 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
 
         cat_session_manager::finish($this->open_session($s, $e), self::THETA_MASTERED, 0.2, 5,
             \local_unics\adaptive\estimate_precision::REASON_PRECISION, 0.3);
+        $this->run_queued();
 
         $m = mastery_manager::current_mastery($s, $e);
         $this->assertNotNull($m);
@@ -164,6 +190,7 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
 
         cat_session_manager::finish($this->open_session($s, $e), -2.0, 0.2, 5,
             \local_unics\adaptive\estimate_precision::REASON_PRECISION, 0.3);
+        $this->run_queued();
 
         $this->assertSame(0, $this->advancements($s, $e), 'продвижения по пробелу быть не может');
         $this->assertSame(1, $DB->count_records('unics_adaptive_suggestion', [
