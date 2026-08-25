@@ -131,7 +131,12 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
     }
 
     public function test_mastery_is_still_recorded(): void {
-        // Правка добавляет шаг ПОСЛЕ записи владения и не должна ее задеть.
+        // Правка добавляет шаги ПОСЛЕ записи владения и не должна ее задеть.
+        //
+        // Здесь же страхуется и вызов глобального гейта уровня: он обернут в catch, и первая
+        // версия правки звала класс с неверным неймспейсом - ошибка была съедена молча. Ловит
+        // это сам PHPUnit: advanced_testcase считает неожиданный debugging() провалом, поэтому
+        // сломанный вызов роняет КАЖДЫЙ тест этого файла (проверено мутацией).
         $this->resetAfterTest();
         $this->setAdminUser();
         $s = $this->student();
@@ -146,8 +151,12 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
             (float)$m->score, 0.01);
     }
 
-    public function test_low_score_does_not_create_advancement(): void {
-        // Точная проверка с низким баллом - это пробел, а не продвижение.
+    public function test_low_score_creates_remediation_not_advancement(): void {
+        // Точная проверка с низким баллом - это пробел, а не продвижение. Раньше тест проверял
+        // только вторую половину («не продвижение»), и предложение о повторении, которое он на
+        // самом деле создает, оставалось непроверенным: мутация, убирающая ветку remediation
+        // из рекомендателя, оставляла тест зеленым (найдено ревью 2026-08-25).
+        global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
         $s = $this->student();
@@ -156,6 +165,10 @@ final class cat_finish_suggestions_test extends \advanced_testcase {
         cat_session_manager::finish($this->open_session($s, $e), -2.0, 0.2, 5,
             \local_unics\adaptive\estimate_precision::REASON_PRECISION, 0.3);
 
-        $this->assertSame(0, $this->advancements($s, $e));
+        $this->assertSame(0, $this->advancements($s, $e), 'продвижения по пробелу быть не может');
+        $this->assertSame(1, $DB->count_records('unics_adaptive_suggestion', [
+            'student_id' => $s, 'element_id' => $e,
+            'kind' => suggestion_service::KIND_REMEDIATION,
+        ]), 'пробел обязан дать предложение о повторении');
     }
 }

@@ -12,13 +12,29 @@ use local_unics\ai\ai_generator;
 #[\PHPUnit\Framework\Attributes\CoversClass(ai_generator::class)]
 final class ai_generator_prompt_test extends \advanced_testcase {
 
+    /**
+     * Переносы строк нормализуются перед сравнением.
+     *
+     * Промт склеивается из строк ai_generator.php и из implode("\n", ...), поэтому несет СМЕСЬ
+     * CRLF и LF - какую именно, зависит от того, в каком виде git положил исходник в рабочую
+     * копию (autocrlf=true). Файл фикстур git нормализует при коммите, и после этого golden-тест
+     * падал на всех 12 кейсах разницей, которую не видно глазами
+     * ([[reference_grep_cr_lies]], повтор истории 2026-08-25).
+     *
+     * Байт-в-байт тест при этом остается собой: перенос строки в промте семантики не несет, а
+     * любое изменение СОДЕРЖАНИЯ по-прежнему роняет проверку (подтверждено мутацией).
+     */
+    private static function nl(string $s): string {
+        return str_replace("\r\n", "\n", $s);
+    }
+
     public function test_build_prompt_matches_golden_fixtures(): void {
         $fixtures = require(__DIR__ . '/fixtures/umk_prompt_fixtures.php');
         $this->assertNotEmpty($fixtures);
         $gen = new ai_generator();
         foreach ($fixtures as $name => $f) {
-            $this->assertSame($f['expected'],
-                $gen->build_prompt($f['profile'], $f['topic'], $f['extra']),
+            $this->assertSame(self::nl($f['expected']),
+                self::nl($gen->build_prompt($f['profile'], $f['topic'], $f['extra'])),
                 "Промт изменился для кейса: {$name}");
         }
     }

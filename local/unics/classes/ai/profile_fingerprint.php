@@ -63,11 +63,36 @@ class profile_fingerprint {
      * Сырой avg_score выбрасывается намеренно - в критериях остается avg_band, и именно
      * полоса, а не число, попадает и в промт, и в ключ. Иначе схлопывание не сработало бы:
      * совпадение среднего балла до процента - редкость.
+     *
+     * Хешируются только СТРУКТУРНЫЕ признаки, а не готовые формулировки промта. Раньше в ключ
+     * шел весь массив критериев, включая special_parts - человекочитаемые указания. Из-за этого
+     * любая редактура текста указания сдвигала КАЖДЫЙ сохраненный profile_key, а из первых
+     * восьми символов ключа строится idnumber группы доступа
+     * (course_builder::get_or_create_profile_group): повторная генерация той же темы не находила
+     * прежнюю группу, заводила «вариант 2», и ребенок оказывался в обеих - с двумя комплектами по
+     * одной теме. Вскрылось ревью 2026-08-25, когда правка формулировок ([[criteria-conflicts-design]])
+     * развела 6 ключей из 8 на стенде.
+     *
+     * Список полей закрытый (белый), а не «все минус лишнее»: при черном списке каждый новый
+     * ключ критериев молча попадал бы в хеш и ломал группировку заново.
+     *
+     * special_needs включен обязательно - это свободный текст про самого ребенка, и двое детей с
+     * разными особенностями схлопываться в один комплект не должны.
      */
+    private const FINGERPRINT_KEYS = [
+        'base_level', 'eff_level', 'avg_band', 'class_str',
+        'category_ids', 'ovz_type_ids', 'word_count',
+    ];
+
     public static function key(array $profile, ?ai_generator $gen = null): string {
         $gen = $gen ?? new ai_generator();
-        $criteria = $gen->build_criteria($profile);
-        unset($criteria['avg_score']);
+        $full = $gen->build_criteria($profile);
+
+        $criteria = [];
+        foreach (self::FINGERPRINT_KEYS as $k) {
+            $criteria[$k] = $full[$k] ?? null;
+        }
+        $criteria['special_needs'] = trim((string)($profile['special_needs'] ?? ''));
         ksort($criteria);
 
         // json_encode отдает false на битом UTF-8 (например строка из импорта в cp1251), а

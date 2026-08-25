@@ -205,6 +205,48 @@ final class item_adaptation_test extends \advanced_testcase {
         $this->assertStringContainsString('Особые указания к формулировке заданий:', $block);
     }
 
+    public function test_unknown_block_kind_fails_loudly(): void {
+        // Прежний код молча откатывался на текстовый набор при любом $kind кроме точного
+        // BLOCK_ITEMS - то есть возвращал исходный дефект, не роняя ни одного теста
+        // (найдено ревью 2026-08-25).
+        $gen = new ai_generator();
+
+        $this->expectException(\coding_exception::class);
+        $gen->adaptation_block([
+            'category_label' => 'ОВЗ', 'level_label' => 'базовый', 'avg_band' => '50-85%',
+            'special_parts' => ['Т'], 'special_parts_items' => ['З'],
+        ], 'ITEMS');
+    }
+
+    public function test_missing_item_set_fails_loudly(): void {
+        // Второй молчаливый путь: критерии, собранные где-то в обход build_criteria, давали
+        // промт заданий вообще без адаптации - и тоже молча.
+        $gen = new ai_generator();
+
+        $this->expectException(\coding_exception::class);
+        $gen->adaptation_block([
+            'category_label' => 'ОВЗ', 'level_label' => 'базовый', 'avg_band' => '50-85%',
+            'special_parts' => ['Т'],
+        ], ai_generator::BLOCK_ITEMS);
+    }
+
+    public function test_ovz_type_without_category_still_adapts(): void {
+        // Категории и виды ОВЗ пишутся независимо (sync_student_taxonomies), и через импорт
+        // достижимо «вид записан, категории нет». В этом состоянии превью печатало диагноз, а
+        // адаптации не было вовсе (найдено ревью 2026-08-25).
+        $gen = new ai_generator();
+
+        $c = $gen->build_criteria(['categories' => [3], 'ovz_types' => [4],
+            'difficulty_level' => 3, 'avg_score' => 90.0, 'class_number' => 7]);
+
+        $this->assertStringContainsString('Очень короткие абзацы', implode("\n", $c['special_parts']),
+            'вид ОВЗ записан - адаптация обязана применяться');
+        $this->assertStringContainsString('Один вопрос - одна мысль',
+            implode("\n", $c['special_parts_items']));
+        $this->assertNotSame('600–800', $c['word_count'],
+            'потолок объема тоже не должен зависеть от категории');
+    }
+
     public function test_item_block_without_parts_has_no_heading(): void {
         $gen = new ai_generator();
 

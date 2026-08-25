@@ -356,7 +356,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
             }
             echo '</ul></li>';
         }
-        if (!empty($crit['special_parts_items'])) {
+        // Гейт по галочке теста: без него превью показывало страницу указаний, которые никуда
+        // не уйдут - тест не генерируется вовсе. Превью и есть источник правды о том, что
+        // получит модель, значит лишнего в нем быть не должно (найдено ревью 2026-08-25).
+        if (!empty($generate_quiz) && !empty($crit['special_parts_items'])) {
             echo '<li>Особые указания к заданиям теста:<ul>';
             foreach ($crit['special_parts_items'] as $p) {
                 echo '<li>' . s($p) . '</li>';
