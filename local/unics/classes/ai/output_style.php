@@ -69,19 +69,120 @@ class output_style {
      * в школьные, разделители формул убираем.
      */
     public static function strip_math_markup(string $text): string {
+        // Блоки кода не трогаем: там обратный слэш законен, и «чистка» превратила бы пример на
+        // Python в кашу ([[code-fence-and-math-design]]).
+        return self::map_outside_code($text, static function (string $chunk): string {
+            return self::clean_math($chunk);
+        });
+    }
+
+    /**
+     * Знакомые команды LaTeX в школьные символы.
+     *
+     * Раньше словарь состоял из четырех записей, а все прочее оставалось в тексте урока: живая
+     * генерация 2026-08-24 вернула «$$H_2O \rightarrow H_2O(пар)$$» - доллары снимались, команда
+     * оставалась ([[code-fence-and-math-design]]).
+     */
+    private const MATH_COMMANDS = [
+        '\\rightarrow' => '→', '\\to' => '→', '\\leftarrow' => '←', '\\Rightarrow' => '⇒',
+        '\\leq' => '≤', '\\le' => '≤', '\\geq' => '≥', '\\ge' => '≥', '\\neq' => '≠',
+        '\\approx' => '≈', '\\pm' => '±', '\\mp' => '∓', '\\infty' => '∞',
+        '\\sqrt' => '√', '\\sum' => '∑', '\\degree' => '°', '\\circ' => '°',
+        '\\alpha' => 'α', '\\beta' => 'β', '\\gamma' => 'γ', '\\pi' => 'π',
+        '\\Delta' => 'Δ', '\\delta' => 'δ', '\\lambda' => 'λ', '\\mu' => 'μ', '\\omega' => 'ω',
+        '\\cdot' => '×', '\\times' => '×', '\\div' => ':',
+    ];
+
+    private static function clean_math(string $text): string {
         // Символы дробей - обход запрета на LaTeX, а не украшение: живая генерация 2026-08-21
         // вернула «⅓ + ⅙ = ?» с вариантами «½», «⅔». Верификатор такие числа не понимал, и
         // ВЕРНЫЕ задания отбрасывались как безответные.
-        $out = strtr($text, self::VULGAR_FRACTIONS);
-        // Смешанное число «1½» без разделителя слиплось бы в «11/2» - вдесятеро больше.
-        $out = preg_replace('~(\d)\s*(\d+/\d+)~u', '$1 $2', $out) ?? $out;
+        // Смешанное число «1½» без разделителя слиплось бы в «11/2» - вдесятеро больше. Разводим
+        // ПРИ подстановке, по самому символу дроби.
+        //
+        // Раньше это делалось общим правилом «цифра + дробь» ПОСЛЕ подстановки, и оно ломало
+        // обычные дроби: «11/15» превращалось в «1 1/15», «25/100» - в «2 5/100». То есть в уроке
+        // про дроби ребенок читал неверный ответ. Найдено 2026-08-25 проверкой чистки на реальных
+        // страницах стенда: из 27 страниц изменились 13, и половина изменений была порчей
+        // ([[code-fence-and-math-design]]).
+        $out = $text;
+        foreach (self::VULGAR_FRACTIONS as $glyph => $plain) {
+            $out = preg_replace('~(\d)\s*' . preg_quote($glyph, '~') . '~u', '$1 ' . $plain, $out)
+                ?? $out;
+        }
+        $out = strtr($out, self::VULGAR_FRACTIONS);
         $out = preg_replace('/\\\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/u', '$1/$2', $out) ?? $out;
-        $out = str_replace(['\\cdot', '\\times'], '×', $out);
-        $out = str_replace('\\div', ':', $out);
+
+        // Длинные имена вперед коротких: иначе «\leq» съелся бы правилом «\le» и оставил хвост
+        // «q». strtr берет самое длинное совпадение сам, но порядок в массиве держим явным.
+        $out = strtr($out, self::MATH_COMMANDS);
+
         $out = str_replace(['\\(', '\\)', '\\[', '\\]', '$'], '', $out);
+        // Все, что осталось от LaTeX, - незнакомые команды. Оставлять их нельзя: «rightarrow»
+        // без слэша такой же мусор, как со слэшем, а ребенок читает это в тексте урока.
+        $out = preg_replace('/\\\\[a-zA-Z]+\s*/u', '', $out) ?? $out;
         // Схлопываем пробелы, оставшиеся от снятых разделителей.
         $out = preg_replace('/[ \t]{2,}/u', ' ', $out) ?? $out;
         return trim($out);
+    }
+
+    /**
+     * Применить преобразование ко всему тексту, КРОМЕ блоков кода в ограждениях ```.
+     *
+     * Тот же обход, что в shift_headings(), но пригодный для повторного использования: решетка и
+     * обратный слэш внутри блока кода - часть материала, а не разметка модели.
+     */
+    public static function map_outside_code(string $text, callable $fn): string {
+        $lines = preg_split('/\R/u', $text);
+        if ($lines === false) {
+            return $fn($text);
+        }
+
+        $out = [];
+        $buffer = [];
+        $in_fence = false;
+        $flush = static function () use (&$buffer, &$out, $fn): void {
+            if ($buffer) {
+                $out[] = $fn(implode("\n", $buffer));
+                $buffer = [];
+            }
+        };
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*```/u', $line)) {
+                $flush();
+                $out[] = $line;
+                $in_fence = !$in_fence;
+                continue;
+            }
+            if ($in_fence) {
+                $out[] = $line;
+                continue;
+            }
+            $buffer[] = $line;
+        }
+        $flush();
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * Номера строк markdown, лежащих ВНЕ блоков кода.
+     *
+     * @return array<int, bool> номер строки => true, если строка вне ограждения
+     */
+    public static function lines_outside_code(string $text): array {
+        $lines = preg_split('/\R/u', $text);
+        $map = [];
+        $in_fence = false;
+        foreach ((array)$lines as $i => $line) {
+            if (preg_match('/^\s*```/u', (string)$line)) {
+                $in_fence = !$in_fence;
+                $map[$i] = false;
+                continue;
+            }
+            $map[$i] = !$in_fence;
+        }
+        return $map;
     }
 
     /**

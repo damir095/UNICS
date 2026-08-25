@@ -58,22 +58,43 @@ class lecture_illustrator {
      * @param int $max потолок
      * @return array<int, array{heading: string, lead: string}>
      */
+    /**
+     * Заголовки разделов со смещениями, БЕЗ тех, что лежат внутри блоков кода.
+     *
+     * Регулярка по всему тексту считала заголовком и строку «#### считаем сумму» внутри примера
+     * на Python: раздел появлялся из комментария к коду и получал иллюстрацию
+     * ([[code-fence-and-math-design]]). Тот же дефект в shift_headings() чинили еще в августе -
+     * тем же построчным обходом.
+     *
+     * @return array<int, array{heading: string, hstart: int, bstart: int}>
+     */
+    private static function headings_of(string $md): array {
+        $outside = output_style::lines_outside_code($md);
+        $found = [];
+        $offset = 0;
+        foreach (preg_split('/\R/u', $md) ?: [] as $i => $line) {
+            $len = strlen($line);
+            if (($outside[$i] ?? true) && preg_match(self::HEADING_RE, $line, $m)) {
+                $found[] = [
+                    'heading' => self::clean_heading($m[1]),
+                    'hstart'  => $offset,
+                    'bstart'  => $offset + $len,
+                ];
+            }
+            // +1 за перенос строки. Смещения нужны точные: по ним режется тело раздела,
+            // и ошибка на единицу уводит в промт картинки обрезок соседнего.
+            $offset += $len + 1;
+        }
+        return $found;
+    }
+
     public static function split_sections(string $md, string $topic,
                                           int $max = self::MAX_IMAGES): array {
         if ($max < 1) {
             return [];
         }
 
-        $found = [];
-        if (preg_match_all(self::HEADING_RE, $md, $m, PREG_OFFSET_CAPTURE)) {
-            foreach ($m[0] as $i => $whole) {
-                $found[] = [
-                    'heading' => self::clean_heading($m[1][$i][0]),
-                    'hstart'  => $whole[1],
-                    'bstart'  => $whole[1] + strlen($whole[0]),
-                ];
-            }
-        }
+        $found = self::headings_of($md);
 
         // Модель не разметила разделы - одна вводная картинка по теме УМК.
         if (empty($found)) {
@@ -134,21 +155,32 @@ class lecture_illustrator {
         }
 
         // Заголовков нет - единственная картинка идет в начало текста.
-        if (!preg_match(self::HEADING_RE, $md)) {
+        if (!self::headings_of($md)) {
             return isset($filenames[0])
                 ? self::img_tag($filenames[0], $sections[0]['heading']) . "\n\n" . $md
                 : $md;
         }
 
+        // Построчно и в обход блоков кода - как и разбивка на разделы. Прежний
+        // preg_replace_callback по всему тексту врезал бы картинку после строки «#### считаем
+        // сумму» внутри примера на Python и сбил бы соответствие картинок разделам
+        // ([[code-fence-and-math-design]]).
+        $outside = output_style::lines_outside_code($md);
+        $lines = preg_split('/\R/u', $md) ?: [];
         $idx = -1;
-        return preg_replace_callback(self::HEADING_RE,
-            static function (array $m) use (&$idx, $filenames): string {
-                $idx++;
-                if (!isset($filenames[$idx])) {
-                    return $m[0];
-                }
-                return $m[0] . "\n\n" . self::img_tag($filenames[$idx], self::clean_heading($m[1]));
-            }, $md);
+        $out = [];
+        foreach ($lines as $i => $line) {
+            $out[] = $line;
+            if (!($outside[$i] ?? true) || !preg_match(self::HEADING_RE, $line, $m)) {
+                continue;
+            }
+            $idx++;
+            if (isset($filenames[$idx])) {
+                $out[] = '';
+                $out[] = self::img_tag($filenames[$idx], self::clean_heading($m[1]));
+            }
+        }
+        return implode("\n", $out);
     }
 
     /**
