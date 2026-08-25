@@ -541,7 +541,7 @@ class ai_generator {
             throw new \moodle_exception('generalexceptionmessage', 'error', '', 'GigaChat auth cURL ошибка: ' . $curl_err);
         }
         if ($auth_code !== 200) {
-            throw new \moodle_exception('GigaChat auth HTTP ' . $auth_code . ': ' . $auth_resp);
+            throw ai_error::exception('GigaChat', (int)$auth_code, (string)$auth_resp, true);
         }
 
         return self::parse_token_response((string)$auth_resp);
@@ -661,7 +661,7 @@ class ai_generator {
             if ($http_code === 401) {
                 $this->invalidate_gigachat_token();
             }
-            throw new \moodle_exception('GigaChat HTTP ' . $http_code . ': ' . mb_substr($response, 0, 300));
+            throw ai_error::exception('GigaChat', (int)$http_code, (string)$response);
         }
 
         $decoded = json_decode($response, true);
@@ -752,7 +752,7 @@ class ai_generator {
             throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech auth cURL ошибка: ' . $curl_err);
         }
         if ($auth_code !== 200) {
-            throw new \moodle_exception('SaluteSpeech auth HTTP ' . $auth_code . ': ' . $auth_resp);
+            throw ai_error::exception('SaluteSpeech', (int)$auth_code, (string)$auth_resp, true);
         }
         $token = json_decode($auth_resp, true)['access_token'] ?? '';
         if (empty($token)) {
@@ -820,7 +820,7 @@ class ai_generator {
                 tts_status::mark_unavailable($message);
             }
 
-            throw new \moodle_exception('SaluteSpeech HTTP ' . $http_code . ': ' . $message);
+            throw ai_error::exception('SaluteSpeech', (int)$http_code, (string)$message);
         }
         if (strlen($audio) < 1000) {
             throw new \moodle_exception('generalexceptionmessage', 'error', '', 'SaluteSpeech вернул некорректные аудиоданные');
@@ -1252,7 +1252,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             if ($http_code === 401) {
                 $this->invalidate_gigachat_token();
             }
-            throw new \moodle_exception('GigaChat image HTTP ' . $http_code . ': ' . mb_substr($response, 0, 200));
+            throw ai_error::exception('GigaChat (картинки)', (int)$http_code, (string)$response);
         }
 
         $data    = json_decode($response, true);
@@ -1337,7 +1337,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             if ($http_code === 401) {
                 $this->invalidate_gigachat_token();
             }
-            throw new \moodle_exception('GigaChat image download HTTP ' . $http_code);
+            throw ai_error::exception('GigaChat (загрузка картинки)', (int)$http_code);
         }
 
         return (string) $img_data;
