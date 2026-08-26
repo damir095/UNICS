@@ -856,7 +856,8 @@ class ai_generator {
     // Возвращает массив: [['text'=>..., 'answers'=>[...], 'correct'=>0], ...]
     // ----------------------------------------------------------------
     public function generate_quiz(array $profile, string $topic, string $source_text = '',
-                                  int $num = 5, string $extra_context = ''): array {
+                                  int $num = 5, string $extra_context = '',
+                                  array &$surplus = []): array {
         // Уровень берется из build_criteria - он ЭФФЕКТИВНЫЙ (с поправкой adapt_level на балл).
         // Раньше здесь стоял сырой difficulty_level, и у ребенка с базовым 3 и баллом 40% текст
         // писался на уровне 2, а тест по этому же тексту - на уровне 3
@@ -912,7 +913,7 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
             $raw = $this->generate_text($prompt,
                 max(4096, $ask * self::QUIZ_TOKENS_PER_QUESTION));
             try {
-                return $this->questions_from_reply($raw, $num);
+                return $this->questions_from_reply($raw, $num, $surplus);
             } catch (\moodle_exception $e) {
                 // След обязателен: без него удачный повтор неотличим от чистого прогона, и
                 // частота порчи первого ответа остается невидимой.
@@ -935,7 +936,10 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
      * @param int $num сколько вопросов просили у модели
      * @throws \moodle_exception если после проверки не осталось ни одного вопроса
      */
-    private function questions_from_reply(string $raw, int $num): array {
+    private function questions_from_reply(string $raw, int $num, array &$surplus = []): array {
+        // Список излишков обнуляем: параметр по ссылке легко получить непустым от вызывающего,
+        // и прошлые вопросы уехали бы в пул повторно.
+        $surplus = [];
         // Разбор с восстановлением обрезанного ответа - общий для всех JSON-выходов
         // ([[codifier-ai-proposal-design]], раздел 4).
         $data = json_reply::decode($raw, 'questions') ?? [];
@@ -1002,26 +1006,31 @@ correct - индекс правильного ответа (0, 1, 2 или 3).";
         // починили, а потом выбросили признаки или судья, попадал в обе колонки разом.
         $result = [];
         foreach ($kept as $q) {
-            if (!empty($q['wasfixed'])) {
+            $qnotes = $q['notes'] ?? [];
+            $wasfixed = !empty($q['wasfixed']);
+            unset($q['wasfixed'], $q['notes'], $q['computed']);
+
+            // Лишнее отсекаем в самом конце - когда добирать уже нечем. Но НЕ выбрасываем:
+            // эти вопросы прошли все проверки, и пул заданий как раз ими и живет
+            // ([[surplus-to-pool-design]]).
+            if (count($result) >= $num) {
+                $surplus[] = $q;
+                continue;
+            }
+
+            if ($wasfixed) {
                 $fixed++;
             }
-            foreach ($q['notes'] as $note) {
+            foreach ($qnotes as $note) {
                 $notes[] = $note;
             }
-            unset($q['wasfixed'], $q['notes']);
             $result[] = $q;
-            // Лишнее, что прислала модель, отсекаем в самом конце - когда добирать уже нечем.
-            if (count($result) >= $num) {
-                break;
-            }
         }
 
-        // Излишки запаса: сколько годных вопросов не дошло до ребенка просто потому, что их
-        // просили сверх нужного. Без этой строки нельзя понять, нужен ли запас и не велик ли он
-        // ([[quiz-buffer-design]]).
-        $surplus = count($kept) - count($result);
-        if ($surplus > 0) {
-            $this->trace('  Запас: лишних годных вопросов отброшено ' . $surplus);
+        // Сколько годных вопросов ушло в пул вместо теста ребенка. Без следа нельзя понять,
+        // нужен ли запас и не велик ли он ([[quiz-buffer-design]]).
+        if ($surplus) {
+            $this->trace('  Запас: лишних годных вопросов отброшено ' . count($surplus));
         }
 
         if ($fixed || $dropped || $bysigns || $byjudge) {

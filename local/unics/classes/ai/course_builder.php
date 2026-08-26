@@ -193,6 +193,12 @@ class course_builder {
      * $questions - массив из ai_generator::generate_quiz().
      * $reuse_ids - готовые questionbankentryid из общего пула элемента: они ставятся в слоты
      * ПЕРЕД новыми и не создают ни одного вопроса заново ([[umk-item-pool-design]]).
+     *
+     * $bank_only - вопросы, которые создаются в банке, но в тест НЕ ставятся: это излишки
+     * запаса генерации ([[surplus-to-pool-design]]). Они прошли все проверки, и пул заданий
+     * живет как раз ими; ребенок при этом видит ровно свой набор. Их questionbankentryid
+     * возвращаются через $bank_refs - иначе пулу нечего привязывать к элементу.
+     *
      * Возвращает cmid теста.
      */
     public function add_quiz_with_questions(
@@ -200,7 +206,9 @@ class course_builder {
         int    $section_num,
         string $title,
         array  $questions,
-        array  $reuse_ids = []
+        array  $reuse_ids = [],
+        array  $bank_only = [],
+        array  &$bank_refs = []
     ): int {
         global $DB;
 
@@ -260,7 +268,12 @@ class course_builder {
             $put_in_slot((int)$reused);
         }
 
-        foreach ($questions as $q) {
+        $bank_refs = [];
+        // Излишки идут тем же путем, что и основные вопросы: разница только в том, что слот им
+        // не ставится. Отдельная ветка создания разъехалась бы с этой при первой же правке.
+        $total = count($questions);
+        foreach (array_merge(array_values($questions), array_values($bank_only)) as $idx => $q) {
+            $into_quiz = $idx < $total;
             // Вопрос с ключом вне диапазона не создаем вовсе: у всех вариантов вышла бы доля
             // 0.0, ребенок не смог бы ответить верно НИКАК, а IRT посчитала бы это трудностью
             // задания. Раньше от такого страховал зажим индекса в generate_quiz, снятый ради
@@ -351,8 +364,10 @@ class course_builder {
             // Слот и question_references ставит замыкание выше: путь у переиспользованных и
             // только что созданных заданий обязан быть один, иначе они разъедутся.
             // usingcontextid там - контекст МОДУЛЯ теста: qbank_helper.php фильтрует по нему.
-            if ($qbe_id) {
+            if ($qbe_id && $into_quiz) {
                 $put_in_slot((int)$qbe_id);
+            } else if ($qbe_id) {
+                $bank_refs[] = (int)$qbe_id;
             }
         }
 

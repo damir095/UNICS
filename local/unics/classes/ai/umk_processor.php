@@ -235,9 +235,12 @@ class umk_processor {
                     }
 
                     $questions = [];
+                    // Излишки запаса генерации: прошли все проверки, но в тест не помещаются.
+                    // Отдаем их в пул элемента ([[surplus-to-pool-design]]).
+                    $surplus = [];
                     if ($needed > 0) {
                         $questions = $generator->generate_quiz(
-                            $profile, $umk->topic, $text, $needed, $extra_context);
+                            $profile, $umk->topic, $text, $needed, $extra_context, $surplus);
                     }
 
                     // Чужое ждем ПОСЛЕ своей генерации: пока мы генерировали, сосед
@@ -276,12 +279,19 @@ class umk_processor {
                             'Ни одного задания: пул пуст и генерация не дала вопросов');
                     }
 
+                    // Излишки создаем в банке только тогда, когда есть куда их привязать:
+                    // без элемента кодификатора пул не при чем, и лишние вопросы просто
+                    // засоряли бы банк курса ([[surplus-to-pool-design]]).
+                    $bank_only = $element_id > 0 ? $surplus : [];
+                    $bank_refs = [];
                     $quiz_cmid = $builder->add_quiz_with_questions(
                         (int)$umk->mdl_course_id,
                         $section,
                         $umk->title,
                         $questions,
-                        $reuse
+                        $reuse,
+                        $bank_only,
+                        $bank_refs
                     );
 
                     // Ограничение по группе - ПЕРВЫМ делом после сборки. Пока оно не наложено,
@@ -300,6 +310,9 @@ class umk_processor {
                         $fresh = $questions
                             ? array_slice($this->slot_entries($quiz_cmid), count($reuse))
                             : [];
+                        // Излишки идут в пул наравне с теми, что легли в тест: они прошли те же
+                        // четыре яруса проверок, и следующему ученику достанутся через take().
+                        $fresh = array_merge($fresh, $bank_refs);
                         // fulfil привязывает созданное И снимает бронь: место больше не наше.
                         \local_unics\learning\item_pool::fulfil(
                             (int)$task->id, $element_id, $umk_level, $fresh, $by);
@@ -307,7 +320,8 @@ class umk_processor {
                         // пул покрыл тест целиком - и есть цель работы, и лог о нем молчать
                         // не должен.
                         mtrace('  Пул элемента #' . $element_id . ': взято ' . count($reuse)
-                            . ', создано ' . count($fresh));
+                            . ', создано ' . count($fresh)
+                            . ($bank_refs ? ' (из них запасом ' . count($bank_refs) . ')' : ''));
                     }
 
                     $builder->set_view_completion($quiz_cmid); // B8 (тест входит в завершение курса)
