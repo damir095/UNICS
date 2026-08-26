@@ -11,9 +11,9 @@ use local_unics\ai\question_sanity;
  * проверка не видела вовсе: она мерила только против самого длинного дистрактора, а он и прятал
  * перекос.
  *
- * Отбраковывать такие вопросы нельзя: развёрнутый верный ответ бывает законной приметой хорошего
+ * Отбраковывать такие вопросы нельзя: развернутый верный ответ бывает законной приметой хорошего
  * задания, и отличить его от подсказки ПО ДЛИНЕ невозможно - это одно и то же измерение. Поэтому
- * признак остаётся подозрением, а профилактика ушла в промт.
+ * признак остается подозрением, а профилактика ушла в промт.
  *
  * @package local_unics
  */
@@ -30,8 +30,22 @@ final class long_key_hint_test extends \advanced_testcase {
         return question_sanity::verdict('Какой ответ верный?', $texts, $correct);
     }
 
+    /**
+     * Помечен ли вопрос за длинный ключ.
+     *
+     * drop() отдает пустой список пометок, поэтому голая проверка «пометки нет» проходила бы и
+     * тогда, когда вопрос выбыл совсем по другой причине - например, два дистрактора одинаковой
+     * длины у хелпера выше дают побайтово равные строки и отбраковку «два варианта одинаковы».
+     * Поэтому отрицательные случаи требуют ИМЕННО вердикта «ok» (найдено ревью 2026-08-26).
+     */
     private function noted(array $v): bool {
         return in_array('ключ заметно длиннее прочих вариантов', $v['notes'], true);
+    }
+
+    /** Вопрос принят и НЕ помечен за длину - именно это, а не «упал по любой причине». */
+    private function assertCleanOfLengthNote(array $v): void {
+        $this->assertSame('ok', $v['verdict'], 'вопрос должен быть принят');
+        $this->assertFalse($this->noted($v), 'пометки про длину быть не должно');
     }
 
     public function test_skew_hidden_by_a_long_distractor_is_now_seen(): void {
@@ -50,7 +64,7 @@ final class long_key_hint_test extends \advanced_testcase {
     }
 
     public function test_long_key_is_not_dropped(): void {
-        // Развёрнутый верный ответ - законная примета хорошего задания. Отличить его от
+        // Развернутый верный ответ - законная примета хорошего задания. Отличить его от
         // подсказки по длине нельзя, поэтому вопрос принимается: решает педагог, увидев пометку.
         $v = $this->verdict(72, [10, 11, 13]);
 
@@ -63,21 +77,20 @@ final class long_key_hint_test extends \advanced_testcase {
         // Прочесть четыре коротких слова легко, подсказки нет. Найдено падением чужого теста.
         $v = $this->verdict(8, [3, 2, 4]);
 
-        $this->assertFalse($this->noted($v), 'отношение без абсолютной разницы ничего не значит');
+        $this->assertCleanOfLengthNote($v);
     }
 
     public function test_two_word_answer_against_one_word(): void {
         // «часть целого» (12) против «сумма» (5): то же самое на паре вариантов.
         $v = $this->verdict(12, [5]);
 
-        $this->assertFalse($this->noted($v));
+        $this->assertCleanOfLengthNote($v);
     }
 
     public function test_equal_lengths_are_clean(): void {
         $v = $this->verdict(30, [28, 32, 29]);
 
-        $this->assertSame('ok', $v['verdict']);
-        $this->assertFalse($this->noted($v));
+        $this->assertCleanOfLengthNote($v);
     }
 
     public function test_short_key_is_clean(): void {
@@ -85,7 +98,7 @@ final class long_key_hint_test extends \advanced_testcase {
         // наблюдали.
         $v = $this->verdict(8, [40, 45, 38]);
 
-        $this->assertFalse($this->noted($v));
+        $this->assertCleanOfLengthNote($v);
     }
 
     public function test_key_position_does_not_matter(): void {
