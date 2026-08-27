@@ -170,19 +170,25 @@ class answer_judge {
      *
      * @param array $questions [['text' => string, 'answers' => string[], 'correct' => int]]
      * @param array $picks выборы судьи по ПОРЯДКУ вопросов, индекс с нуля; null - молчание
-     * @return array ['verdicts' => array<'ok'|'drop'>, 'status' => string,
-     *                'judged' => int, 'disagreed' => int]
+     * @return array ['verdicts' => array<'ok'|'drop'>,
+     *                'at' => array<int,?int> куда лег выбор судьи в НАШЕМ порядке вариантов
+     *                        (null - судья промолчал или его выбор не нашелся),
+     *                'status' => string, 'judged' => int, 'disagreed' => int]
      */
     public static function verdicts(array $questions, array $picks): array {
         $keys = array_keys($questions);
         $list = array_values($questions);
         $verdicts = [];
+        $at_list = [];
         $disagreed = 0;
         $judged = 0;
 
         foreach ($list as $i => $q) {
             $pick = $picks[$i] ?? null;
             $verdicts[$i] = 'ok';
+            // Куда лег выбор судьи в НАШЕМ порядке вариантов. Вызывающему этого не вычислить:
+            // судье варианты перемешиваются, и отвечает он текстом, а не номером.
+            $at_list[$i] = null;
             if ($pick === null) {
                 continue;
             }
@@ -204,6 +210,7 @@ class answer_judge {
             // вопросов, по которым судья ДЕЙСТВИТЕЛЬНО высказался, иначе комплект с одним
             // расхождением и десятком молчаний выглядел бы благополучным.
             $judged++;
+            $at_list[$i] = (int)$at;
             if ((int)$at !== (int)($q['correct'] ?? -1)) {
                 $verdicts[$i] = 'drop';
                 $disagreed++;
@@ -222,6 +229,7 @@ class answer_judge {
 
         return [
             'verdicts' => array_combine($keys, $verdicts),
+            'at' => array_combine($keys, $at_list),
             'status' => ($total || $share) ? self::STATUS_SUSPECT : self::STATUS_JUDGED,
             'judged' => $judged,
             'disagreed' => $disagreed,
@@ -236,12 +244,12 @@ class answer_judge {
      * проект уже стоял с озвучкой ([[project_status_2026_08_10_tts_honest]]).
      *
      * @param array $questions [['text' => string, 'answers' => string[], 'correct' => int]]
-     * @return array ['verdicts' => array<'ok'|'drop'>, 'status' => string,
-     *                'judged' => int, 'disagreed' => int]
+     * @return array ['verdicts' => array<'ok'|'drop'>, 'at' => array<int,?int>,
+     *                'status' => string, 'judged' => int, 'disagreed' => int]
      */
     public function review(array $questions): array {
         if (!$questions) {
-            return ['verdicts' => [], 'status' => self::STATUS_JUDGED,
+            return ['verdicts' => [], 'at' => [], 'status' => self::STATUS_JUDGED,
                     'judged' => 0, 'disagreed' => 0];
         }
         try {
@@ -254,6 +262,8 @@ class answer_judge {
             return [
                 'verdicts' => array_combine(array_keys($questions),
                     array_fill(0, count($questions), 'ok')),
+                'at' => array_combine(array_keys($questions),
+                    array_fill(0, count($questions), null)),
                 'status' => self::STATUS_FAILED,
                 'judged' => 0,
                 'disagreed' => 0,
@@ -318,6 +328,9 @@ class answer_judge {
     /** Тот же ответ, но со снятыми вердиктами. */
     private static function without_verdicts(array $out, string $status): array {
         $out['verdicts'] = array_map(static fn(): string => 'ok', $out['verdicts']);
+        // Выборы снимаем ВМЕСТЕ с вердиктами: снятый вердикт означает, что судье в этом заходе
+        // не верят, и чинить по его выбору тем более нельзя.
+        $out['at'] = array_map(static fn(): ?int => null, $out['at'] ?? []);
         $out['status'] = $status;
         return $out;
     }
