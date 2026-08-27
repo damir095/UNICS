@@ -4,20 +4,20 @@ namespace local_unics;
 use local_unics\ai\ai_generator;
 
 /**
- * Сбитый счет вариантов ВНУТРИ диапазона: отбраковка превращается в починку.
+ * Признак сбитого на единицу ключа ВНУТРИ диапазона: считаем, но ключ не переносим.
  *
  * Ключ, равный числу вариантов, виден по самому значению ([[one-based-key-design]]). Ключ, сбитый
  * на единицу внутри диапазона, не виден ничем: `correct = 2` при четырех вариантах законен. Выдает
  * его только независимое мнение слепого судьи, и выдает характерно - его выбор ложится ровно на
- * вариант ПЕРЕД ключом.
+ * вариант ПЕРЕД ключом. Проба на сорока вопросах: расхождений восемь, семь из них такие.
  *
- * Существенно, что судья слеп к нашему порядку: варианты ему перемешиваются, отвечает он текстом.
- * Поэтому совпадение с `correct - 1` не может быть артефактом его нумерации.
+ * Соблазн переставлять по этому признаку ключ был реализован и ОТКАЧЕН ([[judge-key-shift-design]]).
+ * Причины: выигрыш вышел два вопроса из сорока при полных комплектах; вероятность случайного
+ * попадания судьи на соседний вариант около трети, то есть пара таких совпадений набирается сама
+ * примерно в каждом девятом комплекте; и главное - проект держит границу «ключ правит то, что
+ * ВЫЧИСЛЯЕТ ответ, а не то, что его мнит» (докблок answer_judge).
  *
- * Порог - главное в этой правке. Ошибиться тут дороже, чем выбросить вопрос: неверный ключ у
- * ребенка означает «неверно» за верный ответ, а задание еще и уедет в общий пул. Поэтому одному
- * совпадению не верим: случайная ошибка судьи попадает на соседний вариант примерно в трети
- * случаев, а два и три разом - уже привычка модели в этом комплекте.
+ * Эти тесты сторожат откат: спорный вопрос обязан выбывать, а признак - попадать в след.
  *
  * @package local_unics
  */
@@ -25,18 +25,26 @@ use local_unics\ai\ai_generator;
 final class judge_key_shift_test extends \advanced_testcase {
 
     /**
-     * Генератор, у которого ключи заданы явно, а судья отвечает текстом нужного варианта.
+     * Генератор с заданными ключами и заданным выбором судьи.
+     *
+     * Судье вопросы приходят перенумерованными (в промт идут только те, что не решены расчетом),
+     * поэтому заглушка отвечает не по своему порядку, а по номерам ИЗ ПРОМТА - иначе стоит
+     * появиться арифметическому вопросу, и выборы молча разъедутся (найдено ревью).
      *
      * @param int[] $keys что модель кладет в correct по каждому вопросу
-     * @param int[] $judgepicks индекс варианта, который выберет судья (по нашему порядку)
+     * @param array $judgepicks индекс варианта, который выберет судья (null - промолчит)
+     * @param bool  $judgeworks отвечает ли судья вообще
      */
-    private function generator(array $keys, array $judgepicks): ai_generator {
-        return new class($keys, $judgepicks) extends ai_generator {
+    private function generator(array $keys, array $judgepicks,
+                               bool $judgeworks = true): ai_generator {
+        return new class($keys, $judgepicks, $judgeworks) extends ai_generator {
             private array $keys;
             private array $picks;
-            public function __construct(array $keys, array $picks) {
+            private bool $works;
+            public function __construct(array $keys, array $picks, bool $works) {
                 $this->keys = $keys;
                 $this->picks = $picks;
+                $this->works = $works;
             }
             /** Варианты вопроса: заведомо разные тексты, чтобы сопоставление шло однозначно. */
             private function answers(int $q): array {
@@ -49,12 +57,23 @@ final class judge_key_shift_test extends \advanced_testcase {
             public function generate_text(string $prompt, int $max_tokens = 1024,
                                           int $minlen = self::MIN_REPLY_LEN): string {
                 if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
+                    if (!$this->works) {
+                        // Именно ИСКЛЮЧЕНИЕ: пустая строка дает другую ветку (ответ пришел, но
+                        // не пригодился), и тест про отказ сети проверял бы не то.
+                        throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                            'сеть недоступна');
+                    }
+                    // Номер в промте -> наш номер вопроса.
+                    preg_match_all('~^([0-9]+)\. Вопрос номер ([0-9]+)\?~mu', $prompt, $m,
+                        PREG_SET_ORDER);
                     $rows = [];
-                    foreach ($this->picks as $q => $at) {
+                    foreach ($m as $hit) {
+                        $q = (int)$hit[2];
+                        $at = $this->picks[$q] ?? null;
                         if ($at === null) {
                             continue;
                         }
-                        $rows[] = ['n' => $q + 1, 'choice' => $this->answers($q)[$at]];
+                        $rows[] = ['n' => (int)$hit[1], 'choice' => $this->answers($q)[$at]];
                     }
                     return json_encode(['answers' => $rows], JSON_UNESCAPED_UNICODE);
                 }
@@ -84,71 +103,71 @@ final class judge_key_shift_test extends \advanced_testcase {
         return [$out, $trace];
     }
 
-    public function test_two_shifted_keys_are_fixed_instead_of_dropped(): void {
-        // Судья спорит с двумя ключами, и оба раза выбирает вариант ПЕРЕД ключом. Раньше оба
-        // вопроса выбывали, и комплект укорачивался вдвое.
+    public function test_shift_like_disagreement_is_still_a_drop(): void {
+        // Главное свойство: сколько бы признаков ни набралось, ключ остается прежним, а спорные
+        // вопросы выбывают. Именно это и откатили.
         $gen = $this->generator([2, 3, 1], [1, 2, 1]);
 
         [$out, $trace] = $this->ask($gen, 3);
 
-        $this->assertCount(3, $out, 'годные вопросы не должны выбывать из-за сбитого счета');
-        $this->assertSame(1, (int)$out[0]['correct']);
-        $this->assertSame(2, (int)$out[1]['correct']);
-        $this->assertSame(1, (int)$out[2]['correct'], 'согласованный ключ не трогаем');
-        $this->assertStringContainsString('Ключ переставлен по выбору судьи: 2', $trace);
+        $this->assertCount(1, $out, 'спорные вопросы выбывают, а не чинятся');
+        $this->assertSame('Вопрос номер 2?', (string)$out[0]['text']);
+        $this->assertSame(1, (int)$out[0]['correct'], 'согласованный ключ не трогаем');
+        $this->assertStringNotContainsString('переставлен', $trace);
     }
 
-    public function test_single_match_is_not_trusted(): void {
-        // Одно совпадение - в пределах случайной ошибки судьи. Двигать ключ по нему нельзя:
-        // цена ошибки тут выше цены потерянного вопроса.
-        $gen = $this->generator([2, 1, 3], [1, 1, 3]);
+    public function test_the_sign_is_counted_in_the_trace(): void {
+        // Считать признак нужно: без счетчика нельзя узнать, сколько заданий уходит в мусор
+        // из-за сбитого на единицу ключа, и стоит ли возвращаться к задаче.
+        $gen = $this->generator([2, 3, 1], [1, 2, 1]);
+
+        [, $trace] = $this->ask($gen, 3);
+
+        $this->assertStringContainsString('Похоже на сбитый на единицу ключ: 2', $trace);
+    }
+
+    public function test_disagreement_elsewhere_is_not_counted(): void {
+        // Судья спорит, но выбирает НЕ соседний вариант: это обычный неверный ключ, признака
+        // сбитого счета тут нет, и в счетчик он попадать не должен.
+        $gen = $this->generator([1, 1, 1], [3, 3, 1]);
 
         [$out, $trace] = $this->ask($gen, 3);
 
-        $this->assertCount(2, $out, 'спорный вопрос выбывает, как и раньше');
-        $this->assertStringContainsString('одиночному совпадению не верим', $trace);
-        $this->assertStringNotContainsString('Ключ переставлен', $trace);
+        $this->assertCount(1, $out);
+        $this->assertStringNotContainsString('Похоже на сбитый на единицу ключ', $trace);
     }
 
-    public function test_disagreement_elsewhere_is_still_a_drop(): void {
-        // Судья спорит, но выбирает НЕ соседний вариант: это обычный неверный ключ, и признака
-        // сбитого счета тут нет. Такой вопрос выбывает даже рядом с настоящими сдвигами.
-        $gen = $this->generator([1, 1, 1], [0, 0, 3]);
-
-        [$out, $trace] = $this->ask($gen, 3);
-
-        $this->assertCount(2, $out);
-        $this->assertStringContainsString('Ключ переставлен по выбору судьи: 2', $trace);
-        $this->assertSame(0, (int)$out[0]['correct']);
-        $this->assertSame(0, (int)$out[1]['correct']);
-    }
-
-    public function test_agreement_is_never_touched(): void {
-        // Судья со всеми согласен - двигать нечего. Проверка на то, что правило не срабатывает
-        // от одного лишь наличия вердиктов.
+    public function test_agreement_is_never_counted(): void {
         $gen = $this->generator([2, 1, 3], [2, 1, 3]);
 
         [$out, $trace] = $this->ask($gen, 3);
 
         $this->assertCount(3, $out);
-        $this->assertSame(2, (int)$out[0]['correct']);
-        $this->assertStringNotContainsString('Ключ переставлен', $trace);
+        $this->assertStringNotContainsString('Похоже на сбитый на единицу ключ', $trace);
     }
 
-    public function test_key_shifted_at_parse_time_is_not_shifted_again(): void {
-        // Вопросу уже двигали ключ при разборе (correct = 4 при четырех вариантах). Если судья
-        // после этого все равно спорит, второй сдвиг в ту же сторону был бы разгоном догадки.
-        // Порог берут ДРУГИЕ два вопроса, так что дело не в нем: уже сдвинутый вопрос обязан
-        // выбыть даже тогда, когда починка в комплекте разрешена.
-        $gen = $this->generator([4, 2, 3], [2, 1, 2]);
+    public function test_nothing_is_counted_when_the_judge_failed(): void {
+        // Судья не ответил - вердиктов нет, спорных нет, и признаку взяться неоткуда. Проверка
+        // на то, что счетчик не читает пустые вердикты как согласие или как спор (найдено ревью:
+        // ветки отказа судьи не были покрыты вовсе).
+        $gen = $this->generator([2, 3, 1], [1, 2, 1], false);
 
         [$out, $trace] = $this->ask($gen, 3);
 
-        $this->assertCount(2, $out, 'уже сдвинутый вопрос выбывает, двое остальных чинятся');
-        $this->assertStringContainsString('Ключ переставлен по выбору судьи: 2', $trace);
-        foreach ($out as $q) {
-            $this->assertStringNotContainsString('Вопрос номер 0', (string)$q['text'],
-                'вопрос, которому ключ уже двигали, второй раз двигать нельзя');
-        }
+        $this->assertCount(3, $out, 'отказ судьи комплект не роняет');
+        $this->assertStringNotContainsString('Похоже на сбитый на единицу ключ', $trace);
+        $this->assertStringContainsString('Судья не ответил', $trace);
+    }
+
+    public function test_nothing_is_counted_when_the_judge_is_unusable(): void {
+        // Судья ответил, но ни один его выбор не сошелся с вариантами: проверка не состоялась,
+        // и признак считать не по чему.
+        $gen = $this->generator([2, 3, 1], [null, null, null]);
+
+        [$out, $trace] = $this->ask($gen, 3);
+
+        $this->assertCount(3, $out);
+        $this->assertStringNotContainsString('Похоже на сбитый на единицу ключ', $trace);
+        $this->assertStringContainsString('проверка не состоялась', $trace);
     }
 }
