@@ -37,6 +37,15 @@ class output_style {
      * Убрать из текста модели то, что запрещено правилами проекта.
      */
     public static function clean(string $text): string {
+        // Жесткий перенос markdown - это ДВА пробела в конце строки, и учебный текст ложится в
+        // страницу как FORMAT_MARKDOWN, то есть перенос смысловой. Запоминаем такие строки ДО
+        // вырезания эмодзи: после него «текст (эмодзи)» тоже кончается пробелом, но это след
+        // вырезания, а не авторский перенос, и путать их нельзя.
+        //
+        // Замер 2026-08-27 на пяти уроках: 5 переносов на 219 строк, в двух уроках из пяти.
+        // Съедали их обе чистки ниже - схлопывание раньше, обрезка следом.
+        $hard = self::hard_break_lines($text);
+
         $text = preg_replace(self::EMOJI, '', $text) ?? $text;
         $text = preg_replace(self::DASHES, '-', $text) ?? $text;
 
@@ -47,7 +56,63 @@ class output_style {
         // Хвостовые пробелы в конце строк - тоже след вырезания.
         $text = preg_replace('/\h+$/mu', '', $text) ?? $text;
 
-        return trim($text);
+        // Перенос в самом конце текста бессмыслен и снимается общим trim ниже.
+        return trim(self::restore_hard_breaks($text, $hard));
+    }
+
+    /**
+     * Строки, кончающиеся жестким переносом markdown (два и более пробела после текста).
+     *
+     * Считать надо ДО любых чисток: «текст(пробел)(пробел)(эмодзи)» после вырезания эмодзи тоже
+     * кончается двумя пробелами, но это дыра, а не авторский перенос.
+     *
+     * @return array<int,true> индексы в разбиении split_keeping_breaks()
+     */
+    private static function hard_break_lines(string $text): array {
+        $hard = [];
+        foreach (self::split_keeping_breaks($text) as $i => $part) {
+            // Один пробел переносом не является: markdown требует двух.
+            if ($i % 2 === 0 && preg_match('/\S\h{2,}$/u', $part)) {
+                $hard[$i] = true;
+            }
+        }
+        return $hard;
+    }
+
+    /**
+     * Вернуть жесткие переносы, сбитые чисткой пробелов.
+     *
+     * Переводы строк собираются обратно ТЕМИ ЖЕ: подмена CRLF на LF была бы правкой, о которой
+     * никто не просил.
+     *
+     * @param array<int,true> $hard результат hard_break_lines() на тексте ДО чистки
+     */
+    private static function restore_hard_breaks(string $text, array $hard): string {
+        if (!$hard) {
+            return $text;
+        }
+        $parts = self::split_keeping_breaks($text);
+        foreach ($parts as $i => $part) {
+            if (!empty($hard[$i]) && trim($part) !== '') {
+                // Сперва СРЕЗАЕМ хвост, потом ставим ровно два. Обрезка пробелов в конце строки
+                // ловит их только перед одиночным переводом строки: перед парой CR+LF они
+                // оставались, и приписка дала бы три пробела вместо двух.
+                $parts[$i] = rtrim($part, " 	") . '  ';
+            }
+        }
+        return implode('', $parts);
+    }
+
+    /**
+     * Разбить текст на строки, СОХРАНИВ сами переводы строк отдельными элементами.
+     *
+     * Четные индексы - строки, нечетные - разделители. Обратная сборка через implode('') дает
+     * ровно исходный текст, чем бы строки ни разделялись.
+     *
+     * @return string[]
+     */
+    private static function split_keeping_breaks(string $text): array {
+        return preg_split('/(\R)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$text];
     }
 
     /** Символы дробей Unicode в привычную ребенку запись. */
@@ -69,11 +134,18 @@ class output_style {
      * в школьные, разделители формул убираем.
      */
     public static function strip_math_markup(string $text): string {
+        // Жесткие переносы markdown сбивает и здешнее схлопывание пробелов - живой заход
+        // 2026-08-27 показал, что после починки одного лишь clean() до страницы урока не дожил
+        // НИ ОДИН перенос из трех. Правило одно, мест два, и знать о нем обязаны оба.
+        $hard = self::hard_break_lines($text);
+
         // Блоки кода не трогаем: там обратный слэш законен, и «чистка» превратила бы пример на
         // Python в кашу ([[code-fence-and-math-design]]).
-        return self::map_outside_code($text, static function (string $chunk): string {
+        $out = self::map_outside_code($text, static function (string $chunk): string {
             return self::clean_math($chunk);
         });
+
+        return self::restore_hard_breaks($out, $hard);
     }
 
     /**

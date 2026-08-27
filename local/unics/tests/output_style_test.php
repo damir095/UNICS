@@ -78,6 +78,78 @@ final class output_style_test extends \advanced_testcase {
         $this->assertStringContainsString('Текст дальше', $out);
     }
 
+    public function test_hard_line_break_survives(): void {
+        // Два пробела в конце строки - жесткий перенос markdown, а учебный текст ложится в
+        // страницу как FORMAT_MARKDOWN. Замер на пяти уроках: модель ставит такой перенос
+        // (5 штук на 219 строк), а чистка съедала их все - строки склеивались в один абзац.
+        $out = output_style::clean("первая строка  \nвторая строка\nтретья\n");
+
+        $this->assertStringContainsString("первая строка  \nвторая", $out);
+    }
+
+    public function test_hard_break_is_normalised_to_two_spaces(): void {
+        // Больше двух markdown не требует, и лишние пробелы в тексте ни к чему.
+        $out = output_style::clean("строка     \nследом\n");
+
+        $this->assertStringContainsString("строка  \nследом", $out);
+        $this->assertStringNotContainsString('   ', $out);
+    }
+
+    public function test_single_trailing_space_is_still_cut(): void {
+        // ОДИН пробел переносом не является: это и есть след вырезанного эмодзи.
+        $out = output_style::clean("текст 🔥\nследом\n");
+
+        $this->assertSame("текст\nследом", $out);
+    }
+
+    public function test_hard_break_at_the_very_end_is_dropped(): void {
+        // Перенос в конце текста бессмыслен: переносить нечего.
+        $this->assertSame('одна строка', output_style::clean("одна строка  \n"));
+    }
+
+    public function test_one_trailing_space_is_not_a_hard_break(): void {
+        // Markdown требует ДВА пробела. Один - это опечатка или след правки, и превращать его
+        // в перенос значило бы менять разбивку текста там, где автор ее не менял.
+        $out = output_style::clean("текст \nследом\n");
+
+        $this->assertSame("текст\nследом", $out);
+    }
+
+    public function test_strip_math_markup_keeps_hard_line_breaks(): void {
+        // Второе место, где схлопываются пробелы. Живой заход показал: починив только clean(),
+        // до страницы урока не доживает НИ ОДИН перенос - этот метод съедал их следом.
+        $out = \local_unics\ai\output_style::strip_math_markup("первая строка  \nвторая строка");
+
+        $this->assertSame("первая строка  \nвторая строка", $out);
+    }
+
+    public function test_whole_lesson_path_keeps_hard_line_breaks(): void {
+        // Путь текста урока целиком, как в umk_processor: clean -> strip_math_markup ->
+        // shift_headings. Проверять звенья по отдельности мало - дефект жил на стыке.
+        $src = "## Заголовок\n\nпервая строка  \nвторая строка\n";
+        $out = \local_unics\ai\output_style::shift_headings(
+            \local_unics\ai\output_style::strip_math_markup(
+                \local_unics\ai\output_style::clean($src)));
+
+        $this->assertStringContainsString("первая строка  \nвторая строка", $out);
+    }
+
+    public function test_emoji_hole_does_not_become_a_hard_break(): void {
+        // «текст 🔥 🌋» после вырезания оставит подряд идущие пробелы В СЕРЕДИНЕ, а не перенос:
+        // судим по тексту ДО вырезания, иначе дыра от эмодзи притворилась бы переносом.
+        $out = output_style::clean("текст 🔥 🌋\nследом\n");
+
+        $this->assertSame("текст\nследом", $out);
+    }
+
+    public function test_hard_break_survives_windows_line_endings(): void {
+        // Переводы строк собираются обратно теми же: подмена CRLF на LF была бы правкой,
+        // о которой никто не просил.
+        $out = output_style::clean("первая  \r\nвторая\r\nтретья");
+
+        $this->assertStringContainsString("первая  \r\nвторая", $out);
+    }
+
     public function test_leading_indentation_survives(): void {
         // Отступ в начале строки трогать нельзя: это markdown-вложенность и блоки кода.
         $src = "- пункт\n    вложенная строка\n";
