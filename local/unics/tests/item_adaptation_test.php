@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_raw_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 
 /**
  * Особые указания для ЗАДАНИЙ теста, а не для учебного текста ([[item-adaptation-design]]).
@@ -264,17 +267,11 @@ final class item_adaptation_test extends \advanced_testcase {
     // ---------------------------------------------------------------
 
     private function capturing(string $canned): ai_generator {
-        return new class($canned) extends ai_generator {
-            public string $last_prompt = '';
-            private string $canned;
-            public function __construct(string $canned) {
+        return new class($canned) extends fake_raw_generator {
+            public function __construct(private string $canned) {
                 parent::__construct();
-                $this->canned = $canned;
             }
-            protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
-                if (!str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    $this->last_prompt = $prompt;
-                }
+            protected function reply(string $prompt): string {
                 return $this->canned;
             }
         };
@@ -290,7 +287,7 @@ final class item_adaptation_test extends \advanced_testcase {
         $gen->generate_quiz($this->profile(['categories' => [1, 3, 4]]), 'Дроби');
         ob_end_clean();
 
-        $p = $gen->last_prompt;
+        $p = $gen->last_prompt();
         $this->assertStringContainsString('Один вопрос - одна мысль', $p);
         foreach (self::TEXT_ONLY as $word) {
             $this->assertStringNotContainsStringIgnoringCase($word, $p,
@@ -316,10 +313,10 @@ final class item_adaptation_test extends \advanced_testcase {
 
         $gen = $this->capturing('Текст задания.');
         $gen->generate_assignment_description($this->profile(), 'Дроби');
-        $this->assertStringContainsString('Очень короткие абзацы', $gen->last_prompt);
+        $this->assertStringContainsString('Очень короткие абзацы', $gen->last_prompt());
 
         $gen = $this->capturing('{"slides":[{"title":"Т","content":"С","key_points":["а"]}]}');
         $gen->generate_video_script($this->profile(), 'Дроби');
-        $this->assertStringContainsString('Очень короткие абзацы', $gen->last_prompt);
+        $this->assertStringContainsString('Очень короткие абзацы', $gen->last_prompt());
     }
 }

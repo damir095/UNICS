@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_ai_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 
 /**
  * Модель считает варианты от единицы ([[one-based-key-design]]).
@@ -18,6 +21,10 @@ use local_unics\ai\ai_generator;
  * вовсе, и сдвинутый ключ уходил бы ребенку никем не проверенным. Поэтому непроверенный сдвиг
  * выбывает - ровно так, как выбывал до всей этой правки.
  *
+ * Заглушка НЕ шлет поле `answer`: с ним ключ находился бы сопоставлением текста
+ * ([[key-as-text-design]]), и весь этот ярус не работал бы вовсе. Здесь проверяется именно
+ * запасной путь - разбор номера.
+ *
  * @package local_unics
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(ai_generator::class)]
@@ -32,30 +39,30 @@ final class one_based_key_test extends \advanced_testcase {
      */
     private function generator(int $correct, int $variants = 4,
                                bool $judgeworks = true): ai_generator {
-        return new class($correct, $variants, $judgeworks) extends ai_generator {
-            private int $correct;
-            private int $variants;
-            private bool $judgeworks;
-            public function __construct(int $correct, int $variants, bool $judgeworks) {
-                $this->correct = $correct;
-                $this->variants = $variants;
-                $this->judgeworks = $judgeworks;
+        return new class($correct, $variants, $judgeworks) extends fake_ai_generator {
+            public function __construct(
+                private int $correct,
+                private int $variants,
+                private bool $judgeworks
+            ) {
+                parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    if (!$this->judgeworks) {
-                        return '';
-                    }
-                    // Судья решает задание сам и называет ТЕКСТ варианта. Он выбирает тот,
-                    // который модель и имела в виду: при счете от единицы это вариант с номером
-                    // correct, иначе - следующий за индексом.
-                    $intended = $this->correct === $this->variants
-                        ? $this->correct
-                        : $this->correct + 1;
-                    return json_encode(['answers' => [['n' => 1,
-                        'choice' => 'Вариант номер ' . $intended]]], JSON_UNESCAPED_UNICODE);
+
+            protected function judge_reply(string $prompt): string {
+                if (!$this->judgeworks) {
+                    return '';
                 }
+                // Судья решает задание сам и называет ТЕКСТ варианта. Он выбирает тот, который
+                // модель и имела в виду: при счете от единицы это вариант с номером correct,
+                // иначе - следующий за индексом.
+                $intended = $this->correct === $this->variants
+                    ? $this->correct
+                    : $this->correct + 1;
+                return json_encode(['answers' => [['n' => 1,
+                    'choice' => 'Вариант номер ' . $intended]]], JSON_UNESCAPED_UNICODE);
+            }
+
+            protected function quiz_reply(string $prompt): string {
                 $answers = [];
                 for ($i = 1; $i <= $this->variants; $i++) {
                     $answers[] = 'Вариант номер ' . $i;

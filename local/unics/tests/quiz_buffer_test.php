@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_ai_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 
 /**
  * Комплект не усыхает: у модели просим с запасом ([[quiz-buffer-design]]).
@@ -31,25 +34,20 @@ final class quiz_buffer_test extends \advanced_testcase {
      * @param string|null $judge ответ слепого судьи; null означает «судья молчит»
      */
     private function generator(int $badkeys = 0, ?int $cap = null, ?string $judge = null): ai_generator {
-        return new class($badkeys, $cap, $judge) extends ai_generator {
-            private int $badkeys;
-            private ?int $cap;
-            private ?string $judge;
-            public array $prompts = [];
-            public array $limits = [];
+        return new class($badkeys, $cap, $judge) extends fake_ai_generator {
+            /** Сколько вопросов просили в каждом промте - вопрос ЭТОГО теста. */
             public array $asked = [];
-            public function __construct(int $badkeys, ?int $cap, ?string $judge) {
-                $this->badkeys = $badkeys;
-                $this->cap = $cap;
-                $this->judge = $judge;
+            public function __construct(
+                private int $badkeys,
+                private ?int $cap,
+                private ?string $judge
+            ) {
+                parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    return (string)$this->judge;
-                }
-                $this->prompts[] = $prompt;
-                $this->limits[] = $max_tokens;
+            protected function judge_reply(string $prompt): string {
+                return (string)$this->judge;
+            }
+            protected function quiz_reply(string $prompt): string {
                 preg_match('~ровно ([0-9]+) вопрос~u', $prompt, $m);
                 $n = (int)($m[1] ?? 0);
                 $this->asked[] = $n;
@@ -159,12 +157,8 @@ final class quiz_buffer_test extends \advanced_testcase {
         // Теперь запас уходит в общий пул и достанется другим детям, так что молчание стало
         // сокрытием: пометки показываем, но помечаем «в запасе» - чтобы педагог не искал в
         // тесте своего ребенка задание, которого там нет (найдено ревью 2026-08-27).
-        $gen = new class extends ai_generator {
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    return '';
-                }
+        $gen = new class extends fake_ai_generator {
+            protected function quiz_reply(string $prompt): string {
                 $questions = [];
                 for ($i = 0; $i < 7; $i++) {
                     // Длинный ключ - только у последних двух, то есть ровно у запаса.

@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_ai_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 
 /**
  * Признак сбитого на единицу ключа ВНУТРИ диапазона: считаем, но ключ не переносим.
@@ -37,15 +40,15 @@ final class judge_key_shift_test extends \advanced_testcase {
      */
     private function generator(array $keys, array $judgepicks,
                                bool $judgeworks = true): ai_generator {
-        return new class($keys, $judgepicks, $judgeworks) extends ai_generator {
-            private array $keys;
-            private array $picks;
-            private bool $works;
-            public function __construct(array $keys, array $picks, bool $works) {
-                $this->keys = $keys;
-                $this->picks = $picks;
-                $this->works = $works;
+        return new class($keys, $judgepicks, $judgeworks) extends fake_ai_generator {
+            public function __construct(
+                private array $keys,
+                private array $picks,
+                private bool $works
+            ) {
+                parent::__construct();
             }
+
             /** Варианты вопроса: заведомо разные тексты, чтобы сопоставление шло однозначно. */
             private function answers(int $q): array {
                 $out = [];
@@ -54,29 +57,30 @@ final class judge_key_shift_test extends \advanced_testcase {
                 }
                 return $out;
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    if (!$this->works) {
-                        // Именно ИСКЛЮЧЕНИЕ: пустая строка дает другую ветку (ответ пришел, но
-                        // не пригодился), и тест про отказ сети проверял бы не то.
-                        throw new \moodle_exception('generalexceptionmessage', 'error', '',
-                            'сеть недоступна');
-                    }
-                    // Номер в промте -> наш номер вопроса.
-                    preg_match_all('~^([0-9]+)\. Вопрос номер ([0-9]+)\?~mu', $prompt, $m,
-                        PREG_SET_ORDER);
-                    $rows = [];
-                    foreach ($m as $hit) {
-                        $q = (int)$hit[2];
-                        $at = $this->picks[$q] ?? null;
-                        if ($at === null) {
-                            continue;
-                        }
-                        $rows[] = ['n' => (int)$hit[1], 'choice' => $this->answers($q)[$at]];
-                    }
-                    return json_encode(['answers' => $rows], JSON_UNESCAPED_UNICODE);
+
+            protected function judge_reply(string $prompt): string {
+                if (!$this->works) {
+                    // Именно ИСКЛЮЧЕНИЕ: пустая строка дает другую ветку (ответ пришел, но не
+                    // пригодился), и тест про отказ сети проверял бы не то.
+                    throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                        'сеть недоступна');
                 }
+                // Номер в промте -> наш номер вопроса.
+                preg_match_all('~^([0-9]+)\\. Вопрос номер ([0-9]+)\\?~mu',
+                    $prompt, $m, PREG_SET_ORDER);
+                $rows = [];
+                foreach ($m as $hit) {
+                    $q = (int)$hit[2];
+                    $at = $this->picks[$q] ?? null;
+                    if ($at === null) {
+                        continue;
+                    }
+                    $rows[] = ['n' => (int)$hit[1], 'choice' => $this->answers($q)[$at]];
+                }
+                return json_encode(['answers' => $rows], JSON_UNESCAPED_UNICODE);
+            }
+
+            protected function quiz_reply(string $prompt): string {
                 $questions = [];
                 foreach ($this->keys as $q => $key) {
                     $questions[] = [

@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_ai_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 use local_unics\ai\course_builder;
 
 /**
@@ -22,12 +25,8 @@ final class surplus_to_pool_test extends \advanced_testcase {
 
     /** Заглушка генератора: отвечает столько вопросов, сколько просит промт. */
     private function generator(): ai_generator {
-        return new class extends ai_generator {
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    return '';
-                }
+        return new class extends fake_ai_generator {
+            protected function quiz_reply(string $prompt): string {
                 preg_match('~ровно ([0-9]+) вопрос~u', $prompt, $m);
                 $n = (int)($m[1] ?? 0);
                 $questions = [];
@@ -67,12 +66,8 @@ final class surplus_to_pool_test extends \advanced_testcase {
 
     public function test_surplus_is_empty_when_model_is_stingy(): void {
         // Модель прислала меньше просимого - излишков нет, и выдумывать их неоткуда.
-        $gen = new class extends ai_generator {
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    return '';
-                }
+        $gen = new class extends fake_ai_generator {
+            protected function quiz_reply(string $prompt): string {
                 $questions = [];
                 for ($i = 0; $i < 3; $i++) {
                     $questions[] = [
@@ -186,12 +181,8 @@ final class surplus_to_pool_test extends \advanced_testcase {
         // Модель нередко шлет вопросов вдвое больше просимого. Пока запас выбрасывался, ее
         // многословие ничего не стоило; теперь каждый излишек - это записи в банке вопросов,
         // привязка к элементу и строка уровня, то есть запись в ОБЩИЙ пул (найдено ревью).
-        $gen = new class extends ai_generator {
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    return '';
-                }
+        $gen = new class extends fake_ai_generator {
+            protected function quiz_reply(string $prompt): string {
                 $questions = [];
                 for ($i = 0; $i < 20; $i++) {
                     $questions[] = [

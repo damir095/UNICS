@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_ai_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 
 /**
  * Сборка теста с проверкой ключей ([[quiz-answer-verification-design]]).
@@ -12,22 +15,17 @@ final class quiz_verification_test extends \advanced_testcase {
 
     /** Генератор с заранее заданными ответами модели вместо сети. */
     private function generator(array $replies): ai_generator {
-        return new class($replies) extends ai_generator {
-            private array $queue;
-            public int $calls = 0;
-            // Родительский конструктор не зову намеренно: он читает ключ API из настроек.
-            public function __construct(array $replies) {
-                $this->queue = $replies;
+        // Судья тут молчит по умолчанию: очередь ответов принадлежит проверке арифметики, и
+        // счетчик попыток генерации не должен считать чужие обращения.
+        return new class($replies) extends fake_ai_generator {
+            public function __construct(private array $queue) {
+                parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    // Слепой судья ([[answer-judge-design]]) спрашивается отдельным вызовом.
-                    // Здесь он молчит: очередь ответов принадлежит проверке арифметики, и
-                    // счетчик попыток генерации не должен считать чужие обращения.
-                    return '';
-                }
-                $this->calls++;
+            /** Сколько раз спрашивали генерацию. Промты судьи сюда не идут. */
+            public function calls(): int {
+                return count($this->prompts);
+            }
+            protected function quiz_reply(string $prompt): string {
                 return array_shift($this->queue) ?? '';
             }
         };
@@ -90,7 +88,7 @@ final class quiz_verification_test extends \advanced_testcase {
         ob_start();
         $out = $gen->generate_quiz([], 'Дроби', '', 1);
         $trace = ob_get_clean();
-        $this->assertSame(2, $gen->calls, 'битый ответ обязан вызывать вторую попытку');
+        $this->assertSame(2, $gen->calls(), 'битый ответ обязан вызывать вторую попытку');
         $this->assertStringContainsString('попытка 1 из 2', $trace,
             'без следа удачный повтор неотличим от чистого прогона');
         $this->assertCount(1, $out);

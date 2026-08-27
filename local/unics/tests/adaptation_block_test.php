@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_raw_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 
 /**
  * Адаптационный блок промта ([[adaptation-full-kit-design]]).
@@ -73,19 +76,11 @@ final class adaptation_block_test extends \advanced_testcase {
      * увидеть промт: он собирается внутри generate_* и наружу не возвращается.
      */
     private function capturing(string $canned): ai_generator {
-        return new class($canned) extends ai_generator {
-            public string $last_prompt = '';
-            private string $canned;
-            public function __construct(string $canned) {
+        return new class($canned) extends fake_raw_generator {
+            public function __construct(private string $canned) {
                 parent::__construct();
-                $this->canned = $canned;
             }
-            protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
-                // Промт слепого судьи ([[answer-judge-design]]) идет последним и перебивал бы
-                // сохраненный промт генерации, ради которого заглушка и заведена.
-                if (!str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    $this->last_prompt = $prompt;
-                }
+            protected function reply(string $prompt): string {
                 return $this->canned;
             }
         };
@@ -112,7 +107,7 @@ final class adaptation_block_test extends \advanced_testcase {
         $gen->generate_quiz($this->zpr_profile(), 'Дроби');
         ob_end_clean();
 
-        $p = $gen->last_prompt;
+        $p = $gen->last_prompt();
         $this->assertStringContainsString('уровень: стандартный', $p,
             'Уровень эффективный (3 понижен до 2), а не сырой');
         $this->assertStringNotContainsString('продвинутый', $p);
@@ -132,7 +127,7 @@ final class adaptation_block_test extends \advanced_testcase {
 
         $gen->generate_assignment_description($this->zpr_profile(), 'Дроби');
 
-        $p = $gen->last_prompt;
+        $p = $gen->last_prompt();
         $this->assertStringContainsString('уровень: стандартный', $p);
         $this->assertStringNotContainsString('продвинутый', $p);
         $this->assertStringContainsString('Очень короткие абзацы', $p);
@@ -148,7 +143,7 @@ final class adaptation_block_test extends \advanced_testcase {
             'categories' => [4], 'difficulty_level' => 2, 'class_number' => 8, 'avg_score' => 90.0,
         ], 'Дроби');
 
-        $p = $gen->last_prompt;
+        $p = $gen->last_prompt();
         $this->assertStringContainsString('уровень: продвинутый', $p,
             'Одаренный с баллом выше 85% получает повышенный уровень');
         $this->assertStringContainsString('Категория: одарённый', $p);
@@ -172,16 +167,16 @@ final class adaptation_block_test extends \advanced_testcase {
         ob_start();
         $quiz->generate_quiz($this->zpr_profile(), 'Клетка', '', 5, $extra);
         ob_end_clean();
-        $this->assertStringContainsString('Дополнительные указания от педагога:', $quiz->last_prompt);
-        $this->assertStringContainsString($extra, $quiz->last_prompt);
+        $this->assertStringContainsString('Дополнительные указания от педагога:', $quiz->last_prompt());
+        $this->assertStringContainsString($extra, $quiz->last_prompt());
 
         $assign = $this->capturing('Текст задания.');
         $assign->generate_assignment_description($this->zpr_profile(), 'Клетка', '', $extra);
-        $this->assertStringContainsString($extra, $assign->last_prompt);
+        $this->assertStringContainsString($extra, $assign->last_prompt());
 
         $video = $this->capturing('{"slides":[{"title":"Т","content":"С","key_points":["а"]}]}');
         $video->generate_video_script($this->zpr_profile(), 'Клетка', '', $extra);
-        $this->assertStringContainsString($extra, $video->last_prompt);
+        $this->assertStringContainsString($extra, $video->last_prompt());
     }
 
     /** Без указаний педагога заголовок не появляется - как и в промте учебного текста. */
@@ -194,6 +189,6 @@ final class adaptation_block_test extends \advanced_testcase {
         $quiz->generate_quiz($this->zpr_profile(), 'Клетка');
         ob_end_clean();
 
-        $this->assertStringNotContainsString('Дополнительные указания', $quiz->last_prompt);
+        $this->assertStringNotContainsString('Дополнительные указания', $quiz->last_prompt());
     }
 }

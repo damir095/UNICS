@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_ai_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 use local_unics\ai\answer_judge;
 
 /**
@@ -21,25 +24,18 @@ final class quiz_judge_pipeline_test extends \advanced_testcase {
      * @param string|null $judge ответ судьи; null - отказ сети
      */
     private function generator(string $quiz, ?string $judge = null): ai_generator {
-        return new class($quiz, $judge) extends ai_generator {
-            private string $quiz;
-            private ?string $judge;
-            public int $judge_calls = 0;
-            // Родительский конструктор не зову намеренно: он читает ключ API из настроек.
-            public function __construct(string $quiz, ?string $judge) {
-                $this->quiz = $quiz;
-                $this->judge = $judge;
+        return new class($quiz, $judge) extends fake_ai_generator {
+            public function __construct(private string $quiz, private ?string $judge) {
+                parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, answer_judge::PROMPT_MARKER)) {
-                    $this->judge_calls++;
-                    if ($this->judge === null) {
-                        throw new \moodle_exception('generalexceptionmessage', 'error', '',
-                            'сеть недоступна');
-                    }
-                    return $this->judge;
+            protected function judge_reply(string $prompt): string {
+                if ($this->judge === null) {
+                    throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                        'сеть недоступна');
                 }
+                return $this->judge;
+            }
+            protected function quiz_reply(string $prompt): string {
                 return $this->quiz;
             }
         };
@@ -289,19 +285,16 @@ final class quiz_judge_pipeline_test extends \advanced_testcase {
         };
         $replies = [$answer(['Б', 'Б', 'Б', 'А']), $answer(['В', 'Г', 'В', 'А'])];
 
-        $gen = new class($this->quiz_reply($qs), $replies) extends ai_generator {
-            private string $quiz;
-            private array $replies;
-            public int $judge_calls = 0;
-            public function __construct(string $quiz, array $replies) {
-                $this->quiz = $quiz;
-                $this->replies = $replies;
+        $gen = new class($this->quiz_reply($qs), $replies) extends fake_ai_generator {
+            public function __construct(private string $quiz, private array $replies) {
+                parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, answer_judge::PROMPT_MARKER)) {
-                    return $this->replies[$this->judge_calls++] ?? '';
-                }
+            protected function judge_reply(string $prompt): string {
+                // Счетчик увеличивает база ДО вызова, поэтому первому заходу отвечает
+                // нулевой элемент очереди.
+                return $this->replies[$this->judge_calls - 1] ?? '';
+            }
+            protected function quiz_reply(string $prompt): string {
                 return $this->quiz;
             }
         };

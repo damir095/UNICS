@@ -2,6 +2,9 @@
 namespace local_unics;
 
 use local_unics\ai\ai_generator;
+use local_unics\tests\fake_ai_generator;
+
+require_once(__DIR__ . '/fixtures/fake_ai_generator.php');
 
 /**
  * Ключ приходит ТЕКСТОМ верного варианта, а индекс мы вычисляем сами ([[key-as-text-design]]).
@@ -25,19 +28,12 @@ final class key_as_text_test extends \advanced_testcase {
      */
     private function generator(array $reply, ?array $answers = null): ai_generator {
         $answers ??= ['Синий кит', 'Слон', 'Жираф', 'Морж'];
-        return new class($reply, $answers) extends ai_generator {
-            private array $reply;
-            private array $answers;
-            public function __construct(array $reply, array $answers) {
-                $this->reply = $reply;
-                $this->answers = $answers;
+        // Судья по умолчанию молчит: этот тест про разбор, а не про третий ярус.
+        return new class($reply, $answers) extends fake_ai_generator {
+            public function __construct(private array $reply, private array $answers) {
+                parent::__construct();
             }
-            public function generate_text(string $prompt, int $max_tokens = 1024,
-                                          int $minlen = self::MIN_REPLY_LEN): string {
-                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
-                    // Судья согласен с чем угодно: этот тест про разбор, а не про третий ярус.
-                    return '';
-                }
+            protected function quiz_reply(string $prompt): string {
                 return json_encode(['questions' => [array_merge([
                     'text' => 'Какое животное самое крупное?',
                     'answers' => $this->answers,
