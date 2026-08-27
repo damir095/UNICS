@@ -165,8 +165,9 @@ class answer_judge {
      * судья ответил верно. Снимается ТОЛЬКО ведущая нумерация: ответ «1861» остается собой.
      */
     private static function choice_text(string $pick): string {
-        $stripped = preg_replace('~^\s*\d{1,2}\s*[).]\s+~u', '', $pick);
-        return question_sanity::normalize($stripped ?? $pick);
+        // Правило одно на весь плагин: тем же приемом генератор ищет ключ, когда просит у модели
+        // ТЕКСТ верного ответа. Разъехавшись, две копии дали бы разный ключ у разных ярусов.
+        return question_sanity::option_text($pick);
     }
 
     /**
