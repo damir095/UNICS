@@ -134,6 +134,41 @@ final class output_style_test extends \advanced_testcase {
         $this->assertStringContainsString("первая строка  \nвторая строка", $out);
     }
 
+    public function test_hard_breaks_survive_next_to_a_code_fence(): void {
+        // Главный случай, на котором первая редакция ЛОМАЛАСЬ. Восстановление шло по номерам
+        // строк, а чистка внутри map_outside_code() подрезает пустые строки у ограждений: число
+        // строк менялось, и перенос уезжал на соседнюю строку (найдено ревью).
+        $src = "## Тема\n\n```python\nprint(1)\n```\n\nA  \nB\nC  \nD\n";
+        $out = \local_unics\ai\output_style::shift_headings(
+            \local_unics\ai\output_style::strip_math_markup(
+                \local_unics\ai\output_style::clean($src)));
+
+        $this->assertStringContainsString("A  \nB", $out, "перенос уцелел");
+        $this->assertStringContainsString("C  \nD", $out, "и на своей строке");
+    }
+
+    public function test_code_fence_content_is_not_given_hard_breaks(): void {
+        // Внутри блока кода пробелы значимы, и весь класс их не трогает. Приписка лезла и туда.
+        $out = \local_unics\ai\output_style::clean("текст\n```\nprint(1)    \nprint(2)\n```\nхвост");
+
+        $this->assertStringContainsString("print(1)\nprint(2)", $out);
+    }
+
+    public function test_strip_math_markup_does_not_leave_trailing_spaces(): void {
+        // Через этот метод проходят ТЕКСТ ВОПРОСА и каждый вариант ответа. Первая редакция
+        // дописывала им хвостовые пробелы, и те уезжали в банк вопросов (найдено ревью).
+        $this->assertSame("5", \local_unics\ai\output_style::strip_math_markup("5  "));
+        $this->assertSame("ответ", \local_unics\ai\output_style::strip_math_markup("  ответ  "));
+    }
+
+    public function test_non_breaking_space_tail_becomes_exactly_two_spaces(): void {
+        // Неразрывный пробел ловится как \h, но побайтная обрезка его не снимала, и в хвосте
+        // оказывалось четыре знака вместо двух (найдено ревью).
+        $out = \local_unics\ai\output_style::clean("первая\u{00A0}\u{00A0}\nвторая");
+
+        $this->assertSame("первая  \nвторая", $out);
+    }
+
     public function test_emoji_hole_does_not_become_a_hard_break(): void {
         // «текст 🔥 🌋» после вырезания оставит подряд идущие пробелы В СЕРЕДИНЕ, а не перенос:
         // судим по тексту ДО вырезания, иначе дыра от эмодзи притворилась бы переносом.
