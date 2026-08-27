@@ -272,8 +272,10 @@ class course_builder {
         // Излишки идут тем же путем, что и основные вопросы: разница только в том, что слот им
         // не ставится. Отдельная ветка создания разъехалась бы с этой при первой же правке.
         $total = count($questions);
-        foreach (array_merge(array_values($questions), array_values($bank_only)) as $idx => $q) {
-            $into_quiz = $idx < $total;
+        // Имя НЕ $idx: ниже в этом же теле стоит foreach по вариантам ответа со счетчиком
+        // $idx, и одноименные счетчики в одной функции - это заряженная мина (найдено ревью).
+        foreach (array_merge(array_values($questions), array_values($bank_only)) as $qpos => $q) {
+            $into_quiz = $qpos < $total;
             // Вопрос с ключом вне диапазона не создаем вовсе: у всех вариантов вышла бы доля
             // 0.0, ребенок не смог бы ответить верно НИКАК, а IRT посчитала бы это трудностью
             // задания. Раньше от такого страховал зажим индекса в generate_quiz, снятый ради
@@ -1027,5 +1029,42 @@ HTML;
 
         rebuild_course_cache($course_id, true);
         return $cm->id;
+    }
+
+    /**
+     * Удалить вопросы банка, оставшиеся без привязки после сорвавшейся сборки.
+     *
+     * Основной вопрос при сбое хотя бы стоит в слоте теста - педагог его видит и может убрать.
+     * Запасной («только в банк») не стоит нигде: ни слота, ни привязки к элементу кодификатора.
+     * Не убрав его, мы копили бы в банке курса невидимый мусор с каждым неудачным прогоном
+     * (найдено ревью 2026-08-27).
+     *
+     * Живет здесь, а не в вызывающем: создает эти вопросы этот же класс, и знание о том, чем
+     * запись банка отличается от вопроса, не должно расползаться.
+     *
+     * @param int[] $qbe_ids записи банка (questionbankentryid)
+     * @return int сколько вопросов удалено
+     */
+    public function discard_bank_questions(array $qbe_ids): int {
+        global $DB, $CFG;
+        require_once($CFG->libdir . '/questionlib.php');
+
+        $gone = 0;
+        foreach ($qbe_ids as $qbe_id) {
+            $ids = $DB->get_fieldset_select('question_versions', 'questionid',
+                'questionbankentryid = ?', [(int)$qbe_id]);
+            foreach ($ids as $qid) {
+                try {
+                    question_delete_question((int)$qid);
+                    $gone++;
+                } catch (\Throwable $e) {
+                    // Уборка не имеет права заслонить исходную ошибку, но и молчать ей нельзя:
+                    // молчаливый catch - то, на чем проект уже обжегся не раз.
+                    mtrace('  [warn] Запасной вопрос #' . (int)$qid
+                        . ' не удалось убрать: ' . $e->getMessage());
+                }
+            }
+        }
+        return $gone;
     }
 }

@@ -220,6 +220,9 @@ class umk_processor {
             $generate_quiz = isset($task->generate_quiz) ? (int)$task->generate_quiz : 1;
             if ($generate_quiz) {
                 try {
+                    // Объявляем ДО всего, что может бросить: catch чистит по этому списку, и от
+                    // прошлого комплекта в нем оказались бы ЧУЖИЕ вопросы (найдено ревью).
+                    $bank_refs = [];
                     $element_id = isset($umk->element_id) ? (int)$umk->element_id : 0;
                     $reuse   = [];
                     $needed  = 5;
@@ -264,8 +267,10 @@ class umk_processor {
                         $reuse   = $retry['ids'];
                         $needed  = max($retry['mine'], 5 - count($reuse));
                         if ($needed > 0) {
+                            // Запас забираем и здесь: это ровно тот случай, когда пул пуст,
+                            // и терять проверенные задания тут больнее всего (найдено ревью).
                             $questions = $generator->generate_quiz(
-                                $profile, $umk->topic, $text, $needed, $extra_context);
+                                $profile, $umk->topic, $text, $needed, $extra_context, $surplus);
                         }
                     }
 
@@ -283,7 +288,6 @@ class umk_processor {
                     // без элемента кодификатора пул не при чем, и лишние вопросы просто
                     // засоряли бы банк курса ([[surplus-to-pool-design]]).
                     $bank_only = $element_id > 0 ? $surplus : [];
-                    $bank_refs = [];
                     $quiz_cmid = $builder->add_quiz_with_questions(
                         (int)$umk->mdl_course_id,
                         $section,
@@ -340,6 +344,13 @@ class umk_processor {
                     if (!empty($element_id)) {
                         \local_unics\learning\item_pool::release(
                             (int)$task->id, $element_id, $umk_level);
+                    }
+                    // Запасные вопросы уже созданы в банке, но привязать их к элементу мы не
+                    // успели. В отличие от основных они не стоят ни в одном слоте, поэтому
+                    // педагог их не увидит и не удалит - это невидимый мусор, копящийся с
+                    // каждым неудачным прогоном (найдено ревью).
+                    if (!empty($bank_refs)) {
+                        $builder->discard_bank_questions($bank_refs);
                     }
                     $dbg = property_exists($eq, 'debuginfo') ? ' | ' . $eq->debuginfo : '';
                     mtrace("  [warn] Тест не создан: " . $eq->getMessage() . $dbg);

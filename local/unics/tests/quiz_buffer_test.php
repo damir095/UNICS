@@ -146,13 +146,19 @@ final class quiz_buffer_test extends \advanced_testcase {
         [$out, $trace] = $this->ask_traced($gen, 5);
 
         $this->assertCount(5, $out);
-        $this->assertStringContainsString('Запас: лишних годных вопросов отброшено 2', $trace);
+        // След говорит, куда запас УШЕЛ. Пока излишки выбрасывались, тут стояло «отброшено»;
+        // после [[surplus-to-pool-design]] это было бы прямой неправдой в логе.
+        $this->assertStringContainsString('Запас: годных вопросов ушло в пул 2', $trace);
     }
 
-    public function test_notes_describe_only_delivered_questions(): void {
+    public function test_notes_separate_delivered_questions_from_the_surplus(): void {
         // Подозрения собирались со ВСЕХ разобранных вопросов, включая заведомо обрезаемый
         // запас: педагог читал отчет про задания, которых ребенок не увидит
-        // (найдено ревью 2026-08-26).
+        // (найдено ревью 2026-08-26). Тогда запас выбрасывался, и молчать про него было верно.
+        //
+        // Теперь запас уходит в общий пул и достанется другим детям, так что молчание стало
+        // сокрытием: пометки показываем, но помечаем «в запасе» - чтобы педагог не искал в
+        // тесте своего ребенка задание, которого там нет (найдено ревью 2026-08-27).
         $gen = new class extends ai_generator {
             public function generate_text(string $prompt, int $max_tokens = 1024,
                                           int $minlen = self::MIN_REPLY_LEN): string {
@@ -177,8 +183,11 @@ final class quiz_buffer_test extends \advanced_testcase {
         [$out, $trace] = $this->ask_traced($gen, 5);
 
         $this->assertCount(5, $out);
-        $this->assertStringNotContainsString('Подозрения', $trace,
-            'пометки про выброшенный запас педагогу не показываем');
+        $this->assertStringContainsString('в запасе: ключ заметно длиннее прочих вариантов',
+            $trace, 'подозрение к запасу, ушедшему в пул, скрывать нельзя');
+        // Главное - что пометка НЕ выдана за свойство выданного ребенку задания.
+        $this->assertStringNotContainsString('Подозрения (вопросы все равно приняты): ключ',
+            $trace, 'пометка запаса не должна читаться как пометка выданного вопроса');
     }
 
     public function test_token_limit_covers_the_larger_order(): void {

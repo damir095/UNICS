@@ -12,7 +12,7 @@ use local_unics\ai\course_builder;
  * калибровка IRT была невозможна, потому что у семнадцати заданий из двадцати двух был один
  * ответ.
  *
- * Ребёнок по-прежнему видит ровно свои $num вопросов; излишки лежат в банке и достаются
+ * Ребенок по-прежнему видит ровно свои $num вопросов; излишки лежат в банке и достаются
  * следующим ученикам через item_pool::take().
  *
  * @package local_unics
@@ -95,7 +95,7 @@ final class surplus_to_pool_test extends \advanced_testcase {
     }
 
     public function test_bank_only_questions_stay_out_of_the_quiz(): void {
-        // Ребёнок видит ровно свои вопросы. Излишки живут в банке и в слоты не попадают.
+        // Ребенок видит ровно свои вопросы. Излишки живут в банке и в слоты не попадают.
         $this->resetAfterTest();
         $this->setAdminUser();
         $course = $this->getDataGenerator()->create_course();
@@ -142,6 +142,80 @@ final class surplus_to_pool_test extends \advanced_testcase {
         $text = (string)$DB->get_field('question', 'questiontext', ['id' => $qid]);
         $this->assertStringContainsString('Запасной вопрос про дроби', $text);
         $this->assertSame(4, $DB->count_records('question_answers', ['question' => $qid]));
+    }
+
+    public function test_orphaned_bank_questions_are_discarded(): void {
+        // Запасные вопросы создаются ДО того, как их привяжет к элементу fulfil. Исключение
+        // между этими шагами оставляло вопрос без слота, без привязки и без всякой видимости:
+        // педагог такой не найдет и не удалит, а копится он с каждым неудачным прогоном.
+        //
+        // Уборка живет под catch, поэтому зеленый сьют сам по себе про нее ничего не доказывает
+        // - проверяем ее напрямую (найдено ревью 2026-08-27).
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+        $builder = new course_builder();
+        $refs = [];
+
+        $cmid = $builder->add_quiz_with_questions((int)$course->id, 0, 'Тест', [[
+            'text' => 'Основной?', 'answers' => ['А', 'Б', 'В', 'Г'], 'correct' => 0,
+        ]], [], [[
+            'text' => 'Запасной?', 'answers' => ['Верный', 'Первый', 'Второй', 'Третий'],
+            'correct' => 0,
+        ]], $refs);
+
+        $orphan = (int)$DB->get_field_sql(
+            'SELECT qv.questionid FROM {question_versions} qv WHERE qv.questionbankentryid = ?',
+            [reset($refs)], IGNORE_MULTIPLE);
+        $before = $DB->count_records('question');
+        $this->assertTrue($DB->record_exists('question', ['id' => $orphan]));
+
+        $gone = $builder->discard_bank_questions($refs);
+
+        $this->assertSame(1, $gone);
+        $this->assertFalse($DB->record_exists('question', ['id' => $orphan]),
+            'запасной вопрос обязан исчезнуть, а не остаться невидимым мусором');
+        $this->assertSame($before - 1, $DB->count_records('question'),
+            'уборка не должна задеть ничего сверх названного');
+        // Вопрос, стоящий в слоте теста, уборка не трогает: он виден педагогу и убирается иначе.
+        $this->assertSame(1, $this->quiz_questions($cmid));
+    }
+
+    public function test_surplus_is_capped_at_the_buffer(): void {
+        // Модель нередко шлет вопросов вдвое больше просимого. Пока запас выбрасывался, ее
+        // многословие ничего не стоило; теперь каждый излишек - это записи в банке вопросов,
+        // привязка к элементу и строка уровня, то есть запись в ОБЩИЙ пул (найдено ревью).
+        $gen = new class extends ai_generator {
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
+                if (str_contains($prompt, \local_unics\ai\answer_judge::PROMPT_MARKER)) {
+                    return '';
+                }
+                $questions = [];
+                for ($i = 0; $i < 20; $i++) {
+                    $questions[] = [
+                        'text' => "Вопрос номер {$i}?",
+                        'answers' => ["Верный {$i}", "Первый неверный {$i}",
+                                      "Второй неверный {$i}", "Третий неверный {$i}"],
+                        'correct' => 0,
+                    ];
+                }
+                return json_encode(['questions' => $questions], JSON_UNESCAPED_UNICODE);
+            }
+        };
+
+        $surplus = [];
+        ob_start();
+        try {
+            $out = $gen->generate_quiz([], 'Дроби', '', 5, '', $surplus);
+        } finally {
+            ob_end_clean();
+        }
+
+        $this->assertCount(5, $out, 'ребенок видит ровно свои вопросы');
+        $this->assertCount(ai_generator::QUIZ_BUFFER, $surplus,
+            'в пул уходит запас, а не весь выхлоп модели');
     }
 
     public function test_no_surplus_means_no_change(): void {
