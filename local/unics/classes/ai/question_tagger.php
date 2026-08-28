@@ -114,6 +114,21 @@ n - номер задания из списка выше, code - код элем
             'unics_codifier_element', 'id', 'codifier_id = :cid', ['cid' => $codifier_id])));
         $own_questions = array_flip(self::subject_bankentry_ids($codifier_id));
 
+        // Уже существующие привязки берем ОДНИМ запросом. Раньше на каждую пару шел свой
+        // record_exists, а следом link_question делал ровно такую же выборку - два одинаковых
+        // запроса на пару. На пачке в полсотни вопросов это сотня лишних обращений к базе.
+        $existing = [];
+        $rs = $DB->get_recordset_sql(
+            "SELECT l.id, l.element_id, l.target_id
+               FROM {unics_codifier_link} l
+               JOIN {unics_codifier_element} e ON e.id = l.element_id
+              WHERE e.codifier_id = :cid AND l.target_type = :type",
+            ['cid' => $codifier_id, 'type' => \local_unics\codifier_link_manager::TYPE_QUESTION]);
+        foreach ($rs as $row) {
+            $existing[$row->element_id . ':' . $row->target_id] = true;
+        }
+        $rs->close();
+
         $created = 0;
         foreach ($pairs as $pair) {
             $beid = (int)($pair['bankentryid'] ?? 0);
@@ -124,17 +139,18 @@ n - номер задания из списка выше, code - код элем
             if (!isset($own_elements[$elid]) || !isset($own_questions[$beid])) {
                 continue;
             }
-            // link_question идемпотентен и возвращает id в обоих случаях, поэтому «создано»
-            // считаем сами: методисту важно знать, сколько привязок реально добавилось.
-            $exists = $DB->record_exists('unics_codifier_link', [
-                'element_id'  => $elid,
-                'target_type' => \local_unics\codifier_link_manager::TYPE_QUESTION,
-                'target_id'   => $beid,
-            ]);
-            \local_unics\codifier_link_manager::link_question($elid, $beid, $userid);
-            if (!$exists) {
-                $created++;
+            // link_question идемпотентен, но у существующей привязки его звать незачем: он
+            // сделает ту же выборку и вернет прежний id. «Создано» считаем сами - методисту
+            // важно знать, сколько привязок реально добавилось.
+            $key = $elid . ':' . $beid;
+            if (isset($existing[$key])) {
+                continue;
             }
+            \local_unics\codifier_link_manager::link_question($elid, $beid, $userid);
+            // Помечаем сразу: повтор той же пары ВНУТРИ одной пачки не должен считаться вторым
+            // созданием (link_question его и не создаст, но счетчик соврал бы).
+            $existing[$key] = true;
+            $created++;
         }
         return $created;
     }

@@ -202,4 +202,36 @@ final class question_tagger_bank_test extends \advanced_testcase {
         $this->assertSame('Дроби', $out[0]['title']);
         $this->assertSame('делит дроби', $out[0]['description']);
     }
+
+    /**
+     * Повторная разметка тех же пар не должна стоить запроса на пару.
+     *
+     * Раньше на каждую пару шел `record_exists`, а следом `link_question` делал ровно такую же
+     * выборку - два одинаковых запроса на пару. Теперь существующие привязки берутся ОДНИМ
+     * запросом, и повтор обходится без обращений к базе вовсе.
+     *
+     * Тест считает запросы, а не время: время на стенде шумит, а число обращений - это ровно то
+     * свойство, ради которого правка делалась.
+     */
+    public function test_reapplying_the_same_pairs_costs_no_query_per_pair(): void {
+        global $DB, $USER;
+        $pairs = [];
+        for ($i = 0; $i < 6; $i++) {
+            $pairs[] = ['bankentryid' => $this->make_question('Вопрос ' . $i),
+                        'element_id' => $this->element];
+        }
+
+        $this->assertSame(6, question_tagger::apply($this->codifier, $pairs, (int)$USER->id));
+
+        // Второй заход: все пары уже привязаны, создавать нечего.
+        $before = $DB->perf_get_queries();
+        $this->assertSame(0, question_tagger::apply($this->codifier, $pairs, (int)$USER->id));
+        $spent = $DB->perf_get_queries() - $before;
+
+        // Три подготовительные выборки (элементы дисциплины, вопросы дисциплины, привязки) плюс
+        // запас на устройство самих выборок. Ключевое - число НЕ растет с числом пар: на шести
+        // парах прежний код тратил бы двенадцать запросов сверх подготовки.
+        $this->assertLessThan(count($pairs), $spent, sprintf(
+            'на повтор шести пар ушло %d запросов - похоже, запрос на пару вернулся', $spent));
+    }
 }
