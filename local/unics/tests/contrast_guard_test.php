@@ -214,10 +214,13 @@ final class contrast_guard_test extends \advanced_testcase {
      * выбранный пользователем акцент не доходил до тонированных контролов - он оставался только
      * в рамке (найдено ревью).
      *
-     * Теперь при выбранном акценте фон нейтральный, а цвет следует за `--unics-primary-deep`,
-     * который каждая схема задаёт своим тоном. Тест сторожит именно это: токены разъедутся по
-     * схемам - и какая-нибудь комбинация молча провалится, а страж контраста её не поймает,
-     * потому что судит правила, а не пары токенов.
+     * Попытка привязать тинт к акценту откачена (замеры - в комментарии у миксина unics-accent),
+     * так что пара пока константна во всех схемах. Тест сторожит НЕ доходимость акцента, а только
+     * контраст: токены разъедутся по схемам - и какая-нибудь комбинация молча провалится, а страж
+     * контраста ее не поймает, потому что судит правила, а не пары токенов.
+     *
+     * Доходимость акцента до тонированных контролов - открытый долг; тест на нее появится вместе
+     * с самими пер-акцентными тинтами.
      */
     public function test_tint_pair_holds_aa_in_every_scheme(): void {
         $decls = contrast_analyzer::declarations(contrast_analyzer::css());
@@ -226,7 +229,7 @@ final class contrast_guard_test extends \advanced_testcase {
             $tokens = contrast_analyzer::tokens($decls, $combo);
             $bg = $tokens['--unics-tint-bg'] ?? null;
             $fg = $tokens['--unics-on-tint'] ?? null;
-            $label = implode('+', $combo) ?: 'light';
+            $label = contrast_analyzer::label($combo);
             if ($bg === null || $fg === null) {
                 $bad[] = sprintf('  %s: пара тинта не разрешается в цвета', $label);
                 continue;
@@ -240,29 +243,5 @@ final class contrast_guard_test extends \advanced_testcase {
         $this->assertSame([], $bad, sprintf(
             "Пара тинта ниже AA в %d сочетаниях:\n%s", count($bad), implode("\n", $bad)
         ));
-        // Контраста мало: константная пара (персик плюс глубокий оранжевый) держала AA во всех
-        // схемах и при этом ПОЛНОСТЬЮ игнорировала выбранный акцент. Мутация «вернуть константу»
-        // предыдущее утверждение не роняла, то есть докблок обещал больше, чем тест проверял.
-        // Поэтому отдельно требуем: при выбранном акценте цвет на тинте обязан отличаться от
-        // умолчательного, иначе выбор пользователя до контрола не доходит.
-        $default = contrast_analyzer::tokens($decls, [])['--unics-on-tint'] ?? null;
-        $ignored = [];
-        foreach (contrast_analyzer::combos() as $combo) {
-            $accent = array_filter($combo, static fn(string $c): bool
-                => str_contains($c, 'accent-'));
-            if (!$accent) {
-                continue;
-            }
-            $value = contrast_analyzer::tokens($decls, $combo)['--unics-on-tint'] ?? null;
-            if ($value === $default) {
-                $ignored[] = '  ' . implode('+', $combo);
-            }
-        }
-
-        $this->assertSame([], $ignored, sprintf(
-            "Акцент не доходит до тонированных контролов в %d сочетаниях:" . PHP_EOL . "%s",
-            count($ignored), implode(PHP_EOL, $ignored)
-        ));
-
     }
 }

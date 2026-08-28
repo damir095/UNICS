@@ -300,9 +300,19 @@ final class contrast_analyzer {
      * Метод get_css_content() аргументов не принимает - это ровно то, что
      * theme/styles.php отдает браузеру.
      */
+    private static ?string $css = null;
+
+    /**
+     * Собранный CSS держим в памяти: get_css_content() не кеширует, а каждый вызов
+     * компилирует SCSS и минифицирует больше мегабайта - около четырех секунд. Три метода
+     * стража платили это порознь (найдено ревью).
+     */
     public static function css(): string {
+        if (self::$css !== null) {
+            return self::$css;
+        }
         $theme = \core\output\theme_config::load('unics');
-        return $theme->get_css_content();
+        return self::$css = $theme->get_css_content();
     }
 
     /**
@@ -463,7 +473,7 @@ final class contrast_analyzer {
     }
 
     /** Человекочитаемая метка комбинации: light / dark+contrast+accent-blue и т.п. */
-    private static function label(array $classes): string {
+    public static function label(array $classes): string {
         if ($classes === []) {
             return 'light';
         }
