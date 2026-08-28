@@ -34,6 +34,53 @@ final class contrast_guard_test extends \advanced_testcase {
             . 'Значение подобрано намеренно, см. комментарий у --unics-ctype-cert в _variables.scss.',
     ];
 
+    /**
+     * Дефекты, ставшие видимыми 2026-08-28 после расширения охвата стража, и ЕЩЕ НЕ разобранные.
+     *
+     * Это НЕ allowlist. В allowlist попадает пара, признанная приемлемой ПОСЛЕ замера; сюда -
+     * пара, которую страж раньше не судил вовсе, потому что определял принадлежность по слову
+     * `unics` в селекторе, а партиалы `_core-*.scss` намеренно красят ядровые селекторы. Охват
+     * вырос на 202 группы правил, то есть примерно на треть.
+     *
+     * Список обязан ТАЯТЬ ДО НУЛЯ, и тест сверяет его ровно: починив дефект, надо убрать строку,
+     * иначе тест упадет на устаревшем перечне. Добавлять сюда новое нельзя.
+     *
+     * Разбор каждой находки - отдельная задача: часть может оказаться артефактом самого стража
+     * (правило 3 берет фон ПРЕДКА и не знает ни специфичности, ни настоящего DOM), а часть -
+     * настоящим дефектом, который годами не видел никто.
+     */
+    private const OPEN_AFTER_WIDENING = [
+        '.activity-completion .completion-icon' =>
+            '2.28:1 в схеме dark+accent-purple (#6b3fa0 на #1a1d24), правило 2',
+        '.alert.alert-warning' =>
+            '4.28:1 в схеме light (#b25e09 на #fff4e0), правило 1',
+        '.breadcrumb-item+.breadcrumb-item::before' =>
+            '1.26:1 в схеме dark (#292f3b на #1a1d24), правило 2',
+        '.btn-outline-primary' =>
+            '1.29:1 в схеме dark+contrast+accent-green (#8fe3a3 на #ffe6dc), правило 1',
+        '.btn-outline-primary:hover,.btn-outline-primary:focus' =>
+            '3.12:1 в схеме light (#ffffff на #f26545), правило 1',
+        '.card .card-header.bg-primary,.card .card-header.bg-primary *' =>
+            '1.00:1 в схеме light (#ffffff на #ffffff), правило 3',
+        '.course-content li.section.current::before' =>
+            '1.53:1 в схеме dark+contrast+accent-green (#ffffff на #8fe3a3), правило 1',
+        '.navbar .navbar-brand:hover,.navbar .navbar-brand:focus,'
+            . '.navbar .nav-link:hover,.navbar .nav-link:focus' =>
+            '1.82:1 в схеме accent-purple (#6b3fa0 на #292f3b), правило 3',
+        '.path-mod-quiz #mod_quiz_navblock .qnbutton.notanswered' =>
+            '4.28:1 в схеме light (#b25e09 на #fff4e0), правило 1',
+        '.que .formulation' =>
+            '1.22:1 в схеме dark (#001a1e на #242832), правило 1',
+    ];
+
+    /** То же для брендовых заливок без закрепленного цвета текста. */
+    private const OPEN_FILLS_AFTER_WIDENING = [
+        '.btn-primary',
+        '.btn-primary:hover,.btn-primary:focus,.btn-primary:active',
+        '.card .card-header.bg-primary',
+        '.que .badge.bg-primary',
+    ];
+
     protected function setUp(): void {
         parent::setUp();
         global $CFG;
@@ -45,11 +92,16 @@ final class contrast_guard_test extends \advanced_testcase {
         $found = contrast_analyzer::audit($decls, contrast_analyzer::combos());
 
         $unexpected = [];
+        $stillopen = [];
         foreach ($found as $f) {
             if (!contrast_analyzer::is_ours($f['sel'])) {
                 continue;
             }
             if (isset(self::ALLOWLIST[$f['sel']])) {
+                continue;
+            }
+            if (isset(self::OPEN_AFTER_WIDENING[$f['sel']])) {
+                $stillopen[$f['sel']] = true;
                 continue;
             }
             $key = $f['sel'];
@@ -64,6 +116,15 @@ final class contrast_guard_test extends \advanced_testcase {
             $lines[] = sprintf('  %.2f:1  правило %d  #%s на #%s  [%s]  %s',
                 $f['ratio'], $f['rule'], $f['fg'], $f['bg'], $f['combo'], $f['sel']);
         }
+
+        // Перечень открытого долга обязан быть ТОЧНЫМ: починив дефект, надо убрать строку.
+        // Иначе список превратится в кладбище и переживет то, что описывает.
+        $expectedopen = array_keys(self::OPEN_AFTER_WIDENING);
+        $actualopen = array_keys($stillopen);
+        sort($expectedopen);
+        sort($actualopen);
+        $this->assertSame($expectedopen, $actualopen,
+            'Список OPEN_AFTER_WIDENING устарел: дефект починен, а строка осталась.');
 
         $this->assertSame([], $lines, sprintf(
             "Пар с недостаточным контрастом в НАШЕМ CSS: %d\n%s",
@@ -109,8 +170,13 @@ final class contrast_guard_test extends \advanced_testcase {
         }
 
         $lines = [];
+        $stillopen = [];
         foreach ($bysel as $sel => $props) {
             if (!contrast_analyzer::is_ours($sel) || isset($allowed[$sel]) || isset($props['color'])) {
+                continue;
+            }
+            if (in_array($sel, self::OPEN_FILLS_AFTER_WIDENING, true)) {
+                $stillopen[] = $sel;
                 continue;
             }
             foreach (['background', 'background-color'] as $prop) {
@@ -125,6 +191,12 @@ final class contrast_guard_test extends \advanced_testcase {
                 }
             }
         }
+
+        $expectedopen = self::OPEN_FILLS_AFTER_WIDENING;
+        sort($expectedopen);
+        sort($stillopen);
+        $this->assertSame($expectedopen, $stillopen,
+            'Список OPEN_FILLS_AFTER_WIDENING устарел: заливка починена, а строка осталась.');
 
         $this->assertSame([], $lines, sprintf(
             "Брендовая заливка без закрепленного цвета текста: %d\n%s",

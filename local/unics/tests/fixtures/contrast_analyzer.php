@@ -343,12 +343,57 @@ final class contrast_analyzer {
         if (stripos($sel, 'unics') !== false) {
             return true;
         }
+        if (isset(self::ours_selectors()[$sel])) {
+            return true;
+        }
         foreach (self::CORE_OWNED as $core) {
             if (strpos($sel, $core) !== false) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Селекторы, объявленные ПОСЛЕ маркера границы, то есть нашим SCSS. */
+    private static ?array $ourselectors = null;
+
+    /**
+     * Селекторы нашего SCSS - по положению в бандле, а не по имени.
+     *
+     * `theme_unics_get_extra_scss` начинается правилом `.unics-scss-boundary`, и все, что идет
+     * за ним, написано нами. Именно правилом, а не комментарием: комментарии-разделители
+     * компилятор в сжатом режиме вырезает.
+     *
+     * Селектор, встречающийся и до, и после границы, считается нашим - и это верно: раз мы его
+     * красим, за его контраст отвечаем мы.
+     *
+     * @return array<string,true>
+     */
+    public static function ours_selectors(): array {
+        if (self::$ourselectors !== null) {
+            return self::$ourselectors;
+        }
+        $decls = self::declarations(self::css());
+        $boundary = null;
+        foreach ($decls as $d) {
+            if ($d['sel'] === '.unics-scss-boundary') {
+                $boundary = $d['ord'];
+                break;
+            }
+        }
+        self::$ourselectors = [];
+        if ($boundary === null) {
+            // Маркера нет - тема собрана старой версией lib.php. Молча судить по одному имени
+            // селектора нельзя: страж выглядел бы работающим, теряя целый класс дефектов.
+            throw new \moodle_exception('generalexceptionmessage', 'error', '',
+                'В собранном CSS нет маркера .unics-scss-boundary: очистите кеши темы');
+        }
+        foreach ($decls as $d) {
+            if ($d['ord'] > $boundary) {
+                self::$ourselectors[$d['sel']] = true;
+            }
+        }
+        return self::$ourselectors;
     }
 
     /** Человекочитаемая метка комбинации: light / dark+contrast+accent-blue и т.п. */
