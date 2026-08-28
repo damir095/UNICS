@@ -39,16 +39,9 @@ final class contrast_guard_test extends \advanced_testcase {
      *
      * Списки не «на всякий случай», а рабочий механизм: тест
      * сверяет их РОВНО, поэтому непустой список без соответствующего дефекта валит тест, а
-     * дефект без списка - тоже. Появится новая партия находок - её сюда и запишут.
+     * дефект без списка - тоже. Появится новая партия находок - ее сюда и запишут.
      */
-    private const OPEN_AFTER_WIDENING = [
-        '.path-mod-quiz #mod_quiz_navblock .qnbutton.incorrect,'
-            . '.path-mod-quiz #mod_quiz_navblock .qnbutton.incorrect .trafficlight' =>
-            '4.19:1 в схеме light (#ca3120 на #ffdddd), правило 1. Наше правило задает пару '
-            . '--unics-error на --unics-error-bg (около 8:1); замер берет ЯДРОВЫЕ #ca3120 и #fdd, '
-            . 'то есть слияние выбрало не ту пару. Нужен отдельный разбор: либо остаток артефакта '
-            . 'группировки, либо мы и правда не перекрываем светофорный кружок.',
-    ];
+    private const OPEN_AFTER_WIDENING = [];
 
     /** То же для брендовых заливок без закрепленного цвета текста. */
     private const OPEN_FILLS_AFTER_WIDENING = [];
@@ -61,12 +54,16 @@ final class contrast_guard_test extends \advanced_testcase {
 
     public function test_no_contrast_failures_in_our_css(): void {
         $decls = contrast_analyzer::declarations(contrast_analyzer::css());
+        // Отдаем разбор сразу: иначе первый же is_ours() соберет тему заново.
+        contrast_analyzer::ours_selectors($decls);
         $found = contrast_analyzer::audit($decls, contrast_analyzer::combos());
 
         $unexpected = [];
         $stillopen = [];
         foreach ($found as $f) {
-            if (!contrast_analyzer::is_ours($f['sel'])) {
+            // Судим по ЧАСТИ, на которой родилась находка, а не по групповой строке правила:
+            // у ядровых групп она чужая, и ядровый дефект приписывался нам (найдено ревью).
+            if (!contrast_analyzer::is_ours($f['part'] ?? $f['sel'])) {
                 continue;
             }
             if (isset(self::ALLOWLIST[$f['sel']])) {
@@ -141,14 +138,24 @@ final class contrast_guard_test extends \advanced_testcase {
         // селекторов (`.btn-primary, .btn-primary:hover, ... { color: ... }`), и проверка «есть ли
         // color в ТОМ ЖЕ блоке» объявляла такие заливки незакрепленными - четыре ложных
         // срабатывания из четырех (найдено 2026-08-28).
+        // Учитываем ТОЛЬКО наши объявления - те, что идут после маркера границы. Ядровое правило
+        // цвета не считается закреплением: оно может проигрывать каскад, а обязанность закрепить
+        // текст на своей заливке лежит на нас (найдено ревью: слияние по всему бандлу ослабило
+        // проверку до «где-нибудь есть color»).
+        //
+        // Свойства при этом сливаем по ЧАСТЯМ группового селектора: цвет проект нередко
+        // закрепляет соседним правилом на более широком наборе селекторов
+        // (`.btn-primary, .btn-primary:hover, ... { color: ... }`), и проверка «в том же блоке»
+        // объявляла такие заливки незакрепленными.
+        $decls = contrast_analyzer::declarations(contrast_analyzer::css());
+        $boundary = contrast_analyzer::boundary_ord($decls);
         $bysel = [];
         $fillsel = [];
-        foreach (contrast_analyzer::declarations(contrast_analyzer::css()) as $d) {
-            foreach (explode(',', $d['sel']) as $part) {
-                $part = trim($part);
-                if ($part === '') {
-                    continue;
-                }
+        foreach ($decls as $d) {
+            if ($d['ord'] <= $boundary) {
+                continue;
+            }
+            foreach (contrast_analyzer::selector_parts($d['sel']) as $part) {
                 $bysel[$part][$d['prop']] = $d['val'];
                 if (in_array($d['prop'], ['background', 'background-color'], true)) {
                     // Для сообщения нужен исходный вид правила, а не разобранная часть.
@@ -163,19 +170,25 @@ final class contrast_guard_test extends \advanced_testcase {
             if (!contrast_analyzer::is_ours($sel) || isset($allowed[$sel]) || isset($props['color'])) {
                 continue;
             }
-            if (in_array($sel, self::OPEN_FILLS_AFTER_WIDENING, true)) {
-                $stillopen[] = $sel;
-                continue;
-            }
             foreach (['background', 'background-color'] as $prop) {
                 if (!isset($props[$prop])) {
                     continue;
                 }
                 foreach ($fills as $fill) {
-                    if (strpos($props[$prop], $fill) !== false) {
-                        $lines[] = sprintf('  %s { %s: %s }  - нет color в том же правиле', $sel, $prop, $props[$prop]);
+                    if (strpos($props[$prop], $fill) === false) {
+                        continue;
+                    }
+                    // Членство в перечне открытого долга проверяем ЗДЕСЬ, когда заливка уже
+                    // найдена. Раньше проверка стояла до обнаружения, и починенная заливка все
+                    // равно засчитывалась «еще открытой» - перечень не мог устареть, то есть
+                    // сверка на устаревание не работала вовсе (найдено ревью).
+                    if (in_array($sel, self::OPEN_FILLS_AFTER_WIDENING, true)) {
+                        $stillopen[] = $sel;
                         continue 3;
                     }
+                    $lines[] = sprintf('  %s { %s: %s }  - цвет текста не закреплен нашим правилом',
+                        $fillsel[$sel] ?? $sel, $prop, $props[$prop]);
+                    continue 3;
                 }
             }
         }

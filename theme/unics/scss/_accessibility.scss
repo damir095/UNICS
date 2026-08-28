@@ -70,7 +70,7 @@ html.unics-a11y-dark {
     --unics-ctype-quiz-bg:     #3a2418; --unics-ctype-quiz:     #ff9a68;
     --unics-ctype-cert-bg:     #3a3018; --unics-ctype-cert:     #e0c168;
     --unics-ctype-other:       var(--unics-text-muted); // 6.04:1 на --unics-ctype-other-bg (было 2.10:1)
-    --unics-cchip-todo-tx:     var(--unics-d-warning-tx); // ~8.3:1 на --unics-warning-bg(dark)
+    // --unics-cchip-todo-tx переопределять не нужно: он псевдоним --unics-warning-text.
     --unics-highlight-bg:      #2e2620; // теплая темная подсветка next-step (мягче table-head-bg dark)
     // --unics-highlight-border наследует --unics-table-head-border, который уже темнеет выше.
 

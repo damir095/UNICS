@@ -348,8 +348,8 @@ final class contrast_analyzer {
         // целиком тогда объявляла находку чужой и молча ее теряла. Так пропал дефект условия
         // вопроса, пойманный мутацией уже после починки (2026-08-28).
         $ours = self::ours_selectors();
-        foreach (explode(',', $sel) as $part) {
-            if (isset($ours[trim($part)])) {
+        foreach (self::selector_parts($sel) as $part) {
+            if (isset($ours[$part])) {
                 return true;
             }
         }
@@ -364,6 +364,53 @@ final class contrast_analyzer {
     /** Селекторы, объявленные ПОСЛЕ маркера границы, то есть нашим SCSS. */
     private static ?array $ourselectors = null;
 
+    /** Порядковый номер маркера границы: все, что больше, объявлено нами. */
+    private static ?int $boundary = null;
+
+    /**
+     * Позиция маркера `.unics-scss-boundary` в разборе.
+     *
+     * Нужна там, где важна не только принадлежность селектора, но и авторство самого объявления:
+     * например «закреплен ли цвет НАШИМ правилом», где ядровое объявление не считается.
+     */
+    public static function boundary_ord(?array $decls = null): int {
+        self::ours_selectors($decls);
+        return (int)self::$boundary;
+    }
+
+    /**
+     * Разбить групповой селектор на части, НЕ ломая запятые внутри скобок.
+     *
+     * `:not([for=a], [for=b])` и `:has(+ h4, + .h4)` в бандле уже встречаются: наивный explode
+     * резал их на неразбираемые огрызки вроде `+ .h4)`, и цветное правило с такой записью
+     * получило бы два неверных ключа - его схемное переопределение не слилось бы с базовым
+     * (найдено ревью).
+     *
+     * @return string[]
+     */
+    public static function selector_parts(string $sel): array {
+        $parts = [];
+        $depth = 0;
+        $cur = '';
+        $len = strlen($sel);
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $sel[$i];
+            if ($ch === '(' || $ch === '[') {
+                $depth++;
+            } else if ($ch === ')' || $ch === ']') {
+                $depth--;
+            }
+            if ($ch === ',' && $depth <= 0) {
+                $parts[] = trim($cur);
+                $cur = '';
+                continue;
+            }
+            $cur .= $ch;
+        }
+        $parts[] = trim($cur);
+        return array_values(array_filter($parts, static fn(string $p): bool => $p !== ''));
+    }
+
     /**
      * Селекторы нашего SCSS - по положению в бандле, а не по имени.
      *
@@ -376,11 +423,14 @@ final class contrast_analyzer {
      *
      * @return array<string,true>
      */
-    public static function ours_selectors(): array {
+    public static function ours_selectors(?array $decls = null): array {
         if (self::$ourselectors !== null) {
             return self::$ourselectors;
         }
-        $decls = self::declarations(self::css());
+        // Разбор бандла у вызывающего обычно уже есть. Без этого параметра первый же вызов
+        // is_ours() собирал тему ЗАНОВО: get_css_content() не кеширует в памяти, а компилирует
+        // SCSS и минифицирует многомегабайтный результат (найдено ревью).
+        $decls ??= self::declarations(self::css());
         $boundary = null;
         foreach ($decls as $d) {
             if ($d['sel'] === '.unics-scss-boundary') {
@@ -388,21 +438,25 @@ final class contrast_analyzer {
                 break;
             }
         }
-        self::$ourselectors = [];
+        self::$boundary = $boundary;
         if ($boundary === null) {
             // Маркера нет - тема собрана старой версией lib.php. Молча судить по одному имени
             // селектора нельзя: страж выглядел бы работающим, теряя целый класс дефектов.
+            // Память НЕ заполняем: иначе следующий вызов увидит пустой набор вместо null,
+            // молча вернет его и страж выродится в проверку по подстроке - зеленый при полной
+            // потере охвата (найдено ревью).
             throw new \moodle_exception('generalexceptionmessage', 'error', '',
                 'В собранном CSS нет маркера .unics-scss-boundary: очистите кеши темы');
         }
+        self::$ourselectors = [];
         foreach ($decls as $d) {
             if ($d['ord'] <= $boundary) {
                 continue;
             }
             // Индексируем и группу целиком, и каждую ее часть.
             self::$ourselectors[$d['sel']] = true;
-            foreach (explode(',', $d['sel']) as $part) {
-                self::$ourselectors[trim($part)] = true;
+            foreach (self::selector_parts($d['sel']) as $part) {
+                self::$ourselectors[$part] = true;
             }
         }
         return self::$ourselectors;
@@ -510,16 +564,18 @@ final class contrast_analyzer {
             // по строке целиком его с одиночным `.btn-outline-primary` не сводило. Отсюда рождались
             // ложные срабатывания: базовое светлое правило выглядело неперекрытым в темной схеме,
             // хотя перекрыто оно правилом с БОЛЬШЕЙ специфичностью (найдено 2026-08-28).
-            foreach (explode(',', $sel) as $part) {
-                $part = trim($part);
-                if ($part === '') {
-                    continue;
-                }
+            foreach (self::selector_parts($sel) as $part) {
                 [$required, $normal] = self::scheme_scope($part);
                 $scoped[] = ['sel' => $sel, 'props' => $props,
                              'required' => $required, 'normal' => $normal];
             }
         }
+
+        // Порядок наложения от комбинации НЕ зависит: ключ сортировки - число требуемых схемных
+        // классов. Внутри цикла та же сортировка шла шестнадцать раз по массиву, который разбор
+        // групп на части и без того увеличил в разы (найдено ревью).
+        usort($scoped, static fn(array $x, array $y): int
+            => count($x['required']) <=> count($y['required']));
 
         $found = [];
         foreach ($combos as $classes) {
@@ -554,7 +610,6 @@ final class contrast_analyzer {
             }
             // Стабильная сортировка по квалификации: чем больше требуемых классов схемы,
             // тем позже накладывается.
-            usort($applicable, fn($x, $y) => count($x['required']) <=> count($y['required']));
 
             $winners = [];
             foreach ($applicable as $b) {
@@ -571,6 +626,11 @@ final class contrast_analyzer {
             }
 
             foreach ($winners as $key => $b) {
+                // $key едет в находку: судить «наше или нет» надо по ЧАСТИ, на которой она
+                // родилась. Групповой $b['sel'] берется у ПЕРВОГО правила, создавшего ключ, и у
+                // ядровых групп это чужая строка - ядровый дефект приписывался нам, а наш
+                // собственный дефект на том же ключе глушился бы записью открытого долга
+                // (найдено ревью).
                 // $key - НОРМАЛИЗОВАННАЯ часть селектора, $b['sel'] - исходная группа целиком.
                 // Для поиска фона предка нужна именно часть: у группы
                 // `.card .card-header.bg-primary, .card .card-header.bg-primary *` первая часть
@@ -593,7 +653,7 @@ final class contrast_analyzer {
                     // Правило 1: пара объявлена рядом.
                     $r = self::ratio($fg, $bg);
                     if ($r < $threshold) {
-                        $found[] = ['sel' => $sel, 'combo' => $combo, 'fg' => $fg,
+                        $found[] = ['sel' => $sel, 'part' => $key, 'combo' => $combo, 'fg' => $fg,
                                     'bg' => $bg, 'ratio' => round($r, 2), 'rule' => 1];
                     }
                     continue;
@@ -609,7 +669,7 @@ final class contrast_analyzer {
                 if ($ancestorbg !== null) {
                     $r = self::ratio($fg, $ancestorbg);
                     if ($r < $threshold) {
-                        $found[] = ['sel' => $sel, 'combo' => $combo, 'fg' => $fg,
+                        $found[] = ['sel' => $sel, 'part' => $key, 'combo' => $combo, 'fg' => $fg,
                                     'bg' => $ancestorbg, 'ratio' => round($r, 2), 'rule' => 3];
                     }
                     continue;
@@ -629,7 +689,7 @@ final class contrast_analyzer {
                     }
                 }
                 if ($bestratio < $threshold) {
-                    $found[] = ['sel' => $sel, 'combo' => $combo, 'fg' => $fg,
+                    $found[] = ['sel' => $sel, 'part' => $key, 'combo' => $combo, 'fg' => $fg,
                                 'bg' => $bestbg, 'ratio' => round($bestratio, 2), 'rule' => 2];
                 }
             }
