@@ -343,8 +343,15 @@ final class contrast_analyzer {
         if (stripos($sel, 'unics') !== false) {
             return true;
         }
-        if (isset(self::ours_selectors()[$sel])) {
-            return true;
+        // По ЧАСТЯМ группы: находка рождается на одной части, а сообщается с групповым селектором
+        // того правила, что победило в слиянии, - и группа эта бывает ядровой. Сверка строки
+        // целиком тогда объявляла находку чужой и молча ее теряла. Так пропал дефект условия
+        // вопроса, пойманный мутацией уже после починки (2026-08-28).
+        $ours = self::ours_selectors();
+        foreach (explode(',', $sel) as $part) {
+            if (isset($ours[trim($part)])) {
+                return true;
+            }
         }
         foreach (self::CORE_OWNED as $core) {
             if (strpos($sel, $core) !== false) {
@@ -389,8 +396,13 @@ final class contrast_analyzer {
                 'В собранном CSS нет маркера .unics-scss-boundary: очистите кеши темы');
         }
         foreach ($decls as $d) {
-            if ($d['ord'] > $boundary) {
-                self::$ourselectors[$d['sel']] = true;
+            if ($d['ord'] <= $boundary) {
+                continue;
+            }
+            // Индексируем и группу целиком, и каждую ее часть.
+            self::$ourselectors[$d['sel']] = true;
+            foreach (explode(',', $d['sel']) as $part) {
+                self::$ourselectors[trim($part)] = true;
             }
         }
         return self::$ourselectors;
@@ -493,9 +505,20 @@ final class contrast_analyzer {
         // Разметить каждый блок его схемным скоупом один раз, а не на каждой комбинации.
         $scoped = [];
         foreach ($blocks as $sel => $props) {
-            [$required, $normal] = self::scheme_scope($sel);
-            $scoped[] = ['sel' => $sel, 'props' => $props,
-                         'required' => $required, 'normal' => $normal];
+            // Групповой селектор разбираем НА ЧАСТИ: правило `html.unics-a11y-dark .btn-outline-primary,
+            // html.unics-a11y-dark .btn-outline-secondary, ...` относится к каждой из них, а слияние
+            // по строке целиком его с одиночным `.btn-outline-primary` не сводило. Отсюда рождались
+            // ложные срабатывания: базовое светлое правило выглядело неперекрытым в темной схеме,
+            // хотя перекрыто оно правилом с БОЛЬШЕЙ специфичностью (найдено 2026-08-28).
+            foreach (explode(',', $sel) as $part) {
+                $part = trim($part);
+                if ($part === '') {
+                    continue;
+                }
+                [$required, $normal] = self::scheme_scope($part);
+                $scoped[] = ['sel' => $sel, 'props' => $props,
+                             'required' => $required, 'normal' => $normal];
+            }
         }
 
         $found = [];
@@ -547,7 +570,12 @@ final class contrast_analyzer {
                 }
             }
 
-            foreach ($winners as $b) {
+            foreach ($winners as $key => $b) {
+                // $key - НОРМАЛИЗОВАННАЯ часть селектора, $b['sel'] - исходная группа целиком.
+                // Для поиска фона предка нужна именно часть: у группы
+                // `.card .card-header.bg-primary, .card .card-header.bg-primary *` первая часть
+                // ведет к белому фону `.card`, а вторая - к брендовой заливке самого заголовка.
+                // Разбор по группе давал белое на белом, 1.00:1, там где на деле 4.6:1.
                 $sel = $b['sel'];
                 $props = $b['props'];
                 $fgraw = $props['color'] ?? null;
@@ -577,7 +605,7 @@ final class contrast_analyzer {
                 // сверяется с белым (самой щадящей из поверхностей) и молча проходит:
                 // так проскочили .note-date 4.33:1 на тинте и ховер навбара 2.16:1
                 // на всегда-темной подложке.
-                $ancestorbg = self::ancestor_background($sel, $winners, $tokens);
+                $ancestorbg = self::ancestor_background($key, $winners, $tokens);
                 if ($ancestorbg !== null) {
                     $r = self::ratio($fg, $ancestorbg);
                     if ($r < $threshold) {

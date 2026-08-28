@@ -133,8 +133,11 @@
             display: inline-block;
             margin-bottom: var(--unics-space-2);
             padding: var(--unics-space-1) var(--unics-space-3);
-            background-color: var(--unics-primary-deep);  // #A93D24 — белый текст 6:1 (AA); сам маркер-полоса яркий
-            color: #fff;
+            // Заливка - КНОПОЧНЫЙ тон: он единственный не переопределяется акцентом, и белый на
+            // нем держит 4.6:1 в любой схеме. --unics-primary-deep акцент переопределяет светлым
+            // тоном (в зеленой схеме #8fe3a3), и белая подпись давала 1.53:1.
+            background-color: var(--unics-primary-btn);
+            color: var(--unics-on-primary);
             border-radius: var(--unics-radius-pill);
             font-size: 0.8125rem;
             font-weight: 600;

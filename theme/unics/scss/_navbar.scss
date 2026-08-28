@@ -12,7 +12,14 @@
 
         &:hover,
         &:focus {
-            color: var(--unics-primary) !important;
+            // Текст остается БЕЛЫМ (около 11:1 на темном навбаре), а подсказка наведения уходит
+            // в подчеркивание: там порог 3.0, и акцент законен. Раньше акцентом красился сам
+            // текст, а навбар темный ВСЕГДА - в фиолетовой схеме выходило 1.82:1, то есть пункт
+            // меню при наведении почти пропадал (найдено 2026-08-28).
+            text-decoration: underline;
+            text-decoration-thickness: 2px;
+            text-underline-offset: 4px;
+            text-decoration-color: var(--unics-primary) !important;
         }
     }
 
@@ -69,8 +76,11 @@
     color: var(--unics-primary-deep);
 }
 .breadcrumb-item + .breadcrumb-item::before {
-    color: var(--unics-dark);
-    opacity: 0.55;
+    // --unics-dark темный ВСЕГДА и схемой не переопределяется: в темной схеме разделитель
+    // хлебных крошек давал 1.26:1, то есть пропадал совсем. --unics-text-muted переопределен
+    // под каждую схему и держит AA (найдено 2026-08-28).
+    color: var(--unics-text-muted);
+    opacity: 0.75;
 }
 
 // Баннер шапки #page-header. По умолчанию Boost красит его в --unics-primary:

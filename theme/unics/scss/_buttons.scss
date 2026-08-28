@@ -88,14 +88,21 @@
 }
 
 .btn-outline-primary {
-    color: var(--unics-primary-text);
+    // Пара «текст + фон» закреплена ОБЕИМИ сторонами токенами тинта: они константы, не зависят
+    // от выбранного акцента, и потому дают одни и те же 6:1 в любой схеме. Раньше текст брался
+    // из --unics-primary-text, который акцент переопределяет: в зеленом акценте выходило 4.31:1
+    // на персиковой заливке ниже.
+    color: var(--unics-on-tint);
     border-color: var(--unics-primary);
 
     &:hover,
     &:focus {
-        background-color: var(--unics-primary);
-        border-color: var(--unics-primary);
-        color: #fff;
+        // Заливка при наведении - КНОПОЧНЫЙ тон, а не акцент. --unics-primary (#F26545) дает с
+        // белым лишь 3.12:1: он законен как акцент (порог 3.0), но не как фон под текстом.
+        // Токены под это давно есть и описаны в _variables.scss.
+        background-color: var(--unics-primary-btn);
+        border-color: var(--unics-primary-btn);
+        color: var(--unics-on-primary);
     }
 }
 
@@ -108,7 +115,8 @@
 // При :hover Bootstrap заливает кнопку цветом контура — это сохраняем.
 // -----------------------------------------------------------------------------
 .btn-outline-primary {
-    background-color: #FFE6DC;   // light peach, виден на белом за счёт hue contrast
+    // Тот же тинт, что и у текста выше: пара живет одним токеном, а не сырым hex.
+    background-color: var(--unics-tint-bg);
 }
 
 .btn-outline-secondary,

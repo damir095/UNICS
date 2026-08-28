@@ -35,51 +35,23 @@ final class contrast_guard_test extends \advanced_testcase {
     ];
 
     /**
-     * Дефекты, ставшие видимыми 2026-08-28 после расширения охвата стража, и ЕЩЕ НЕ разобранные.
+     * Дефекты, вскрытые расширением охвата 2026-08-28. Из одиннадцати починены десять.
      *
-     * Это НЕ allowlist. В allowlist попадает пара, признанная приемлемой ПОСЛЕ замера; сюда -
-     * пара, которую страж раньше не судил вовсе, потому что определял принадлежность по слову
-     * `unics` в селекторе, а партиалы `_core-*.scss` намеренно красят ядровые селекторы. Охват
-     * вырос на 202 группы правил, то есть примерно на треть.
-     *
-     * Список обязан ТАЯТЬ ДО НУЛЯ, и тест сверяет его ровно: починив дефект, надо убрать строку,
-     * иначе тест упадет на устаревшем перечне. Добавлять сюда новое нельзя.
-     *
-     * Разбор каждой находки - отдельная задача: часть может оказаться артефактом самого стража
-     * (правило 3 берет фон ПРЕДКА и не знает ни специфичности, ни настоящего DOM), а часть -
-     * настоящим дефектом, который годами не видел никто.
+     * Списки не «на всякий случай», а рабочий механизм: тест
+     * сверяет их РОВНО, поэтому непустой список без соответствующего дефекта валит тест, а
+     * дефект без списка - тоже. Появится новая партия находок - её сюда и запишут.
      */
     private const OPEN_AFTER_WIDENING = [
-        '.activity-completion .completion-icon' =>
-            '2.28:1 в схеме dark+accent-purple (#6b3fa0 на #1a1d24), правило 2',
-        '.alert.alert-warning' =>
-            '4.28:1 в схеме light (#b25e09 на #fff4e0), правило 1',
-        '.breadcrumb-item+.breadcrumb-item::before' =>
-            '1.26:1 в схеме dark (#292f3b на #1a1d24), правило 2',
-        '.btn-outline-primary' =>
-            '1.29:1 в схеме dark+contrast+accent-green (#8fe3a3 на #ffe6dc), правило 1',
-        '.btn-outline-primary:hover,.btn-outline-primary:focus' =>
-            '3.12:1 в схеме light (#ffffff на #f26545), правило 1',
-        '.card .card-header.bg-primary,.card .card-header.bg-primary *' =>
-            '1.00:1 в схеме light (#ffffff на #ffffff), правило 3',
-        '.course-content li.section.current::before' =>
-            '1.53:1 в схеме dark+contrast+accent-green (#ffffff на #8fe3a3), правило 1',
-        '.navbar .navbar-brand:hover,.navbar .navbar-brand:focus,'
-            . '.navbar .nav-link:hover,.navbar .nav-link:focus' =>
-            '1.82:1 в схеме accent-purple (#6b3fa0 на #292f3b), правило 3',
-        '.path-mod-quiz #mod_quiz_navblock .qnbutton.notanswered' =>
-            '4.28:1 в схеме light (#b25e09 на #fff4e0), правило 1',
-        '.que .formulation' =>
-            '1.22:1 в схеме dark (#001a1e на #242832), правило 1',
+        '.path-mod-quiz #mod_quiz_navblock .qnbutton.incorrect,'
+            . '.path-mod-quiz #mod_quiz_navblock .qnbutton.incorrect .trafficlight' =>
+            '4.19:1 в схеме light (#ca3120 на #ffdddd), правило 1. Наше правило задает пару '
+            . '--unics-error на --unics-error-bg (около 8:1); замер берет ЯДРОВЫЕ #ca3120 и #fdd, '
+            . 'то есть слияние выбрало не ту пару. Нужен отдельный разбор: либо остаток артефакта '
+            . 'группировки, либо мы и правда не перекрываем светофорный кружок.',
     ];
 
     /** То же для брендовых заливок без закрепленного цвета текста. */
-    private const OPEN_FILLS_AFTER_WIDENING = [
-        '.btn-primary',
-        '.btn-primary:hover,.btn-primary:focus,.btn-primary:active',
-        '.card .card-header.bg-primary',
-        '.que .badge.bg-primary',
-    ];
+    private const OPEN_FILLS_AFTER_WIDENING = [];
 
     protected function setUp(): void {
         parent::setUp();
@@ -164,9 +136,25 @@ final class contrast_guard_test extends \advanced_testcase {
             '.unics-staff-course .unics-staff-sec-bar'       => 'Полоса прогресса раздела (педагог): градиент без текста внутри.',
         ];
 
+        // Свойства сливаем по ЧАСТЯМ группового селектора, а не по строке целиком. Цвет на
+        // брендовой заливке проект закрепляет соседним правилом на более широком наборе
+        // селекторов (`.btn-primary, .btn-primary:hover, ... { color: ... }`), и проверка «есть ли
+        // color в ТОМ ЖЕ блоке» объявляла такие заливки незакрепленными - четыре ложных
+        // срабатывания из четырех (найдено 2026-08-28).
         $bysel = [];
+        $fillsel = [];
         foreach (contrast_analyzer::declarations(contrast_analyzer::css()) as $d) {
-            $bysel[$d['sel']][$d['prop']] = $d['val'];
+            foreach (explode(',', $d['sel']) as $part) {
+                $part = trim($part);
+                if ($part === '') {
+                    continue;
+                }
+                $bysel[$part][$d['prop']] = $d['val'];
+                if (in_array($d['prop'], ['background', 'background-color'], true)) {
+                    // Для сообщения нужен исходный вид правила, а не разобранная часть.
+                    $fillsel[$part] = $d['sel'];
+                }
+            }
         }
 
         $lines = [];

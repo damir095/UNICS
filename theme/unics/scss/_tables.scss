@@ -60,8 +60,13 @@
 
         &:hover,
         &:focus {
-            color: var(--unics-primary-text);
+            // Цвет НЕ меняем: подчеркивание уже дает подсказку наведения, а --unics-primary-text
+            // акцент переопределяет, и на тонированной шапке выходило 4.37:1 - чуть ниже AA.
+            // Подчеркивание красим акцентом: там порог 3.0, и он законен.
             text-decoration: underline;
+            text-decoration-thickness: 2px;
+            text-underline-offset: 3px;
+            text-decoration-color: var(--unics-primary);
         }
     }
 }

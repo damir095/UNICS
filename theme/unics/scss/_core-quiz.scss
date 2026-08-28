@@ -28,6 +28,11 @@
 
     // Формулировка вопроса + варианты - на мягкой поверхности с рамкой/радиусом.
     .formulation {
+        // Цвет закрепляем ВМЕСТЕ с фоном. Ядро задает `.que .formulation` пару #001a1e на
+        // светло-голубом; перекрыв один только фон, мы получали в темной схеме темный текст на
+        // темной поверхности - 1.22:1, условие вопроса ребенок читал бы наощупь. Найдено, когда
+        // страж контраста начал судить ядровые селекторы, которые красим мы.
+        color: var(--unics-text);
         background-color: var(--unics-surface);
         border: 1px solid var(--unics-border);
         border-radius: var(--unics-radius);
@@ -99,6 +104,10 @@
     // белом - 5.0:1 (AA). Левая полоса --unics-info сохраняет "инфо"-семантику.
     .outcome,
     .feedback {
+        // Цвет закрепляем ВМЕСТЕ с фоном. Рассуждение выше учло только светлую схему: ядровый
+        // #90682f дает на белом 5.0:1, но --unics-surface в темной схеме - #242832, и там выходит
+        // 2.95:1. Тот же корень, что у .formulation: перекрыт фон, а текст остался чужой.
+        color: var(--unics-text);
         background-color: var(--unics-surface);
         border: 1px solid var(--unics-info);
         border-left-width: 4px;
@@ -113,6 +122,10 @@
     // светлый текст = 4.68:1 (AA). Утилита .bg-primary у Bootstrap идёт с !important.
     .badge.bg-primary {
         background-color: var(--unics-primary-btn) !important;
+        // Цвет ЗАКРЕПЛЯЕМ, а не полагаемся на авто-контраст Bootstrap: перекрасив один фон, мы
+        // оставляли текст на усмотрение чужого правила, и любая правка руля доступности могла
+        // его затемнить молча.
+        color: var(--unics-on-primary) !important;
     }
 }
 
@@ -177,9 +190,9 @@
     // Просмотр: вопрос без ответа - нейтральный + тире.
     .qnbutton.notanswered {
         background-color: var(--unics-warning-bg);
-        color: var(--unics-warning);
+        color: var(--unics-warning-text);
 
-        &::after { content: "\2013"; color: var(--unics-warning); }   // –
+        &::after { content: "\2013"; color: var(--unics-warning-text); }   // –
     }
 
     // Текущая страница/вопрос - сильная фирменная рамка (форма, не только цвет).

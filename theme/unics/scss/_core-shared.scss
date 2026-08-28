@@ -132,8 +132,8 @@
     }
     &.alert-warning {
         background-color: var(--unics-warning-bg);
-        border-color: var(--unics-warning);
-        color: var(--unics-warning);
+        border-color: var(--unics-warning);   // рамка: порог 3.0, --unics-warning законен
+        color: var(--unics-warning-text);     // текст: нужен 4.5, у --unics-warning лишь 4.28
     }
     &.alert-danger,
     &.alert-error {

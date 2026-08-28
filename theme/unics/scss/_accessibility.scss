@@ -81,6 +81,10 @@ html.unics-a11y-dark {
     --unics-success: var(--unics-d-success-tx); --unics-success-bg: var(--unics-d-success-bg);
     --unics-error:   var(--unics-d-danger-tx);  --unics-error-bg:   var(--unics-d-danger-bg);
     --unics-warning: var(--unics-d-warning-tx); --unics-warning-bg: var(--unics-d-warning-bg);
+    // Текст предупреждения: в светлой схеме он ТЕМНЕЕ заливки (4.97:1 против 4.28:1 у самого
+    // --unics-warning), а в темной все наоборот - фон темный, и темный текст на нем дает 2.32:1.
+    // Первая редакция правки этого не учла: починила светлую и сломала темную.
+    --unics-warning-text: var(--unics-d-warning-tx);
     --unics-info:    var(--unics-d-info-tx);    --unics-info-bg:    var(--unics-d-info-bg);
     --unics-neutral: var(--unics-text-muted);
 
