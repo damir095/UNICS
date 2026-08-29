@@ -110,24 +110,45 @@ n - номер задания из списка выше, code - код элем
      */
     public static function apply(int $codifier_id, array $pairs, int $userid): int {
         global $DB;
+        if (!$pairs) {
+            // Страница зовет apply() безусловно, в том числе когда методист не отметил ничего.
+            // Без этого выхода пустая отправка формы стоила бы двух подготовительных выборок.
+            return 0;
+        }
         $own_elements = array_flip(array_map('intval', $DB->get_fieldset_select(
             'unics_codifier_element', 'id', 'codifier_id = :cid', ['cid' => $codifier_id])));
         $own_questions = array_flip(self::subject_bankentry_ids($codifier_id));
 
-        // Уже существующие привязки берем ОДНИМ запросом. Раньше на каждую пару шел свой
-        // record_exists, а следом link_question делал ровно такую же выборку - два одинаковых
-        // запроса на пару. На пачке в полсотни вопросов это сотня лишних обращений к базе.
+        // Уже существующие привязки берем ОДНИМ запросом - но ТОЛЬКО по присланным вопросам.
+        // Первая редакция тянула все привязки дисциплины: на зрелом предмете это тысячи строк
+        // ради тридцати проверок, то есть ограниченная стоимость менялась на неограниченную
+        // (найдено ревью). Условие по (target_type, target_id) ложится на индекс ix_link_target.
+        //
+        // JOIN к элементам тут тоже был лишним и ВРЕДНЫМ: набор элементов уже собран выше, а
+        // соединение делало проверку уже уникального индекса - осиротевшая привязка (элемент
+        // удален, строка осталась) в выборку не попадала, и следом insert падал на уникальном
+        // индексе, роняя всю пачку.
+        $beids = [];
+        foreach ($pairs as $pair) {
+            $beid = (int)($pair['bankentryid'] ?? 0);
+            if ($beid > 0) {
+                $beids[$beid] = true;
+            }
+        }
+        if (!$beids || !$own_elements) {
+            return 0;
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal(array_keys($beids), SQL_PARAMS_NAMED, 'be');
+        // Тип обязателен: cmid и questionbankentryid - независимые последовательности, они
+        // пересекаются. Без него привязка активности к тому же числу выдала бы себя за привязку
+        // вопроса, и вопрос молча остался бы вне пула и вне CAT.
+        $params['type'] = \local_unics\codifier_link_manager::TYPE_QUESTION;
         $existing = [];
-        $rs = $DB->get_recordset_sql(
-            "SELECT l.id, l.element_id, l.target_id
-               FROM {unics_codifier_link} l
-               JOIN {unics_codifier_element} e ON e.id = l.element_id
-              WHERE e.codifier_id = :cid AND l.target_type = :type",
-            ['cid' => $codifier_id, 'type' => \local_unics\codifier_link_manager::TYPE_QUESTION]);
-        foreach ($rs as $row) {
+        foreach ($DB->get_records_select('unics_codifier_link',
+            "target_type = :type AND target_id $insql", $params, '', 'id, element_id, target_id') as $row) {
             $existing[$row->element_id . ':' . $row->target_id] = true;
         }
-        $rs->close();
 
         $created = 0;
         foreach ($pairs as $pair) {

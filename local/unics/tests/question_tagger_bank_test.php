@@ -2,6 +2,7 @@
 namespace local_unics;
 
 use local_unics\ai\question_tagger;
+use local_unics\codifier_link_manager;
 
 /**
  * Выборка неразмеченных вопросов и запись привязок ([[codifier-bank-tagging-design]]).
@@ -204,34 +205,92 @@ final class question_tagger_bank_test extends \advanced_testcase {
     }
 
     /**
-     * Повторная разметка тех же пар не должна стоить запроса на пару.
+     * Стоимость повторной разметки НЕ растет с числом пар.
      *
      * Раньше на каждую пару шел `record_exists`, а следом `link_question` делал ровно такую же
-     * выборку - два одинаковых запроса на пару. Теперь существующие привязки берутся ОДНИМ
-     * запросом, и повтор обходится без обращений к базе вовсе.
+     * выборку - два одинаковых запроса на пару. Теперь существующие привязки берутся одним
+     * запросом по присланным вопросам, и повтор не стоит ни одного обращения сверх подготовки.
      *
-     * Тест считает запросы, а не время: время на стенде шумит, а число обращений - это ровно то
-     * свойство, ради которого правка делалась.
+     * Утверждение - именно про НЕИЗМЕННОСТЬ, а не про абсолютный порог: первая редакция теста
+     * требовала «меньше шести запросов» при измеренных четырех, и любая новая подготовительная
+     * выборка роняла бы ее с сообщением про запрос на пару, которого там нет (найдено ревью).
      */
-    public function test_reapplying_the_same_pairs_costs_no_query_per_pair(): void {
+    public function test_reapplying_costs_the_same_for_any_batch_size(): void {
         global $DB, $USER;
         $pairs = [];
-        for ($i = 0; $i < 6; $i++) {
+        for ($i = 0; $i < 8; $i++) {
             $pairs[] = ['bankentryid' => $this->make_question('Вопрос ' . $i),
                         'element_id' => $this->element];
         }
+        $this->assertSame(8, question_tagger::apply($this->codifier, $pairs, (int)$USER->id));
 
-        $this->assertSame(6, question_tagger::apply($this->codifier, $pairs, (int)$USER->id));
+        $cost = function (array $batch) use ($DB, $USER): int {
+            $before = $DB->perf_get_queries();
+            $this->assertSame(0, question_tagger::apply($this->codifier, $batch, (int)$USER->id));
+            return $DB->perf_get_queries() - $before;
+        };
 
-        // Второй заход: все пары уже привязаны, создавать нечего.
-        $before = $DB->perf_get_queries();
-        $this->assertSame(0, question_tagger::apply($this->codifier, $pairs, (int)$USER->id));
-        $spent = $DB->perf_get_queries() - $before;
+        $small = $cost(array_slice($pairs, 0, 4));
+        $large = $cost($pairs);
 
-        // Три подготовительные выборки (элементы дисциплины, вопросы дисциплины, привязки) плюс
-        // запас на устройство самих выборок. Ключевое - число НЕ растет с числом пар: на шести
-        // парах прежний код тратил бы двенадцать запросов сверх подготовки.
-        $this->assertLessThan(count($pairs), $spent, sprintf(
-            'на повтор шести пар ушло %d запросов - похоже, запрос на пару вернулся', $spent));
+        $this->assertSame($small, $large, sprintf(
+            'повтор 4 пар стоил %d запросов, 8 пар - %d: стоимость растет с числом пар',
+            $small, $large));
+    }
+
+    /**
+     * Привязка АКТИВНОСТИ с тем же числом не должна выдавать себя за привязку вопроса.
+     *
+     * cmid и questionbankentryid - независимые последовательности, и они пересекаются: на стенде
+     * bankentryid доходит до 366, а cmid идут с 497. Выборка существующих привязок обязана
+     * фильтровать по типу, иначе вопрос молча останется без привязки - и вне пула, и вне CAT.
+     *
+     * Мутация «убрать условие по типу» проходила все прежние тесты (найдено ревью).
+     */
+    public function test_activity_link_with_the_same_id_is_not_mistaken_for_a_question(): void {
+        global $DB, $USER;
+        $beid = $this->make_question('Вопрос про дроби');
+
+        // Привязка активности с тем же числом в target_id.
+        $DB->insert_record('unics_codifier_link', (object)[
+            'element_id'             => $this->element,
+            'target_type'            => codifier_link_manager::TYPE_ACTIVITY,
+            'target_id'              => $beid,
+            'weight'                 => null,
+            'created_by_mdl_user_id' => (int)$USER->id,
+            'timecreated'            => time(),
+        ]);
+
+        $created = question_tagger::apply($this->codifier,
+            [['bankentryid' => $beid, 'element_id' => $this->element]], (int)$USER->id);
+
+        $this->assertSame(1, $created, 'привязка вопроса обязана появиться');
+        $this->assertTrue($DB->record_exists('unics_codifier_link', [
+            'element_id'  => $this->element,
+            'target_type' => codifier_link_manager::TYPE_QUESTION,
+            'target_id'   => $beid,
+        ]));
+    }
+
+    /**
+     * Одна и та же пара дважды в пачке считается ОДНИМ созданием.
+     *
+     * Второй записи в базе не появится и без пометки - link_question идемпотентен, - но счетчик
+     * соврал бы методисту: «Привязано вопросов: 2» на одну привязку. Мутация «убрать пометку»
+     * проходила все прежние тесты (найдено ревью).
+     */
+    public function test_duplicate_pair_in_one_batch_counts_once(): void {
+        global $DB, $USER;
+        $beid = $this->make_question('Вопрос про дроби');
+        $pair = ['bankentryid' => $beid, 'element_id' => $this->element];
+
+        $created = question_tagger::apply($this->codifier, [$pair, $pair], (int)$USER->id);
+
+        $this->assertSame(1, $created, 'дубль в пачке - одно создание, а не два');
+        $this->assertSame(1, $DB->count_records('unics_codifier_link', [
+            'element_id'  => $this->element,
+            'target_type' => codifier_link_manager::TYPE_QUESTION,
+            'target_id'   => $beid,
+        ]));
     }
 }
