@@ -310,7 +310,11 @@ class shell {
         // Педагог (роль 5 editingteacher / роль 6 teacher) или администратор сайта.
         $can_courses = !access::is_nonediting_teacher() || $is_admin;
 
-        $students = [$item('Мои учащиеся', '/local/unics/pages/my_students.php', 'i/users')];
+        $students = [
+            $item('Мои учащиеся', '/local/unics/pages/my_students.php', 'i/users'),
+            // Журнал помощника - рядом с учащимися: это чтение про них, а не про ИИ.
+            $item('Вопросы помощнику', '/local/unics/pages/assistant_log.php', 'i/question'),
+        ];
         if ($is_admin) {
             $students[] = $item('Пользователи', '/local/unics/pages/users.php', 'i/user');
             $students[] = $item('Импорт из CSV', '/local/unics/pages/import_users.php', 'i/import');

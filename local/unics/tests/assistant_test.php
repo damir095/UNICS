@@ -178,6 +178,73 @@ final class assistant_test extends \advanced_testcase {
         $this->assertSame('Вопрос без материала', $row->question);
     }
 
+    /**
+     * Педагог видит переписку ТОЛЬКО закрепленных за ним учащихся.
+     *
+     * Журнал ассистента - такой же персональный материал ребенка, как оценки: чужой педагог не
+     * должен его читать. Утечка родителю уже случалась (роль на системном контексте вместо
+     * контекста своего ребенка), и повторять ее на новом журнале нельзя.
+     */
+    public function test_teacher_sees_only_bound_students(): void {
+        global $DB;
+        $mine = $this->getDataGenerator()->create_user();
+        $alien = $this->getDataGenerator()->create_user();
+        $teacheruser = $this->getDataGenerator()->create_user();
+
+        $region = (int)$DB->insert_record('unics_regions', (object)['name' => 'Тюменская область']);
+        $district = (int)$DB->insert_record('unics_districts',
+            (object)['region_id' => $region, 'name' => 'Муниципалитет']);
+        $org = (int)$DB->insert_record('unics_organizations', (object)[
+            'district_id' => $district, 'name' => 'Школа', 'short_name' => 'Ш', 'org_type' => 1,
+        ]);
+        $mkstudent = function (int $userid) use ($DB, $org): int {
+            return (int)$DB->insert_record('unics_students', (object)[
+                'mdl_user_id' => $userid, 'organization_id' => $org, 'class_number' => 7,
+                'class_letter' => 'А', 'difficulty_level' => 2,
+            ]);
+        };
+        $mineid = $mkstudent((int)$mine->id);
+        $alienid = $mkstudent((int)$alien->id);
+
+        $teacherid = (int)$DB->insert_record('unics_teachers', (object)[
+            'mdl_user_id' => (int)$teacheruser->id, 'organization_id' => $org,
+        ]);
+        $DB->insert_record('unics_teacher_student', (object)[
+            'teacher_id' => $teacherid, 'student_id' => $mineid,
+        ]);
+
+        // Чужой ученик привязан к ДРУГОМУ педагогу, а не просто «ни к кому». Без этого запросу
+        // нечего различать: он вернул бы ту же единственную строку и с любым условием, и мутация
+        // «не учитывать привязку» прошла бы незамеченной.
+        $otherteacher = (int)$DB->insert_record('unics_teachers', (object)[
+            'mdl_user_id' => (int)$this->getDataGenerator()->create_user()->id,
+            'organization_id' => $org,
+        ]);
+        $DB->insert_record('unics_teacher_student', (object)[
+            'teacher_id' => $otherteacher, 'student_id' => $alienid,
+        ]);
+
+        $visible = assistant::visible_student_userids((int)$teacheruser->id);
+
+        $this->assertSame([(int)$mine->id], $visible,
+            'чужой ученик в журнал педагога попадать не должен');
+    }
+
+    /** Пользователь без роли и привязок не читает ничего. */
+    public function test_stranger_sees_nothing(): void {
+        $nobody = $this->getDataGenerator()->create_user();
+
+        $this->assertSame([], assistant::visible_student_userids((int)$nobody->id));
+    }
+
+    /** Полный админ читает всё: null означает «без ограничения». */
+    public function test_admin_sees_everything(): void {
+        global $USER;
+        $this->setAdminUser();
+
+        $this->assertNull(assistant::visible_student_userids((int)$USER->id));
+    }
+
     /** Вопрос в банке курса. */
     private function make_question(string $text): void {
         $gen = $this->getDataGenerator()->get_plugin_generator('core_question');

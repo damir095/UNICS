@@ -188,6 +188,48 @@ class assistant {
 Вопрос ученика: {$question}";
     }
 
+    /**
+     * Чьи диалоги вправе читать этот сотрудник.
+     *
+     * Те же три режима, что у «Моих учащихся», и это не совпадение: журнал ассистента - такой же
+     * персональный материал ребенка, и область видимости у него обязана быть той же, иначе
+     * педагог соседней школы прочитает переписку чужого ученика.
+     *
+     * @return int[]|null список mdl_user_id; null означает «все» (полный админ)
+     */
+    public static function visible_student_userids(int $viewerid): ?array {
+        global $DB;
+
+        $ctx = \context_system::instance();
+        $teacher = $DB->get_record('unics_teachers', ['mdl_user_id' => $viewerid], 'id');
+
+        // Полный админ без педагогического профиля видит всех. Проверка manageorg идет ДО ветки
+        // педагога: у методиста тоже есть запись в unics_teachers.
+        if (!$teacher && has_capability('local/unics:manage', $ctx, $viewerid)) {
+            return null;
+        }
+
+        if (has_capability('local/unics:manageorg', $ctx, $viewerid)) {
+            [$where, $params] = \local_unics\identity\scope_checker::org_filter_sql($viewerid, 'o');
+            return array_map('intval', $DB->get_fieldset_sql(
+                "SELECT s.mdl_user_id
+                   FROM {unics_students} s
+                   JOIN {unics_organizations} o ON o.id = s.organization_id
+                  WHERE {$where}", $params));
+        }
+
+        if ($teacher) {
+            return array_map('intval', $DB->get_fieldset_sql(
+                "SELECT s.mdl_user_id
+                   FROM {unics_teacher_student} ts
+                   JOIN {unics_students} s ON s.id = ts.student_id
+                  WHERE ts.teacher_id = :tid", ['tid' => (int)$teacher->id]));
+        }
+
+        // Ни админ, ни методист, ни педагог - читать нечего.
+        return [];
+    }
+
     /** Запись в журнал и возврат исхода. */
     private function log(int $userid, int $courseid, string $question, ?string $answer,
                          string $outcome): object {
