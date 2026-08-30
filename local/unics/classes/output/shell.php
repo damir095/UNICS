@@ -171,7 +171,11 @@ class shell {
             $sid    = (int)$student_rec->id;
             $groups = $base;
 
-            $learn = [$item('Мой маршрут', '/local/unics/pages/my_path.php', 'i/competencies')];
+            $learn = [
+                $item('Мой маршрут', '/local/unics/pages/my_path.php', 'i/competencies'),
+                // Помощник - в «Учебе», рядом с маршрутом: ребенок ищет его там же, где урок.
+                $item('Помощник', '/local/unics/pages/assistant.php', 'i/question'),
+            ];
             // «Заметки педагога» - только в контексте курса и если они есть (зеркало
             // extend_navigation; на страницах /local/unics/* контекст курса появится с
             // охватом курса в следующем срезе).
