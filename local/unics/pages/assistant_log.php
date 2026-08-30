@@ -18,6 +18,11 @@ require_login();
 global $USER, $DB, $PAGE, $OUTPUT;
 
 local_unics_require_not_student();
+// Право обязательно: require_not_student() отсекает только тех, у кого есть строка в
+// unics_students, поэтому родитель и вообще любой пользователь без ролей страницу открывали.
+// Сегодня они увидели бы пустой список, но безопасность держалась бы на этом «сегодня» - ровно
+// та форма, в которой уже случалась утечка родителю (найдено ревью).
+require_capability('local/unics:viewstudents', context_system::instance());
 
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url(new moodle_url('/local/unics/pages/assistant_log.php'));
@@ -85,7 +90,12 @@ foreach ($rows as $row) {
         s(trim($row->lastname . ' ' . $row->firstname)),
         $row->coursename !== null ? format_string($row->coursename) : '-',
         s($row->question),
-        $row->answer !== null ? format_text((string)$row->answer, FORMAT_MARKDOWN) : '-',
+        $row->answer !== null
+            ? ($row->outcome === assistant::AI_FAILED
+                // У отказа в этом поле лежит техническая причина, а не ответ ребенку.
+                ? html_writer::span(s($row->answer), 'text-muted')
+                : format_text((string)$row->answer, FORMAT_MARKDOWN))
+            : '-',
         html_writer::span($label, 'badge bg-' . $style),
     ];
 }

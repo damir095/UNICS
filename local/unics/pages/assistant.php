@@ -46,6 +46,9 @@ $helper = new assistant();
 if ($courseid && optional_param('ask', 0, PARAM_INT) && confirm_sesskey()) {
     $question = trim(optional_param('question', '', PARAM_TEXT));
     if ($question !== '') {
+        // Сессию отпускаем ДО похода в сеть: обращение к ИИ занимает секунды, и все это время
+        // остальные вкладки ребенка висели бы на блокировке сессии (найдено ревью).
+        \core\session\manager::write_close();
         $helper->ask((int)$USER->id, $courseid, $question);
     }
     redirect(new moodle_url('/local/unics/pages/assistant.php', ['courseid' => $courseid]));

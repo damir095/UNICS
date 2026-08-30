@@ -26,12 +26,17 @@ class assistant {
     /** Сколько знаков учебного текста уходит в промт. */
     public const SOURCE_LEN = 6000;
 
+    /** Сколько знаков вопроса уходит в промт. */
+    public const QUESTION_LEN = 500;
+
     /** Исходы, они же значения поля outcome. */
     public const ANSWERED = 'answered';
     public const NO_MATERIAL = 'no_material';
     public const LOOKS_LIKE_TASK = 'looks_like_task';
     public const LIMIT = 'limit';
     public const AI_FAILED = 'ai_failed';
+    /** Пустой вопрос: в журнал не пишется, это не событие. */
+    public const EMPTY_QUESTION = 'empty';
 
     /** @var ai_generator */
     private ai_generator $gen;
@@ -51,13 +56,19 @@ class assistant {
     public function ask(int $userid, int $courseid, string $question): object {
         global $DB;
 
-        $question = trim($question);
+        // Длину режем НА СЕРВЕРЕ: maxlength в форме снимается в браузере одним движением, а
+        // полмегабайта в промте сожгли бы дневной лимит одним вопросом (найдено ревью).
+        $question = \core_text::substr(trim($question), 0, self::QUESTION_LEN);
         if ($question === '') {
-            return $this->log($userid, $courseid, $question, null, self::NO_MATERIAL);
+            // Пустой вопрос - НЕ «нет материала»: тот исход велит педагогу добавить материал,
+            // которого может не хватать вовсе не здесь. Просто ничего не делаем.
+            return (object)['id' => 0, 'outcome' => self::EMPTY_QUESTION, 'answer' => null];
         }
 
         if ($this->asked_today($userid) >= self::DAILY_LIMIT) {
-            return $this->log($userid, $courseid, $question, null, self::LIMIT);
+            // Строку НЕ пишем: иначе удерживаемая кнопка отправки хоронит журнал педагога под
+            // сотнями «лимит исчерпан» - ровно ту страницу, ради которой журнал и заведен.
+            return (object)['id' => 0, 'outcome' => self::LIMIT, 'answer' => null];
         }
 
         $source = $this->course_material($userid, $courseid);
@@ -70,11 +81,19 @@ class assistant {
         }
 
         try {
-            $answer = $this->gen->generate_text($this->build_prompt($userid, $source, $question), 700);
+            // Порог длины - КОРОТКИЙ. Промт требует «не больше пяти предложений», а сам отказ
+            // «В нашем материале об этом не написано» - 37 знаков: при обычном пороге в 50 верный
+            // ответ летел бы в мусор как «пустой», и педагог видел бы «ИИ не ответил»
+            // (найдено ревью). Тем же порогом пользуется слепой судья.
+            $answer = $this->gen->generate_text($this->build_prompt($userid, $source, $question),
+                700, ai_generator::MIN_REPLY_LEN_SHORT);
         } catch (\Throwable $e) {
-            // Отказ сети не должен выглядеть как ответ. Причину пишем в журнал: педагог увидит,
-            // что ребенок спрашивал, а ассистент молчал не по своей воле.
-            return $this->log($userid, $courseid, $question, null, self::AI_FAILED);
+            // Отказ сети не должен выглядеть как ответ. Причину пишем В ЖУРНАЛ, а не только
+            // объявляем: раньше исключение выбрасывалось целиком, и «ключ API не настроен»,
+            // отказ Сбера и опечатка в коде выглядели для педагога одинаково (найдено ревью).
+            // Ребенку эта строка не показывается - детская страница печатает свой текст.
+            return $this->log($userid, $courseid, $question,
+                'Причина: ' . \core_text::substr($e->getMessage(), 0, 250), self::AI_FAILED);
         }
 
         return $this->log($userid, $courseid, $question, trim($answer), self::ANSWERED);
@@ -83,9 +102,13 @@ class assistant {
     /** Сколько вопросов ученик задал за последние сутки. */
     public function asked_today(int $userid): int {
         global $DB;
+        // Считаем ТОЛЬКО обращения к ИИ. Лимит заведен ради стоимости токенов, а отказ «нет
+        // материала» токенов не стоит: раньше тридцать бесплодных нажатий на неопубликованном
+        // курсе запирали ребенка на сутки, не потратив ни одного токена (найдено ревью).
         return $DB->count_records_select('unics_assistant_message',
-            'mdl_user_id = :uid AND timecreated > :since',
-            ['uid' => $userid, 'since' => time() - DAYSECS]);
+            'mdl_user_id = :uid AND timecreated > :since AND outcome IN (:ok, :failed)',
+            ['uid' => $userid, 'since' => time() - DAYSECS,
+             'ok' => self::ANSWERED, 'failed' => self::AI_FAILED]);
     }
 
     /**
@@ -103,6 +126,10 @@ class assistant {
                   JOIN {course_modules} cm ON cm.id = m.mdl_course_module_id
                   JOIN {page} p ON p.id = cm.instance
                  WHERE u.mdl_course_id = :cid
+                   -- Скрытую страницу курс ребенку не показывает - и ассистент не должен
+                   -- отвечать по ней. Публикация УМК и видимость модуля живут врозь: педагог
+                   -- прячет страницу, не трогая unics_umk (найдено ревью).
+                   AND cm.visible = 1 AND cm.deletioninprogress = 0
                    AND u.published_at IS NOT NULL
                    AND (u.mdl_group_id IS NULL OR u.mdl_group_id IN (
                            SELECT gm.groupid FROM {groups_members} gm WHERE gm.userid = :uid))
@@ -147,8 +174,12 @@ class assistant {
                JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
                JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
                JOIN {context} c ON c.id = qc.contextid
-              WHERE " . $DB->sql_like('c.path', ':path'),
-            ['path' => $ctx->path . '%']);
+              WHERE (c.id = :ctxid OR " . $DB->sql_like('c.path', ':path') . ")
+                AND qv.status = :ready
+                AND qv.version = (SELECT MAX(v.version) FROM {question_versions} v
+                                   WHERE v.questionbankentryid = qbe.id)",
+            ['ctxid' => $ctx->id, 'path' => $ctx->path . '/%',
+             'ready' => \core_question\local\bank\question_version_status::QUESTION_STATUS_READY]);
 
         foreach ($texts as $text) {
             if (question_sanity::normalize(html_to_text((string)$text, 0, false)) === $needle) {
@@ -209,7 +240,11 @@ class assistant {
             return null;
         }
 
-        if (has_capability('local/unics:manageorg', $ctx, $viewerid)) {
+        // Порядок веток тот же, что в «Моих учащихся», и гейт !$teacher обязателен: у методиста
+        // тоже есть запись в unics_teachers, а у админа она бывает. Без него админ-педагог падал
+        // в ветку скоупа, где записи unics_user_org нет, и получал ПУСТОЙ список вместо своих
+        // учащихся (найдено ревью).
+        if (!$teacher && has_capability('local/unics:manageorg', $ctx, $viewerid)) {
             [$where, $params] = \local_unics\identity\scope_checker::org_filter_sql($viewerid, 'o');
             return array_map('intval', $DB->get_fieldset_sql(
                 "SELECT s.mdl_user_id

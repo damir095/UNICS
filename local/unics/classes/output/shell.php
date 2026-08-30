@@ -174,7 +174,7 @@ class shell {
             $learn = [
                 $item('Мой маршрут', '/local/unics/pages/my_path.php', 'i/competencies'),
                 // Помощник - в «Учебе», рядом с маршрутом: ребенок ищет его там же, где урок.
-                $item('Помощник', '/local/unics/pages/assistant.php', 'i/question'),
+                $item('Помощник', '/local/unics/pages/assistant.php', 'i/questions'),
             ];
             // «Заметки педагога» - только в контексте курса и если они есть (зеркало
             // extend_navigation; на страницах /local/unics/* контекст курса появится с
@@ -255,6 +255,7 @@ class shell {
         if ($is_scoped_admin) {
             $groups[] = ['label' => 'Учащиеся', 'items' => [
                 $item('Все учащиеся', '/local/unics/pages/my_students.php', 'i/users'),
+                $item('Вопросы помощнику', '/local/unics/pages/assistant_log.php', 'i/questions'),
                 $item('Создать пользователя', '/local/unics/pages/create_user.php', 'i/user'),
                 $item('Привязки', '/local/unics/pages/assign.php', 'i/group'),
             ]];
@@ -281,6 +282,9 @@ class shell {
         if ($is_methodist) {
             $groups[] = ['label' => 'Учащиеся', 'items' => [
                 $item('Все учащиеся', '/local/unics/pages/my_students.php', 'i/users'),
+                // Ветка скоупа в visible_student_userids() написана ровно под методиста - без
+                // этого пункта она была бы недостижима из интерфейса (найдено ревью).
+                $item('Вопросы помощнику', '/local/unics/pages/assistant_log.php', 'i/questions'),
                 $item('Пользователи', '/local/unics/pages/users.php', 'i/user'),
                 $item('Привязки', '/local/unics/pages/assign.php', 'i/group'),
             ]];
@@ -313,7 +317,7 @@ class shell {
         $students = [
             $item('Мои учащиеся', '/local/unics/pages/my_students.php', 'i/users'),
             // Журнал помощника - рядом с учащимися: это чтение про них, а не про ИИ.
-            $item('Вопросы помощнику', '/local/unics/pages/assistant_log.php', 'i/question'),
+            $item('Вопросы помощнику', '/local/unics/pages/assistant_log.php', 'i/questions'),
         ];
         if ($is_admin) {
             $students[] = $item('Пользователи', '/local/unics/pages/users.php', 'i/user');

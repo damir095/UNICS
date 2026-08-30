@@ -159,7 +159,10 @@ final class assistant_test extends \advanced_testcase {
         $out = (new assistant($gen))->ask((int)$this->user->id, (int)$this->course->id, 'Что такое дробь?');
 
         $this->assertSame(assistant::AI_FAILED, $out->outcome);
-        $this->assertNull($out->answer);
+        // Причина остается В ЖУРНАЛЕ: без нее «ключ API не настроен», отказ Сбера и опечатка в
+        // коде выглядят для педагога одинаково. Ребенку эта строка не показывается - детская
+        // страница печатает свой текст по исходу.
+        $this->assertStringContainsString('сеть', (string)$out->answer);
         $this->assertTrue($DB->record_exists('unics_assistant_message',
             ['id' => $out->id, 'outcome' => assistant::AI_FAILED]),
             'отказ ИИ обязан остаться в журнале: педагог видит, что ребенок спрашивал');
