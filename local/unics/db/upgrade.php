@@ -1748,5 +1748,26 @@ function xmldb_local_unics_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026082402, 'local', 'unics');
     }
 
+    if ($oldversion < 2026083002) {
+        // Диалог с ИИ-ассистентом. Журнал ведется целиком: модерация ответов детям была одной из
+        // трех причин, по которым ассистента откладывали ([[assistant-design]]).
+        $table = new xmldb_table('unics_assistant_message');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('mdl_user_id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('mdl_course_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('question', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null);
+        $table->add_field('answer', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('outcome', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('ix_assistant_user_time', XMLDB_INDEX_NOTUNIQUE, ['mdl_user_id', 'timecreated']);
+        $table->add_index('ix_assistant_course', XMLDB_INDEX_NOTUNIQUE, ['mdl_course_id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026083002, 'local', 'unics');
+    }
+
     return true;
 }

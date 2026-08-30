@@ -888,5 +888,24 @@
       </INDEXES>
     </TABLE>
 
+    <TABLE NAME="unics_assistant_message" COMMENT="Диалог ученика с ИИ-ассистентом: вопрос, ответ и исход. Журнал ведется ЦЕЛИКОМ - модерация ответов детям была одной из трех причин, по которым ассистент откладывался.">
+      <FIELDS>
+        <FIELD NAME="id"            TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="mdl_user_id"   TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="mdl_course_id" TYPE="int"  LENGTH="10"  NOTNULL="false" SEQUENCE="false" COMMENT="Курс, о материале которого спрашивают; NULL - вопрос вне курса"/>
+        <FIELD NAME="question"      TYPE="text"              NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="answer"        TYPE="text"              NOTNULL="false" SEQUENCE="false" COMMENT="NULL при отказе"/>
+        <FIELD NAME="outcome"       TYPE="char" LENGTH="20"  NOTNULL="true"  SEQUENCE="false" COMMENT="answered / no_material / looks_like_task / limit / ai_failed"/>
+        <FIELD NAME="timecreated"   TYPE="int"  LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="ix_assistant_user_time" UNIQUE="false" FIELDS="mdl_user_id, timecreated"/>
+        <INDEX NAME="ix_assistant_course"    UNIQUE="false" FIELDS="mdl_course_id"/>
+      </INDEXES>
+    </TABLE>
+
   </TABLES>
 </XMLDB>
