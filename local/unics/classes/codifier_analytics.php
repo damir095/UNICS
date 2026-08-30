@@ -295,6 +295,11 @@ class codifier_analytics {
                               AND ABS(i.a - 1) > :atol THEN 1 ELSE 0 END AS is2pl,
                     COALESCE(i.calibrated_n, 0) AS answers_n
                FROM {unics_codifier_link} l
+               -- Соединение с банком ОБЯЗАТЕЛЬНО: удаление курса сносит вопросы, а привязки к
+               -- ним оставались сиротами, и покрытие считалось по несуществующим заданиям.
+               -- Уборка их подметает, но защита нужна и на чтении: сироты появляются и от
+               -- прямого SQL, и от восстановления из резервной копии, и от неполного удаления.
+               JOIN {question_bank_entries} qbe ON qbe.id = l.target_id
                LEFT JOIN {unics_item_irt} i ON i.item_ref = l.target_id
               WHERE l.target_type = :tq AND l.element_id $insql",
             $params);

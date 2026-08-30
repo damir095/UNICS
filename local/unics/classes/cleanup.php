@@ -95,6 +95,15 @@ class cleanup {
                 AND target_id NOT IN (SELECT id FROM {course_modules})",
             [codifier_link_manager::TYPE_ACTIVITY]
         );
+        // Привязки ВОПРОСОВ к элементам кодификатора. Удаление курса сносит вопросы его банка,
+        // а привязки оставались сиротами: индикатор готовности к CAT считал их наравне с живыми
+        // и показывал методисту покрытие, которого нет. Подметалась только TYPE_ACTIVITY.
+        $DB->execute(
+            "DELETE FROM {unics_codifier_link}
+              WHERE target_type = ?
+                AND target_id NOT IN (SELECT id FROM {question_bank_entries})",
+            [codifier_link_manager::TYPE_QUESTION]
+        );
         $DB->execute(
             "DELETE FROM {unics_umk_materials}
               WHERE mdl_course_module_id NOT IN (SELECT id FROM {course_modules})"

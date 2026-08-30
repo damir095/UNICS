@@ -190,4 +190,35 @@ final class cat_readiness_test extends \advanced_testcase {
 
         $this->assertSame(item_irt_manager::MIN_CALIBRATED_N, item_pool::MIN_CALIBRATED_N);
     }
+
+    /**
+     * Привязка к УДАЛЁННОМУ вопросу не должна попадать в счётчики покрытия.
+     *
+     * Удаление курса сносит вопросы его банка, но `cleanup::course_deleted()` подметал только
+     * привязки активностей - привязки вопросов оставались сиротами. Индикатор считает их без
+     * соединения с таблицей вопросов, поэтому методист видел покрытие, которого нет: элемент
+     * «тегирован» заданиями, которых больше не существует, и решение «пул готов» принималось по
+     * несуществующим числам ([[umk-item-pool-design]]).
+     *
+     * Пул задания отфильтровывает (item_pool соединяется с question_bank_entries), так что
+     * ребёнку мёртвый вопрос не достанется - врут именно числа.
+     */
+    public function test_link_to_deleted_question_is_not_counted(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $alive = $this->make_calibrated_item($eid, 1.4, 30);
+        $dead  = $this->make_calibrated_item($eid, 1.4, 30);
+
+        // Вопрос удалён (курс снесён), привязка осталась сиротой.
+        $DB->delete_records('question_versions', ['questionbankentryid' => $dead]);
+        $DB->delete_records('question_bank_entries', ['id' => $dead]);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(1, (int)$rows[0]->tagged_n,
+            'сирота не задание: покрытие обязано считаться по живым вопросам');
+        $this->assertTrue($DB->record_exists('question_bank_entries', ['id' => $alive]));
+    }
 }
