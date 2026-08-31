@@ -243,5 +243,28 @@ final class contrast_guard_test extends \advanced_testcase {
         $this->assertSame([], $bad, sprintf(
             "Пара тинта ниже AA в %d сочетаниях:\n%s", count($bad), implode("\n", $bad)
         ));
+
+        // Контраста мало: константная пара держала AA во всех схемах и при этом ПОЛНОСТЬЮ
+        // игнорировала выбранный акцент. Мутация «вернуть константу» предыдущее утверждение не
+        // роняла - докблок обещал больше, чем тест проверял. Поэтому отдельно требуем: при
+        // выбранном акценте цвет на тинте обязан отличаться от умолчательного.
+        $default = contrast_analyzer::tokens($decls, [])['--unics-on-tint'] ?? null;
+        $ignored = [];
+        foreach (contrast_analyzer::combos() as $combo) {
+            $accent = array_filter($combo, static fn(string $c): bool
+                => str_contains($c, 'accent-'));
+            if (!$accent) {
+                continue;
+            }
+            $value = contrast_analyzer::tokens($decls, $combo)['--unics-on-tint'] ?? null;
+            if ($value === $default) {
+                $ignored[] = '  ' . contrast_analyzer::label($combo);
+            }
+        }
+
+        $this->assertSame([], $ignored, sprintf(
+            "Акцент не доходит до тонированных контролов в %d сочетаниях:\n%s",
+            count($ignored), implode("\n", $ignored)
+        ));
     }
 }
