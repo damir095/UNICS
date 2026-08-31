@@ -80,6 +80,25 @@ if (!$courseid) {
     exit;
 }
 
+// Маршрутизация к ресурсам - вторая половина формулировки C-2. Без нее совет «загляни в материал
+// урока» ребенку нечем выполнить: он знает КУДА, но не знает ГДЕ.
+$materials = $helper->course_materials((int)$USER->id, $courseid);
+if ($materials) {
+    echo html_writer::start_div('card mb-4');
+    echo html_writer::start_div('card-body');
+    echo html_writer::tag('h2', 'Твои материалы по этому курсу', ['class' => 'h5 mb-3']);
+    echo html_writer::start_tag('ul', ['class' => 'list-unstyled mb-0']);
+    foreach ($materials as $m) {
+        echo html_writer::tag('li',
+            html_writer::link($m['url'], s($m['name']), ['class' => 'unics-cta d-inline-block'])
+            . ' ' . html_writer::span($m['label'], 'text-muted'),
+            ['class' => 'mb-2']);
+    }
+    echo html_writer::end_tag('ul');
+    echo html_writer::end_div();
+    echo html_writer::end_div();
+}
+
 $left = assistant::DAILY_LIMIT - $helper->asked_today((int)$USER->id);
 
 echo html_writer::start_tag('form', ['method' => 'post', 'class' => 'mb-4']);

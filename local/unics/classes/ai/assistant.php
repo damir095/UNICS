@@ -120,21 +120,17 @@ class assistant {
     public function course_material(int $userid, int $courseid): string {
         global $DB;
 
+        // Условие «свой опубликованный комплект, видимый модуль» общее с course_materials():
+        // две копии разъехались бы, и ассистент отвечал бы по тексту, ссылки на который не дает.
+        [$where, $params] = self::own_umk_where();
         $sql = "SELECT p.content
                   FROM {unics_umk} u
                   JOIN {unics_umk_materials} m ON m.umk_id = u.id AND m.material_type = 1
                   JOIN {course_modules} cm ON cm.id = m.mdl_course_module_id
                   JOIN {page} p ON p.id = cm.instance
-                 WHERE u.mdl_course_id = :cid
-                   -- Скрытую страницу курс ребенку не показывает - и ассистент не должен
-                   -- отвечать по ней. Публикация УМК и видимость модуля живут врозь: педагог
-                   -- прячет страницу, не трогая unics_umk (найдено ревью).
-                   AND cm.visible = 1 AND cm.deletioninprogress = 0
-                   AND u.published_at IS NOT NULL
-                   AND (u.mdl_group_id IS NULL OR u.mdl_group_id IN (
-                           SELECT gm.groupid FROM {groups_members} gm WHERE gm.userid = :uid))
+                 WHERE {$where}
               ORDER BY u.id DESC";
-        $rows = $DB->get_fieldset_sql($sql, ['cid' => $courseid, 'uid' => $userid]);
+        $rows = $DB->get_fieldset_sql($sql, $params + ['cid' => $courseid, 'uid' => $userid]);
 
         $text = '';
         foreach ($rows as $row) {
@@ -144,6 +140,73 @@ class assistant {
             }
         }
         return \core_text::substr(trim($text), 0, self::SOURCE_LEN);
+    }
+
+    /** Названия типов материалов УМК для ребенка. */
+    public const MATERIAL_LABELS = [
+        1 => 'Материал урока',
+        2 => 'Видеоурок',
+        3 => 'Аудио',
+        4 => 'Тест',
+        5 => 'Задание',
+    ];
+
+    /**
+     * Материалы УМК ЭТОГО ребенка по курсу - для маршрутизации к ресурсам.
+     *
+     * Это вторая половина формулировки C-2: «вопросы по материалу, навигация, маршрутизация к
+     * ресурсам». Без нее отказ «загляни в материал урока» говорил ребенку КУДА смотреть, но не
+     * давал ссылки - совет, который нечем выполнить.
+     *
+     * Отбор тот же, что у course_material(): свой опубликованный комплект, видимый модуль. Условие
+     * вынесено в own_umk_where(), чтобы две выборки не разъехались.
+     *
+     * @return array<int,array{name:string,url:\moodle_url,label:string}>
+     */
+    public function course_materials(int $userid, int $courseid): array {
+        global $DB;
+
+        [$where, $params] = self::own_umk_where();
+        $rows = $DB->get_records_sql(
+            "SELECT cm.id AS cmid, m.material_type, md.name AS modname, cm.instance
+               FROM {unics_umk} u
+               JOIN {unics_umk_materials} m ON m.umk_id = u.id
+               JOIN {course_modules} cm ON cm.id = m.mdl_course_module_id
+               JOIN {modules} md ON md.id = cm.module
+              WHERE {$where}
+           ORDER BY u.id DESC, m.sort_order ASC",
+            $params + ['cid' => $courseid, 'uid' => $userid]);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $label = self::MATERIAL_LABELS[(int)$row->material_type] ?? null;
+            if ($label === null) {
+                continue;
+            }
+            $name = $DB->get_field($row->modname, 'name', ['id' => $row->instance]);
+            $out[] = [
+                'name'  => (string)($name ?: $label),
+                'url'   => new \moodle_url('/mod/' . $row->modname . '/view.php', ['id' => $row->cmid]),
+                'label' => $label,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Условие «свой опубликованный комплект, видимый модуль» - одно на две выборки.
+     *
+     * @return array{0:string,1:array}
+     */
+    private static function own_umk_where(): array {
+        return [
+            "u.mdl_course_id = :cid
+               AND u.published_at IS NOT NULL
+               AND cm.visible = 1 AND cm.deletioninprogress = 0
+               AND (u.mdl_group_id IS NULL OR u.mdl_group_id IN (
+                       SELECT gm.groupid FROM {groups_members} gm WHERE gm.userid = :uid))",
+            [],
+        ];
     }
 
     /**

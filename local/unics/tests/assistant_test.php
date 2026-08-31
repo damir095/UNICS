@@ -182,6 +182,44 @@ final class assistant_test extends \advanced_testcase {
     }
 
     /**
+     * Маршрутизация к ресурсам: ассистент дает ССЫЛКИ на материалы этого ребенка.
+     *
+     * Вторая половина формулировки C-2. Без нее отказ «загляни в материал урока» сообщал ребенку,
+     * куда смотреть, но не давал куда пойти.
+     */
+    public function test_materials_of_the_child_are_listed(): void {
+        $this->make_umk('Дробь - это часть целого.');
+
+        $mats = (new assistant())->course_materials((int)$this->user->id, (int)$this->course->id);
+
+        $this->assertCount(1, $mats);
+        $this->assertSame('Материал урока', $mats[0]['label']);
+        $this->assertStringContainsString('/mod/page/view.php', $mats[0]['url']->out(false));
+    }
+
+    /** Чужой комплект в список не попадает - тот же отбор, что у текста. */
+    public function test_materials_of_another_group_are_not_listed(): void {
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $this->make_umk('Чужой материал.', (int)$group->id);
+
+        $mats = (new assistant())->course_materials((int)$this->user->id, (int)$this->course->id);
+
+        $this->assertSame([], $mats, 'чужой комплект ребенку не показывают');
+    }
+
+    /** Спрятанный педагогом модуль не предлагается: курс его тоже не показывает. */
+    public function test_hidden_material_is_not_listed(): void {
+        global $DB;
+        $this->make_umk('Дробь - это часть целого.');
+        $cmid = (int)$DB->get_field('unics_umk_materials', 'mdl_course_module_id', []);
+        $DB->set_field('course_modules', 'visible', 0, ['id' => $cmid]);
+
+        $mats = (new assistant())->course_materials((int)$this->user->id, (int)$this->course->id);
+
+        $this->assertSame([], $mats);
+    }
+
+    /**
      * Педагог видит переписку ТОЛЬКО закрепленных за ним учащихся.
      *
      * Журнал ассистента - такой же персональный материал ребенка, как оценки: чужой педагог не
