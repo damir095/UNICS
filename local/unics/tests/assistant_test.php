@@ -193,7 +193,8 @@ final class assistant_test extends \advanced_testcase {
         $mats = (new assistant())->course_materials((int)$this->user->id, (int)$this->course->id);
 
         $this->assertCount(1, $mats);
-        $this->assertSame('Материал урока', $mats[0]['label']);
+        $this->assertSame(get_string('type_material', 'local_unics'), $mats[0]['label'],
+            'метка общая со страницей курса, а не своя');
         $this->assertStringContainsString('/mod/page/view.php', $mats[0]['url']->out(false));
     }
 
@@ -205,6 +206,48 @@ final class assistant_test extends \advanced_testcase {
         $mats = (new assistant())->course_materials((int)$this->user->id, (int)$this->course->id);
 
         $this->assertSame([], $mats, 'чужой комплект ребенку не показывают');
+    }
+
+    /**
+     * Неопубликованный комплект НЕ идет ни в ответ, ни в ссылки.
+     *
+     * Условие живет в общем предикате `own_umk_where()`, а после его выноса стало одной точкой
+     * отказа сразу для двух выборок: мутация «убрать published_at» оставляла сьют зеленым, а
+     * черновик педагога уходил бы и в промт ИИ, и ребенку ссылкой (найдено ревью).
+     */
+    public function test_unpublished_umk_is_invisible_everywhere(): void {
+        global $DB;
+        $umk = $this->make_umk('Черновик про дроби.');
+        $DB->set_field('unics_umk', 'published_at', null, ['id' => $umk]);
+        $helper = new assistant();
+
+        $this->assertSame('', $helper->course_material((int)$this->user->id, (int)$this->course->id),
+            'черновик не имеет права попасть в промт');
+        $this->assertSame([], $helper->course_materials((int)$this->user->id, (int)$this->course->id),
+            'и ссылкой ребенку тоже');
+    }
+
+    /**
+     * Запертая условием доступа активность в список не попадает.
+     *
+     * Наш же `gate_quiz_on_materials()` запирает сгенерированный тест до открытия страницы урока.
+     * Первая редакция смотрела только на `cm.visible`, и ребенок получал кнопку «Тест», ведущую в
+     * тупик: клик упирался в «Эта активность сейчас недоступна» (найдено ревью).
+     */
+    public function test_activity_locked_by_availability_is_not_offered(): void {
+        global $DB;
+        $this->make_umk('Дробь - это часть целого.');
+        $cmid = (int)$DB->get_field('unics_umk_materials', 'mdl_course_module_id', []);
+
+        // Условие, которое ребенок заведомо не выполнил: дата в будущем.
+        $DB->set_field('course_modules', 'availability',
+            json_encode(['op' => '&', 'c' => [['type' => 'date', 'd' => '>=',
+                't' => time() + WEEKSECS]], 'showc' => [true]]), ['id' => $cmid]);
+        rebuild_course_cache((int)$this->course->id, true);
+
+        $mats = (new assistant())->course_materials((int)$this->user->id, (int)$this->course->id);
+
+        $this->assertSame([], $mats, 'ссылка на недоступное хуже отсутствия ссылки');
     }
 
     /** Спрятанный педагогом модуль не предлагается: курс его тоже не показывает. */

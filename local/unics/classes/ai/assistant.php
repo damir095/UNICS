@@ -122,15 +122,14 @@ class assistant {
 
         // Условие «свой опубликованный комплект, видимый модуль» общее с course_materials():
         // две копии разъехались бы, и ассистент отвечал бы по тексту, ссылки на который не дает.
-        [$where, $params] = self::own_umk_where();
         $sql = "SELECT p.content
                   FROM {unics_umk} u
                   JOIN {unics_umk_materials} m ON m.umk_id = u.id AND m.material_type = 1
                   JOIN {course_modules} cm ON cm.id = m.mdl_course_module_id
                   JOIN {page} p ON p.id = cm.instance
-                 WHERE {$where}
+                 WHERE " . self::own_umk_where() . "
               ORDER BY u.id DESC";
-        $rows = $DB->get_fieldset_sql($sql, $params + ['cid' => $courseid, 'uid' => $userid]);
+        $rows = $DB->get_fieldset_sql($sql, ['cid' => $courseid, 'uid' => $userid]);
 
         $text = '';
         foreach ($rows as $row) {
@@ -142,13 +141,23 @@ class assistant {
         return \core_text::substr(trim($text), 0, self::SOURCE_LEN);
     }
 
-    /** Названия типов материалов УМК для ребенка. */
-    public const MATERIAL_LABELS = [
-        1 => 'Материал урока',
-        2 => 'Видеоурок',
-        3 => 'Аудио',
-        4 => 'Тест',
-        5 => 'Задание',
+    /**
+     * Сколько материалов показываем ребенку. Комплектов на курсе бывает десяток, по пять
+     * материалов в каждом: без потолка карточка ссылок выдавила бы саму форму вопроса за экран.
+     */
+    public const MATERIALS_SHOWN = 8;
+
+    /**
+     * Тип материала УМК -> ключ языковой строки. Строки ОБЩИЕ со страницей курса: иначе одна и та
+     * же активность звалась бы у ребенка «Аудиоматериал» в курсе и «Аудио» у помощника
+     * (найдено ревью).
+     */
+    private const MATERIAL_STRINGS = [
+        1 => 'type_material',
+        2 => 'type_video',
+        3 => 'type_audio',
+        4 => 'type_quiz',
+        5 => 'type_task',
     ];
 
     /**
@@ -158,55 +167,70 @@ class assistant {
      * ресурсам». Без нее отказ «загляни в материал урока» говорил ребенку КУДА смотреть, но не
      * давал ссылки - совет, который нечем выполнить.
      *
-     * Отбор тот же, что у course_material(): свой опубликованный комплект, видимый модуль. Условие
-     * вынесено в own_umk_where(), чтобы две выборки не разъехались.
+     * Доступность берем у САМОГО Moodle через get_fast_modinfo: `uservisible` учитывает и
+     * видимость модуля, и условия доступа. Первая редакция смотрела только на `cm.visible`, и
+     * ребенок получал кнопку «Тест», которая ведет в тупик: наш же `gate_quiz_on_materials()`
+     * запирает сгенерированный тест до открытия страницы урока (найдено ревью).
      *
      * @return array<int,array{name:string,url:\moodle_url,label:string}>
      */
     public function course_materials(int $userid, int $courseid): array {
         global $DB;
 
-        [$where, $params] = self::own_umk_where();
         $rows = $DB->get_records_sql(
-            "SELECT cm.id AS cmid, m.material_type, md.name AS modname, cm.instance
+            "SELECT m.id, m.mdl_course_module_id AS cmid, m.material_type
                FROM {unics_umk} u
                JOIN {unics_umk_materials} m ON m.umk_id = u.id
                JOIN {course_modules} cm ON cm.id = m.mdl_course_module_id
-               JOIN {modules} md ON md.id = cm.module
-              WHERE {$where}
+              WHERE " . self::own_umk_where() . "
            ORDER BY u.id DESC, m.sort_order ASC",
-            $params + ['cid' => $courseid, 'uid' => $userid]);
+            ['cid' => $courseid, 'uid' => $userid]);
 
+        $modinfo = get_fast_modinfo($courseid, $userid);
         $out = [];
         foreach ($rows as $row) {
-            $label = self::MATERIAL_LABELS[(int)$row->material_type] ?? null;
-            if ($label === null) {
+            $key = self::MATERIAL_STRINGS[(int)$row->material_type] ?? null;
+            if ($key === null) {
                 continue;
             }
-            $name = $DB->get_field($row->modname, 'name', ['id' => $row->instance]);
+            try {
+                $cm = $modinfo->get_cm((int)$row->cmid);
+            } catch (\moodle_exception $e) {
+                continue;   // модуль уже удален, а строка материала осталась
+            }
+            // uservisible закрывает разом видимость, условия доступа и группы. Ссылка на
+            // недоступное - хуже отсутствия ссылки: ребенок жмет и упирается в отказ.
+            if (!$cm->uservisible || $cm->url === null) {
+                continue;
+            }
             $out[] = [
-                'name'  => (string)($name ?: $label),
-                'url'   => new \moodle_url('/mod/' . $row->modname . '/view.php', ['id' => $row->cmid]),
-                'label' => $label,
+                'name'  => $cm->get_formatted_name(),
+                'url'   => $cm->url,
+                'label' => get_string($key, 'local_unics'),
             ];
+            if (count($out) >= self::MATERIALS_SHOWN) {
+                break;
+            }
         }
         return $out;
     }
 
     /**
-     * Условие «свой опубликованный комплект, видимый модуль» - одно на две выборки.
+     * Условие «свой опубликованный комплект» - одно на две выборки.
      *
-     * @return array{0:string,1:array}
+     * Публикация УМК и видимость модуля живут ВРОЗЬ: педагог прячет страницу, не трогая
+     * unics_umk, поэтому непроверенный черновик и спрятанный модуль отсекаются разными
+     * условиями (найдено ревью). Видимость для СПИСКА ссылок доверена get_fast_modinfo, а здесь
+     * остается грубый отсев на уровне запроса.
+     *
+     * Плейсхолдеры :cid и :uid обязан подставить вызывающий.
      */
-    private static function own_umk_where(): array {
-        return [
-            "u.mdl_course_id = :cid
-               AND u.published_at IS NOT NULL
-               AND cm.visible = 1 AND cm.deletioninprogress = 0
-               AND (u.mdl_group_id IS NULL OR u.mdl_group_id IN (
-                       SELECT gm.groupid FROM {groups_members} gm WHERE gm.userid = :uid))",
-            [],
-        ];
+    private static function own_umk_where(): string {
+        return "u.mdl_course_id = :cid
+                  AND u.published_at IS NOT NULL
+                  AND cm.visible = 1 AND cm.deletioninprogress = 0
+                  AND (u.mdl_group_id IS NULL OR u.mdl_group_id IN (
+                          SELECT gm.groupid FROM {groups_members} gm WHERE gm.userid = :uid))";
     }
 
     /**

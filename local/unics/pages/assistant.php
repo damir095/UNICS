@@ -89,10 +89,14 @@ if ($materials) {
     echo html_writer::tag('h2', 'Твои материалы по этому курсу', ['class' => 'h5 mb-3']);
     echo html_writer::start_tag('ul', ['class' => 'list-unstyled mb-0']);
     foreach ($materials as $m) {
+        // НЕ .unics-cta: главное действие экрана - «Спросить», и оно должно выделяться. Тема
+        // прямо требует не больше одной такой кнопки на блок, а утилита d-inline-block вдобавок
+        // перебивала бы inline-flex у .unics-cta - тот самый, из-за которого высота падала с 60
+        // до 46 (найдено ревью). Список ссылок - это список ссылок.
         echo html_writer::tag('li',
-            html_writer::link($m['url'], s($m['name']), ['class' => 'unics-cta d-inline-block'])
-            . ' ' . html_writer::span($m['label'], 'text-muted'),
-            ['class' => 'mb-2']);
+            html_writer::link($m['url'], $m['name'], ['class' => 'd-block py-2'])
+            . html_writer::span($m['label'], 'text-muted'),
+            ['class' => 'mb-3']);
     }
     echo html_writer::end_tag('ul');
     echo html_writer::end_div();
@@ -148,8 +152,15 @@ foreach ($rows as $row) {
     if ($row->outcome === assistant::ANSWERED) {
         echo html_writer::div(format_text((string)$row->answer, FORMAT_MARKDOWN));
     } else {
-        echo html_writer::div($refusals[$row->outcome] ?? $refusals[assistant::AI_FAILED],
-            'unics-assistant-note');
+        $note = $refusals[$row->outcome] ?? $refusals[assistant::AI_FAILED];
+        // Ссылку кладем В САМ ОТКАЗ, а не только в карточку выше: совет «загляни в материал
+        // урока» без ссылки рядом с ним ребенку нечем выполнить, а до карточки надо еще
+        // долистать вверх через всю переписку (найдено ревью).
+        if ($materials && in_array($row->outcome,
+                [assistant::LOOKS_LIKE_TASK, assistant::NO_MATERIAL], true)) {
+            $note .= ' ' . html_writer::link($materials[0]['url'], $materials[0]['name']);
+        }
+        echo html_writer::div($note, 'unics-assistant-note');
     }
 
     echo html_writer::tag('p', userdate((int)$row->timecreated, get_string('strftimedatetimeshort')),
