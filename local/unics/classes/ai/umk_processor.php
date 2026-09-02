@@ -98,8 +98,13 @@ class umk_processor {
             // Математическая разметка чистится и здесь, а не только в тесте: промт запрещает
             // LaTeX всем выходам, но модель его шлет, и ребенок видел бы «$ \frac{4}{7} $»
             // прямо в тексте урока ([[quiz-answer-verification-design]]).
+            // Не generate_text(): для ЗПР учебный текст обязан нести артефакт «Запомни:», и его
+            // наличие проверяется с одним переспросом ([[ovz-adaptation-measured]]). Без проверки
+            // адаптация держалась бы на одном лишь указании в промте, а замер показал, что
+            // непроверяемого указания модель не выполняет.
             $text   = \local_unics\ai\output_style::shift_headings(
-                \local_unics\ai\output_style::strip_math_markup($generator->generate_text($prompt)));
+                \local_unics\ai\output_style::strip_math_markup(
+                    $generator->generate_lesson_text($profile, $prompt)));
 
             // --- 1a. Иллюстрации учебного текста ([[ai-lecture-images-design]]) ---
             // Картинки нужны ДО создания страницы: в тексте уже должны стоять ссылки
