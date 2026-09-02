@@ -185,7 +185,21 @@ class ai_generator {
                . 'После каждого раздела ставь отдельной строкой «' . self::MEMO_MARKER
                . ': ...» и повторяй в ней '
                . 'главное понятие раздела своими словами, одной короткой фразой.',
-            5 => 'Строго предсказуемая структура текста. Только однозначные формулировки - без метафор и иносказаний.',
+            // Замер 2026-09-02: прежняя редакция не выполняла НИ ОДНОГО из двух своих обещаний.
+            // «Строго предсказуемая структура» - неровность длин разделов та же, что в контроле
+            // (0.48 против 0.50, p = 0.857); «без метафор» - 0.4 против 1.0 на текст, p = 0.365.
+            // Оба требования были непроверяемыми пожеланиями, как и «повторяй понятия» у ЗПР.
+            //
+            // Предсказуемость задается КОНСТРУКЦИЕЙ, а не просьбой: одна и та же схема раздела,
+            // повторенная во всех. Пример в каждом разделе - это и опора на конкретное вместо
+            // отвлеченного, то есть то же требование с другой стороны.
+            //
+            // Метафоры при этом ушли почти в ноль (0.2 против 1.0), но эффект НЕ устойчив:
+            // p = 0.167. Утверждать про метафоры нечего - работает схема.
+            5 => 'Строго предсказуемая структура: КАЖДЫЙ раздел по одной и той же схеме - '
+               . 'заголовок, одно короткое объяснение, затем отдельной строкой '
+               . '«' . self::EXAMPLE_MARKER . ': ...». Только однозначные формулировки, без '
+               . 'метафор и иносказаний.',
             6 => 'Доступный язык, короткие предложения, минимум специальных терминов без пояснений.',
         ];
 
@@ -484,6 +498,31 @@ class ai_generator {
     public const MEMO_MARKER = 'Запомни';
 
     /**
+     * Артефакт, обязательный в учебном тексте для ребенка с РАС ([[ovz-adaptation-measured]]).
+     *
+     * Та же история, что у ЗПР: прежнее указание требовало «строго предсказуемой структуры» и
+     * отсутствия метафор, а замер не нашел ни того, ни другого (p = 0.857 и p = 0.365). Пример в
+     * каждом разделе делает структуру предсказуемой по построению - и заодно опирает объяснение на
+     * конкретное, а не на образ.
+     *
+     * Замер после правки: доля разделов, идущих по одной схеме, - 86.6% против 17.0% в контроле
+     * (p = 0.008), примеров 5.2 против 1.8 (p = 0.040).
+     *
+     * ПЕРВАЯ редакция требовала еще и «РОВНО три раздела». Модель это проигнорировала (вышло 3-6,
+     * p = 0.524), а по правилу проекта проигнорированное указание - декорация, и его снимают.
+     * Снятие вдобавок оказалось полезным: схема выросла с 70.3% до 86.6%.
+     */
+    public const EXAMPLE_MARKER = 'Пример';
+
+    /**
+     * Нижний порог числа примеров.
+     *
+     * Это ПОЛ, а не число разделов: разделов модель делает 3-6, примеров вышло 5.2 в среднем.
+     * Порог ловит схлопывание к одному-двум примерам «под конец», а не сторожит разметку.
+     */
+    public const EXAMPLE_MIN = 3;
+
+    /**
      * Сколько артефактов требуется от годного текста.
      *
      * Проверять НАЛИЧИЕ мало: указание просит «Запомни» после каждого раздела, и живая проба дала
@@ -510,6 +549,32 @@ class ai_generator {
     }
 
     /**
+     * Нужен ли учебному тексту артефакт «Пример:» - только РАС (вид 5).
+     */
+    public function example_required(array $criteria): bool {
+        return in_array(5, $criteria['ovz_type_ids'] ?? [], true);
+    }
+
+    /**
+     * Какие артефакты и в каком числе обязан нести текст по этим критериям.
+     *
+     * Одна таблица на оба вида: у ребенка с ЗПР и РАС разом текст обязан нести И повтор, И примеры,
+     * и проверка не должна замолкать, увидев первый выполненный.
+     *
+     * @return array<string,int> метка артефакта => минимальное число вхождений
+     */
+    public function required_artifacts(array $criteria): array {
+        $need = [];
+        if ($this->memo_required($criteria)) {
+            $need[self::MEMO_MARKER] = self::MEMO_MIN;
+        }
+        if ($this->example_required($criteria)) {
+            $need[self::EXAMPLE_MARKER] = self::EXAMPLE_MIN;
+        }
+        return $need;
+    }
+
+    /**
      * Сколько раз артефакт встречается в тексте.
      *
      * Разметку снимаем ПЕРЕД поиском: тот же промт велит модели выделять ключевые понятия жирным,
@@ -517,13 +582,32 @@ class ai_generator {
      * верно адаптированный текст был бы признан негодным и стоил бы лишней генерации (найдено
      * ревью; живая проба этого не показала - все 5 текстов пришли в голом виде).
      */
-    public function memo_count(string $text): int {
+    public function artifact_count(string $text, string $marker): int {
         $flat = str_replace(['*', '_', '`'], '', $text);
-        return preg_match_all('/' . preg_quote(self::MEMO_MARKER, '/') . '\s*:/iu', $flat);
+        return preg_match_all('/' . preg_quote($marker, '/') . '\s*:/iu', $flat);
+    }
+
+    public function memo_count(string $text): int {
+        return $this->artifact_count($text, self::MEMO_MARKER);
+    }
+
+    public function example_count(string $text): int {
+        return $this->artifact_count($text, self::EXAMPLE_MARKER);
     }
 
     public function has_memo(string $text): bool {
         return $this->memo_count($text) >= self::MEMO_MIN;
+    }
+
+    /**
+     * Каких артефактов тексту не хватает.
+     *
+     * @return array<string,int> метка => сколько требовалось
+     */
+    public function missing_artifacts(string $text, array $criteria): array {
+        return array_filter($this->required_artifacts($criteria),
+            fn(int $min, string $marker): bool => $this->artifact_count($text, $marker) < $min,
+            ARRAY_FILTER_USE_BOTH);
     }
 
     /**
@@ -558,29 +642,33 @@ class ai_generator {
      * @param array $criteria результат build_criteria() - тот же, по которому собран $prompt
      */
     public function generate_lesson_text(array $criteria, string $prompt): string {
-        $text = $this->generate_text($prompt);
-        if (!$this->memo_required($criteria) || $this->has_memo($text)) {
+        $text    = $this->generate_text($prompt);
+        $missing = $this->missing_artifacts($text, $criteria);
+        if (!$missing) {
             return $text;
         }
+        $names = implode('», «', array_keys($missing));
         try {
             $retry = $this->generate_text($prompt . "\n\n"
-                . 'ОБЯЗАТЕЛЬНО: после каждого раздела поставь отдельной строкой «'
-                . self::MEMO_MARKER . ': ...» и повтори в ней главное понятие раздела '
-                . 'одной короткой фразой.');
+                . 'ОБЯЗАТЕЛЬНО: в тексте должны быть строки «' . $names . ': ...» - '
+                . 'по одной после каждого раздела, короткой фразой.');
         } catch (\Throwable $e) {
             // След обязателен: без него отказ переспроса неотличим от текста, который артефакт
             // содержал сразу, и адаптация «проверяется» только в тестах (найдено ревью).
-            $this->trace('Переспрос за артефактом «' . self::MEMO_MARKER . '» не удался: '
+            $this->trace('Переспрос за артефактами «' . $names . '» не удался: '
                 . $e->getMessage() . '. Оставлен первый текст.');
             return $text;
         }
-        if ($this->has_memo($retry)) {
+        if (!$this->missing_artifacts($retry, $criteria)) {
             return $retry;
         }
-        $this->trace('Артефакт «' . self::MEMO_MARKER . '» не появился и после переспроса ('
-            . $this->memo_count($text) . ' и ' . $this->memo_count($retry) . ' при пороге '
-            . self::MEMO_MIN . '). Урок отдан без него.');
-        return $text;
+        // Возвращаем ТОТ текст, где артефактов не хватает меньшему числу видов: ребенку с ЗПР и
+        // РАС разом половина адаптации лучше, чем ее отсутствие.
+        $better = count($this->missing_artifacts($retry, $criteria)) < count($missing)
+            ? $retry : $text;
+        $this->trace('Артефакты «' . $names . '» не появились и после переспроса. '
+            . 'Урок отдан ' . ($better === $retry ? 'со вторым' : 'с первым') . ' текстом.');
+        return $better;
     }
 
     public function build_prompt(array $profile, string $topic, string $extra_context = ''): string {

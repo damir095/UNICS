@@ -145,7 +145,7 @@ final class memo_artifact_test extends \advanced_testcase {
         $this->assertSame('Первый без повтора.', $text,
             'При двух неудачах вернуть надо ПЕРВЫЙ текст, а не пустоту и не третий заход.');
         $this->assertCount(2, $gen->prompts, 'Переспросов больше одного - неограниченный расход токенов.');
-        $this->assertStringContainsString('не появился и после переспроса', $trace,
+        $this->assertStringContainsString('не появились и после переспроса', $trace,
             'Урок ушел без артефакта молча - в production это неотличимо от удачи.');
     }
 
@@ -177,8 +177,10 @@ final class memo_artifact_test extends \advanced_testcase {
      */
     public function test_other_children_are_not_asked_twice(): void {
         $this->resetAfterTest();
+        // РАС здесь БОЛЬШЕ НЕТ: с 2026-09-02 он требует своего артефакта («Пример»), и держать
+        // его в списке «кому не нужно» значило бы сторожить уже неверное правило.
         foreach ([$this->plain(),
-                  ['class_number' => 5, 'categories' => [1], 'ovz_types' => [5]],   // РАС
+                  ['class_number' => 5, 'categories' => [1], 'ovz_types' => [1]],   // слабовидящий
                   ['class_number' => 5, 'categories' => [4], 'ovz_types' => []]] as $profile) {
             $gen = $this->gen(['Текст без артефакта.', self::GOOD]);
 
@@ -229,5 +231,85 @@ final class memo_artifact_test extends \advanced_testcase {
             'Повтор съедает окно источника: там текст режется по 1500-2000 знаков.');
         $this->assertStringContainsString('Испарение воды.', $source);
         $this->assertStringContainsString('Конденсация.', $source);
+    }
+
+    /**
+     * РАС: три «Пример:» - и текст годен.
+     *
+     * Замер показал, что прежнее указание для РАС не выполняло НИ ОДНОГО из двух своих обещаний:
+     * неровность структуры та же, что в контроле (p = 0.857), метафоры 0.4 против 1.0 (p = 0.365).
+     * Предсказуемость теперь задается конструкцией - одинаковая схема раздела, повторенная трижды.
+     */
+    public function test_ras_needs_three_examples(): void {
+        $this->resetAfterTest();
+        $ras = ['class_number' => 5, 'categories' => [1], 'ovz_types' => [5]];
+        $good = "Раздел.
+
+Пример: лужа высыхает.
+
+Второй.
+
+Пример: пар над чайником."
+              . "
+
+Третий.
+
+Пример: роса на траве.";
+
+        $gen = $this->gen([$good]);
+        [$text] = $this->lesson($gen, $ras);
+        $this->assertSame($good, $text);
+        $this->assertCount(1, $gen->prompts, 'Переспрос за годный текст РАС.');
+
+        // Двух примеров мало: три раздела - три примера.
+        $gen = $this->gen(["Пример: раз.
+
+Пример: два.", $good]);
+        [$text] = $this->lesson($gen, $ras);
+        $this->assertSame($good, $text);
+        $this->assertCount(2, $gen->prompts, 'Двух примеров хватило - структура уже не трехчастная.');
+    }
+
+    /**
+     * ЗПР и РАС разом: нужны ОБА артефакта, и проверка не смолкает на первом выполненном.
+     */
+    public function test_combined_profile_needs_both_artifacts(): void {
+        $this->resetAfterTest();
+        $both = ['class_number' => 5, 'categories' => [1], 'ovz_types' => [4, 5]];
+        $gen  = $this->gen([]);
+
+        $this->assertSame([ai_generator::MEMO_MARKER => ai_generator::MEMO_MIN,
+                           ai_generator::EXAMPLE_MARKER => ai_generator::EXAMPLE_MIN],
+            $gen->required_artifacts($gen->build_criteria($both)));
+
+        // Повторы есть, примеров нет - текст все равно негоден.
+        $только_повтор = "Раздел.
+
+Запомни: раз.
+
+Второй.
+
+Запомни: два.";
+        $this->assertSame([ai_generator::EXAMPLE_MARKER],
+            array_keys($gen->missing_artifacts($только_повтор, $gen->build_criteria($both))),
+            'Проверка смолкла на первом выполненном артефакте.');
+    }
+
+    /**
+     * Строки «Пример:» из источника НЕ вырезаются: пример - это содержание, а не повтор.
+     */
+    public function test_examples_stay_in_the_source(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen([]);
+
+        $source = $gen->strip_memo("Испарение.
+
+Запомни: вода испаряется.
+
+Пример: лужа высыхает.");
+
+        $this->assertStringNotContainsString('Запомни', $source);
+        $this->assertStringContainsString('Пример: лужа высыхает.', $source,
+            'Вырезан пример - из источника ушло содержание, а не повтор.');
     }
 }
