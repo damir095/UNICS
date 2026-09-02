@@ -92,6 +92,9 @@ class umk_processor {
             // --- 1. Генерация текста ---
             $extra_context = isset($umk->extra_prompt) ? (string)$umk->extra_prompt : '';
             $prompt = $generator->build_prompt($profile, $umk->topic, $extra_context);
+            // Критерии считаем ОДИН раз на комплект: их просят и проверка артефакта, и картинки, а
+            // build_criteria перестраивает десяток массивов и прогоняет adapt_level.
+            $criteria = $generator->build_criteria($profile);
             // Учебный текст - единственный выход, который ложится в страницу как FORMAT_MARKDOWN
             // и потому РЕНДЕРИТСЯ: без сдвига «#» от модели стал бы <h1> внутри страницы курса,
             // где заголовок уже есть ([[ai-output-style-design]], раздел 1).
@@ -104,7 +107,13 @@ class umk_processor {
             // непроверяемого указания модель не выполняет.
             $text   = \local_unics\ai\output_style::shift_headings(
                 \local_unics\ai\output_style::strip_math_markup(
-                    $generator->generate_lesson_text($profile, $prompt)));
+                    $generator->generate_lesson_text($criteria, $prompt)));
+
+            // ИСТОЧНИК для теста, задания и видео - текст БЕЗ строк-повторов. Там он режется по
+            // 1500-2000 знаков, а текст для ЗПР и так укладывается в ~2100: четыре-пять «Запомни»
+            // съели бы больше десятой части окна и вытеснили за срез настоящий материал
+            // (найдено ревью). В страницу и в озвучку идет полный текст.
+            $source = $generator->strip_memo($text);
 
             // --- 1a. Иллюстрации учебного текста ([[ai-lecture-images-design]]) ---
             // Картинки нужны ДО создания страницы: в тексте уже должны стоять ссылки
@@ -117,7 +126,6 @@ class umk_processor {
 
             $generate_images = isset($task->generate_images) ? (int)$task->generate_images : 0;
             if ($generate_images && !empty(get_config('local_unics', 'ai_api_key'))) {
-                $criteria = $generator->build_criteria($profile);
                 $sections = lecture_illustrator::split_sections($text, (string)$umk->topic);
                 $images_total += count($sections);
 
@@ -248,7 +256,7 @@ class umk_processor {
                     $surplus = [];
                     if ($needed > 0) {
                         $questions = $generator->generate_quiz(
-                            $profile, $umk->topic, $text, $needed, $extra_context, $surplus);
+                            $profile, $umk->topic, $source, $needed, $extra_context, $surplus);
                     }
 
                     // Чужое ждем ПОСЛЕ своей генерации: пока мы генерировали, сосед
@@ -275,7 +283,7 @@ class umk_processor {
                             // Запас забираем и здесь: это ровно тот случай, когда пул пуст,
                             // и терять проверенные задания тут больнее всего (найдено ревью).
                             $questions = $generator->generate_quiz(
-                                $profile, $umk->topic, $text, $needed, $extra_context, $surplus);
+                                $profile, $umk->topic, $source, $needed, $extra_context, $surplus);
                         }
                     }
 
@@ -367,7 +375,7 @@ class umk_processor {
             if ($generate_assignment) {
                 try {
                     $assign_desc = $generator->generate_assignment_description(
-                        $profile, $umk->topic, $text, $extra_context);
+                        $profile, $umk->topic, $source, $extra_context);
                     $assign_cmid = $builder->add_assignment(
                         (int)$umk->mdl_course_id,
                         $section,
@@ -393,7 +401,7 @@ class umk_processor {
             if ($generate_video) {
                 try {
                     $slides = $generator->generate_video_script(
-                        $profile, $umk->topic, $text, $extra_context);
+                        $profile, $umk->topic, $source, $extra_context);
 
                     $slide_audios = [];
                     $salute_key = get_config('local_unics', 'salute_speech_api_key');

@@ -267,6 +267,76 @@ final class umk_processor_test extends \advanced_testcase {
     }
 
     /**
+     * Сквозной путь артефакта «Запомни» для ребенка с ЗПР ([[ovz-adaptation-measured]]).
+     *
+     * Юнит-тесты проверяют сам предохранитель, но откат строки 110 обратно на generate_text()
+     * они бы не заметили: у всех прочих фикстур видов ОВЗ нет, и ветка проверки не берется вовсе
+     * (найдено ревью). Здесь проверяется ровно стык: воркер зовет проверяющий метод, переспрос
+     * доходит до сети, а строки-повторы НЕ уезжают в источник для теста.
+     */
+    public function test_zpr_lesson_gets_the_artifact_and_quiz_source_stays_clean(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, , $studentid, , $queueid] = $this->make_fixture();
+        $DB->insert_record('unics_student_ovz', (object)['student_id' => $studentid, 'ovz_type' => 4]);
+        $DB->set_field('unics_ai_queue', 'generate_quiz', 1, ['id' => $queueid]);
+
+        $seen = new \stdClass();
+        $seen->prompts = 0;
+        $seen->source  = null;
+        $generator = new class($seen) extends ai_generator {
+            public function __construct(private \stdClass $seen) {
+                parent::__construct();
+            }
+            public function generate_text(string $prompt, int $max_tokens = 1024,
+                                          int $minlen = self::MIN_REPLY_LEN): string {
+                $this->seen->prompts++;
+                // Первый заход БЕЗ артефакта - как повел бы себя сползший промт.
+                return $this->seen->prompts === 1
+                    ? "#### Круговорот
+
+Вода испаряется.
+
+#### Осадки
+
+Вода выпадает."
+                    : "#### Круговорот
+
+Вода испаряется.
+
+Запомни: вода испаряется.
+
+"
+                      . "#### Осадки
+
+Вода выпадает.
+
+Запомни: вода выпадает.";
+            }
+            public function generate_quiz(array $profile, string $topic, string $source_text = '',
+                                          int $num = 5, string $extra_context = '',
+                                          array &$surplus = []): array {
+                $this->seen->source = $source_text;
+                return [];
+            }
+            public function get_avg_score(int $mdl_user_id): float {
+                return 75.0;
+            }
+        };
+
+        $this->expectOutputRegex('~готов~');
+        (new umk_processor($generator))->process(ai_queue::claim($queueid));
+
+        $this->assertSame(2, $seen->prompts,
+            'Переспрос не дошел до сети - значит воркер зовет generate_text() мимо проверки.');
+        $this->assertNotNull($seen->source, 'Тест не получил источника - проверять нечего.');
+        $this->assertStringNotContainsString('Запомни', $seen->source,
+            'Строки-повторы съедают окно источника, которое режется по 2000 знаков.');
+        $this->assertStringContainsString('Вода выпадает', $seen->source,
+            'Вместе с повторами вырезан настоящий материал.');
+    }
+
+    /**
      * Отказ озвучки не должен валить комплект.
      *
      * Блок аудио был ЕДИНСТВЕННЫМ вторичным материалом без try/catch: у теста, задания,

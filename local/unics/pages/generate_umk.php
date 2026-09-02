@@ -304,10 +304,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $per_set = 1 + (int)!empty($generate_quiz) + (int)!empty($generate_assignment)
                  + (int)!empty($generate_audio) + $video_calls + $image_calls;
     $sets    = count($groups);
+    // Комплект для ЗПР может стоить лишнего обращения: учебный текст обязан нести артефакт
+    // «Запомни», и при его отсутствии промт переспрашивается один раз
+    // ([[ovz-adaptation-measured]]). Считаем по потолку - по той же причине, что и картинки.
+    $memo_calls = 0;
+    foreach ($groups as $g) {
+        if ($generator->memo_required($generator->build_criteria($g['profile']))) {
+            $memo_calls++;
+        }
+    }
     // Формулировки без числительных в родительном падеже: числа тут переменные, и
     // «1 комплектов» читалось бы неряшливо при любом значении потолка.
     echo '<p class="mb-3">Комплектов будет создано: <strong>' . $sets . '</strong>. '
-       . 'Обращений к ИИ примерно: <strong>' . ($sets * $per_set) . '</strong>.</p>';
+       . 'Обращений к ИИ примерно: <strong>' . ($sets * $per_set + $memo_calls) . '</strong>.</p>';
 
     $over_limit = $limit > 0 && $sets > $limit;
     if ($over_limit) {
