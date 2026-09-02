@@ -99,9 +99,12 @@
     &:focus {
         // Заливка при наведении - КНОПОЧНЫЙ тон, а не акцент. --unics-primary (#F26545) дает с
         // белым лишь 3.12:1: он законен как акцент (порог 3.0), но не как фон под текстом.
-        // Токены под это давно есть и описаны в _variables.scss.
-        background-color: var(--unics-primary-btn);
-        border-color: var(--unics-primary-btn);
+        //
+        // Токен СВОЙ, а не общий --unics-primary-btn: тот акцент не переопределяет, и синяя
+        // кнопка под курсором перекрашивалась в коралловый - цвет вне выбранной палитры
+        // (найдено ревью). Акцент-миксин задает свой тон, белый на нем 6.9-9.2:1.
+        background-color: var(--unics-tint-hover-bg);
+        border-color: var(--unics-tint-hover-bg);
         color: var(--unics-on-primary);
     }
 }
