@@ -304,12 +304,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $per_set = 1 + (int)!empty($generate_quiz) + (int)!empty($generate_assignment)
                  + (int)!empty($generate_audio) + $video_calls + $image_calls;
     $sets    = count($groups);
-    // Комплект для ЗПР может стоить лишнего обращения: учебный текст обязан нести артефакт
-    // «Запомни», и при его отсутствии промт переспрашивается один раз
-    // ([[ovz-adaptation-measured]]). Считаем по потолку - по той же причине, что и картинки.
+    // Комплект может стоить лишнего обращения: учебный текст для ЗПР и для РАС обязан нести свой
+    // артефакт, и при его отсутствии промт переспрашивается один раз ([[ovz-adaptation-measured]]).
+    // Спрашиваем про ВСЕ артефакты, а не только про «Запомни»: после появления артефакта для РАС
+    // проверка по memo_required() занижала цену на каждом таком комплекте (найдено ревью).
+    // Переспрос один на комплект, сколько бы артефактов ни не хватало.
     $memo_calls = 0;
     foreach ($groups as $g) {
-        if ($generator->memo_required($generator->build_criteria($g['profile']))) {
+        if ($generator->required_artifacts($generator->build_criteria($g['profile']))) {
             $memo_calls++;
         }
     }

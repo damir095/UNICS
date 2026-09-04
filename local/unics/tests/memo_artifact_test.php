@@ -145,8 +145,26 @@ final class memo_artifact_test extends \advanced_testcase {
         $this->assertSame('Первый без повтора.', $text,
             'При двух неудачах вернуть надо ПЕРВЫЙ текст, а не пустоту и не третий заход.');
         $this->assertCount(2, $gen->prompts, 'Переспросов больше одного - неограниченный расход токенов.');
-        $this->assertStringContainsString('не появились и после переспроса', $trace,
+        $this->assertStringContainsString('не набраны и после переспроса', $trace,
             'Урок ушел без артефакта молча - в production это неотличимо от удачи.');
+    }
+
+    /**
+     * Два ОДИНАКОВЫХ ответа модели: след обязан сказать «с первым».
+     *
+     * Признак выбора сравнивал СОДЕРЖИМОЕ строк, и при одинаковых ответах - обычное дело при
+     * низкой температуре и у любой заглушки - след врал, будто отдан второй текст (найдено ревью).
+     * Врал он ровно в том случае, который оператор и пошел бы разбирать.
+     */
+    public function test_identical_answers_are_reported_as_the_first_text(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen(['Один и тот же ответ.', 'Один и тот же ответ.']);
+
+        [$text, $trace] = $this->lesson($gen, $this->zpr());
+
+        $this->assertSame('Один и тот же ответ.', $text);
+        $this->assertStringContainsString('с первым', $trace);
+        $this->assertStringNotContainsString('со вторым', $trace);
     }
 
     /**
@@ -283,7 +301,7 @@ final class memo_artifact_test extends \advanced_testcase {
             $gen->required_artifacts($gen->build_criteria($both)));
 
         // Повторы есть, примеров нет - текст все равно негоден.
-        $только_повтор = "Раздел.
+        $memo_only = "Раздел.
 
 Запомни: раз.
 
@@ -291,8 +309,89 @@ final class memo_artifact_test extends \advanced_testcase {
 
 Запомни: два.";
         $this->assertSame([ai_generator::EXAMPLE_MARKER],
-            array_keys($gen->missing_artifacts($только_повтор, $gen->build_criteria($both))),
+            array_keys($gen->missing_artifacts($memo_only, $gen->build_criteria($both))),
             'Проверка смолкла на первом выполненном артефакте.');
+    }
+
+
+    /**
+     * Сочетание ЗПР+РАС на ЖИВОМ пути: переспрос называет оба артефакта, и выбирается лучший текст.
+     *
+     * Проверка через required_artifacts() сама по себе мимо: весь код переспроса для сочетания
+     * видов не исполнялся НИ В ОДНОМ тесте, и склейка меток «Запомни», «Пример: ...» - где нужный
+     * вид был только у последней - прошла бы мимо сьюта (найдено ревью).
+     */
+    public function test_combined_profile_retry_names_both_and_keeps_the_better_text(): void {
+        $this->resetAfterTest();
+        $both = ['class_number' => 5, 'categories' => [1], 'ovz_types' => [4, 5]];
+        // Первому не хватает ОБОИХ артефактов (повтор всего один при пороге два, примеров нет),
+        // второму - только повтора. Значит переспрос обязан назвать оба, а вернуться должен
+        // ВТОРОЙ текст: не хватает меньшему числу видов.
+        $first  = "Раздел.
+
+Запомни: один и только.";
+        $second = "Раздел.
+
+Пример: раз.
+
+Второй.
+
+Пример: два.
+
+Третий.
+
+Пример: три.";
+        $gen = $this->gen([$first, $second]);
+
+        [$text, $trace] = $this->lesson($gen, $both);
+
+        $retry = $gen->last_prompt();
+        $this->assertStringContainsString(ai_generator::MEMO_MARKER . ': ...', $retry,
+            'Повтор назван в переспросе не в том виде, который засчитывает проверка.');
+        $this->assertStringContainsString(ai_generator::EXAMPLE_MARKER . ': ...', $retry);
+        $this->assertStringContainsString('не меньше ' . ai_generator::EXAMPLE_MIN, $retry,
+            'Переспрос не называет нужное число - модель ставит по одному на раздел и не берет порог.');
+        $this->assertStringContainsString('главное понятие', $retry,
+            'Переспрос не говорит, ЧТО класть в строку - его выполнит наполнитель вида «Запомни: далее».');
+        $this->assertSame($second, $text,
+            'Вернулся текст, которому не хватает большего числа артефактов.');
+        $this->assertStringContainsString('со вторым', $trace);
+        $this->assertStringContainsString('Запомни: 1 и 0', $trace,
+            'В следе нет счетов - нельзя отличить «чуть не хватило» от «не выполнено вовсе».');
+    }
+
+    /**
+     * «Например:» - не артефакт: «пример» лишь подстрока этого слова.
+     *
+     * Без якоря текст с тремя «Например: ...» и НУЛЕМ строк-примеров проходил проверку, а след
+     * рапортовал об успехе. На 20 текстах замера этого не случилось ни разу - дыра была скрытой.
+     */
+    public function test_naprimer_does_not_count_as_an_example(): void {
+        $this->resetAfterTest();
+        $ras = ['class_number' => 5, 'categories' => [1], 'ovz_types' => [5]];
+        $gen = $this->gen([]);
+        $naprimer_only = "Например: лужа высыхает. Например: пар. Например: роса.";
+
+        $this->assertSame([ai_generator::EXAMPLE_MARKER],
+            array_keys($gen->missing_artifacts($naprimer_only, $gen->build_criteria($ras))),
+            'Связка «например» засчитана как строка-пример.');
+        $this->assertSame(1, $gen->artifact_count('Приведем пример: роса.', ai_generator::EXAMPLE_MARKER),
+            'Якорь съел законный пример в середине предложения.');
+    }
+
+    /**
+     * Общее требование «2-3 примера» не должно спорить с указанием для РАС.
+     */
+    public function test_shared_example_cap_yields_to_the_ras_instruction(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen([]);
+
+        $this->assertStringNotContainsString('Включи 2–3 примера',
+            $gen->build_prompt(['class_number' => 5, 'categories' => [1], 'ovz_types' => [5]], 'Дроби'),
+            'Потолок «2-3» стоит рядом с требованием примера в каждом разделе - оси спорят.');
+        $this->assertStringContainsString('Включи 2–3 примера',
+            $gen->build_prompt($this->plain(), 'Дроби'),
+            'Потолок снят у всех - требование про примеры потеряно для обычного ребенка.');
     }
 
     /**
