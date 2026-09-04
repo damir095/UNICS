@@ -157,7 +157,8 @@ class lecture_illustrator {
         // Заголовков нет - единственная картинка идет в начало текста.
         if (!self::headings_of($md)) {
             return isset($filenames[0])
-                ? self::img_tag($filenames[0], $sections[0]['heading']) . "\n\n" . $md
+                ? self::img_tag($filenames[0],
+                    self::alt_text($sections[0]['heading'], $sections[0]['lead'] ?? '')) . "\n\n" . $md
                 : $md;
         }
 
@@ -177,7 +178,8 @@ class lecture_illustrator {
             $idx++;
             if (isset($filenames[$idx])) {
                 $out[] = '';
-                $out[] = self::img_tag($filenames[$idx], self::clean_heading($m[1]));
+                $out[] = self::img_tag($filenames[$idx],
+                    self::alt_text(self::clean_heading($m[1]), $sections[$idx]['lead'] ?? ''));
             }
         }
         return implode("\n", $out);
@@ -189,6 +191,32 @@ class lecture_illustrator {
      */
     private static function clean_heading(string $raw): string {
         return trim(preg_replace('/^[#*_\s]+|[#*_\s]+$/u', '', $raw));
+    }
+
+    /** Сколько знаков начала раздела уходит в alt: фраза, а не абзац. */
+    private const ALT_LEAD_LEN = 110;
+
+    /**
+     * Альтернативный текст картинки: заголовок раздела плюс начало его текста.
+     *
+     * Раньше в alt уходил ОДИН заголовок, хотя начало раздела лежало рядом в $sections и уже
+     * уходило в промт рисования. Ребенку с экранным диктором «Испарение» про картинку не говорит
+     * ничего: он слышит название раздела второй раз подряд. Для слабовидящего это и есть тот
+     * барьер, который указание вида 1 обещало снимать словами ([[ovz-adaptation-measured]]).
+     *
+     * Длина ограничена: alt читается голосом целиком, и абзац в нем был бы хуже короткой фразы.
+     */
+    private static function alt_text(string $heading, string $lead): string {
+        $lead = trim((string)preg_replace('/[#*_`]+/u', '', $lead));
+        if ($lead === '') {
+            return $heading;
+        }
+        if (\core_text::strlen($lead) > self::ALT_LEAD_LEN) {
+            $cut  = \core_text::substr($lead, 0, self::ALT_LEAD_LEN);
+            $sp   = \core_text::strrpos($cut, ' ');
+            $lead = $sp > 0 ? \core_text::substr($cut, 0, $sp) : $cut;
+        }
+        return $heading === '' ? $lead : $heading . '. ' . $lead;
     }
 
     /** Разметка одной картинки. Класс - хук для стиля в _unics-pages.scss. */

@@ -395,6 +395,113 @@ final class memo_artifact_test extends \advanced_testcase {
     }
 
     /**
+     * НОДА: три пронумерованных шага - и текст годен.
+     *
+     * Указание обещало «чёткие пошаговые инструкции», а замер дал 0.00 нумерованных шагов при
+     * 0.80 в контроле: с указанием выходило ХУЖЕ, чем без него. После замены на артефакт - 4.40
+     * против 0.00, p = 0.008 ([[ovz-adaptation-measured]]).
+     */
+    public function test_noda_needs_numbered_steps(): void {
+        $this->resetAfterTest();
+        $noda = ['class_number' => 5, 'categories' => [1], 'ovz_types' => [3]];
+        $good = "Шаг 1. Нагрей воду.
+
+Шаг 2. Дождись пара.
+
+Шаг 3. Охлади пар.";
+
+        $gen = $this->gen([$good]);
+        [$text] = $this->lesson($gen, $noda);
+        $this->assertSame($good, $text);
+        $this->assertCount(1, $gen->prompts, 'Переспрос за годный текст НОДА.');
+
+        // Двух шагов мало: порядок действий назван, а не разобран.
+        $gen = $this->gen(["Шаг 1. Раз.
+
+Шаг 2. Два.", $good]);
+        [$text] = $this->lesson($gen, $noda);
+        $this->assertSame($good, $text);
+        $this->assertCount(2, $gen->prompts);
+    }
+
+    /**
+     * Шаг пишется «Шаг 1.», с номером и точкой, а не с двоеточием.
+     *
+     * Общий шаблон «метка плюс двоеточие» не нашёл бы его НИКОГДА, и каждый комплект для НОДА
+     * платил бы лишней генерацией, не проходя проверку ни при каком ответе модели.
+     */
+    public function test_step_counting_accepts_number_and_dot(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen([]);
+        $M = ai_generator::STEP_MARKER;
+
+        $this->assertSame(3, $gen->artifact_count("Шаг 1. Раз
+Шаг 2. Два
+Шаг 3. Три", $M));
+        $this->assertSame(2, $gen->artifact_count('**Шаг 1.** Раз. **Шаг 2.** Два.', $M));
+        $this->assertSame(2, $gen->artifact_count('Шаг 1: Раз. Шаг 2: Два.', $M));
+        // И то, что срабатывать НЕ должно.
+        $this->assertSame(0, $gen->artifact_count('Первым шагом нагреваем, шагом вторым ждём.', $M),
+            'Слово «шагом» в тексте засчитано за артефакт.');
+        $this->assertSame(0, $gen->artifact_count('Запомни 1. что-то', ai_generator::MEMO_MARKER),
+            'Хвост с номером применён к артефакту, который пишется с двоеточием.');
+    }
+
+    /**
+     * Переспрос за шагами называет ИХ формат, а не чужой.
+     *
+     * Прежняя развилка знала два артефакта и третьему выдала бы формулировку про примеры.
+     */
+    public function test_step_retry_asks_for_numbered_lines(): void {
+        $this->resetAfterTest();
+        $gen = $this->gen(['Текст без шагов.', "Шаг 1. Раз.
+
+Шаг 2. Два.
+
+Шаг 3. Три."]);
+
+        $this->lesson($gen, ['class_number' => 5, 'categories' => [1], 'ovz_types' => [3]]);
+
+        $retry = $gen->last_prompt();
+        $this->assertStringContainsString(ai_generator::STEP_MARKER . ' 1. ...', $retry);
+        $this->assertStringContainsString('порядком действий', $retry);
+        $this->assertStringNotContainsString('пример из реальной жизни', $retry,
+            'Шагам досталась формулировка чужого артефакта.');
+    }
+
+    /**
+     * У КАЖДОГО артефакта своя формулировка переспроса.
+     *
+     * В match есть ветка по умолчанию - без нее забытая формулировка роняла бы генерацию урока
+     * целиком (UnhandledMatchError летит ВНЕ try). Но запасная ветка не должна работать молча,
+     * поэтому тест сторожит число артефактов: добавили новый - опишите его формулировку и внесите
+     * сюда, иначе ребенок получит переспрос без требования к содержанию строки.
+     */
+    public function test_every_artifact_has_its_own_retry_wording(): void {
+        $this->resetAfterTest();
+        $gen  = $this->gen([]);
+        $crit = $gen->build_criteria(
+            ['class_number' => 5, 'categories' => [1], 'ovz_types' => [1, 2, 3, 4, 5, 6]]);
+
+        $wordings = [
+            ai_generator::MEMO_MARKER    => 'главное понятие',
+            ai_generator::EXAMPLE_MARKER => 'пример из реальной жизни',
+            ai_generator::STEP_MARKER    => 'порядком действий',
+        ];
+        $this->assertCount(count($wordings), $gen->required_artifacts($crit),
+            'Появился артефакт без своей формулировки переспроса - опишите ее и внесите в тест.');
+
+        $gen = $this->gen(['Текст без единого артефакта.', 'И второй такой же.']);
+        $this->lesson($gen, ['class_number' => 5, 'categories' => [1],
+                             'ovz_types' => [1, 2, 3, 4, 5, 6]]);
+        $retry = $gen->last_prompt();
+        foreach ($wordings as $marker => $wording) {
+            $this->assertStringContainsString($wording, $retry,
+                "Артефакт «{$marker}» получил чужую или пустую формулировку.");
+        }
+    }
+
+    /**
      * Строки «Пример:» из источника НЕ вырезаются: пример - это содержание, а не повтор.
      */
     public function test_examples_stay_in_the_source(): void {

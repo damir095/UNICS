@@ -90,10 +90,14 @@ final class lecture_illustrator_test extends \basic_testcase {
         $out  = lecture_illustrator::insert_images($md, $secs,
             [0 => 'lecture-1.jpg', 1 => 'lecture-2.jpg']);
 
-        $this->assertStringContainsString('alt="Краткое введение"', $out);
-        $this->assertStringContainsString('alt="Виды пород"', $out);
+        // Alt несет заголовок И начало раздела: одного заголовка экранному диктору мало, он
+        // повторяет название второй раз подряд и о картинке не говорит ничего.
+        $this->assertStringContainsString('alt="Краткое введение. Текст."', $out);
+        $this->assertStringContainsString('alt="Виды пород. Текст."', $out);
         $this->assertStringNotContainsString('alt="#', $out);
         $this->assertStringNotContainsString('alt="**', $out);
+        // Разметка не утекает в alt и из начала раздела, не только из заголовка.
+        $this->assertStringNotContainsString('alt="Виды пород. **', $out);
     }
 
     public function test_prompt_for_zpr_asks_for_single_object(): void {
@@ -143,7 +147,7 @@ final class lecture_illustrator_test extends \basic_testcase {
 
         $this->assertStringContainsString(
             '#### Раздел 1' . "\n\n" . '<p class="unics-lecture-img">'
-            . '<img src="@@PLUGINFILE@@/lecture-1.jpg" alt="Раздел 1"></p>', $out);
+            . '<img src="@@PLUGINFILE@@/lecture-1.jpg" alt="Раздел 1. Текст раздела 1. Второе предложение раздела 1."></p>', $out);
         $this->assertStringContainsString('@@PLUGINFILE@@/lecture-2.jpg', $out);
     }
 
@@ -166,7 +170,7 @@ final class lecture_illustrator_test extends \basic_testcase {
         $out  = lecture_illustrator::insert_images($md, $secs, [0 => 'lecture-1.jpg']);
 
         $this->assertStringStartsWith('<p class="unics-lecture-img">', $out);
-        $this->assertStringContainsString('alt="Вода в природе"', $out);
+        $this->assertStringContainsString('alt="Вода в природе. Сплошной текст без заголовков."', $out);
         $this->assertStringEndsWith('Сплошной текст без заголовков.', $out);
     }
 
