@@ -158,7 +158,7 @@ class lecture_illustrator {
         if (!self::headings_of($md)) {
             return isset($filenames[0])
                 ? self::img_tag($filenames[0],
-                    self::alt_text($sections[0]['heading'], $sections[0]['lead'] ?? '')) . "\n\n" . $md
+                    self::alt_text($sections[0]['heading'])) . "\n\n" . $md
                 : $md;
         }
 
@@ -179,44 +179,51 @@ class lecture_illustrator {
             if (isset($filenames[$idx])) {
                 $out[] = '';
                 $out[] = self::img_tag($filenames[$idx],
-                    self::alt_text(self::clean_heading($m[1]), $sections[$idx]['lead'] ?? ''));
+                    self::alt_text(self::clean_heading($m[1])));
             }
         }
         return implode("\n", $out);
     }
 
     /**
-     * Текст заголовка без разметки: остаток решеток от более глубокого уровня и
-     * markdown-выделение. И то и другое утекало в alt картинки при живой генерации.
+     * Текст заголовка без разметки.
+     *
+     * Разметка снимается ВЕЗДЕ, а не только по краям: прежний шаблон чистил лишь начало и конец
+     * строки, и заголовок «Что такое **порода**?» уезжал в alt со звездочками - хвостовой якорь
+     * не срабатывал из-за вопросительного знака (найдено ревью). Целиком обернутый случай
+     * «**Виды пород**» чистился и потому единственный стоял в тесте.
      */
     private static function clean_heading(string $raw): string {
-        return trim(preg_replace('/^[#*_\s]+|[#*_\s]+$/u', '', $raw));
+        return trim((string)preg_replace('/[#*_`]+/u', '', $raw));
     }
 
-    /** Сколько знаков начала раздела уходит в alt: фраза, а не абзац. */
-    private const ALT_LEAD_LEN = 110;
+    /** Потолок длины заголовка в alt: он читается голосом целиком. */
+    private const ALT_HEADING_LEN = 100;
 
     /**
-     * Альтернативный текст картинки: заголовок раздела плюс начало его текста.
+     * Альтернативный текст картинки: подпись «иллюстрация к разделу», а не пересказ раздела.
      *
-     * Раньше в alt уходил ОДИН заголовок, хотя начало раздела лежало рядом в $sections и уже
-     * уходило в промт рисования. Ребенку с экранным диктором «Испарение» про картинку не говорит
-     * ничего: он слышит название раздела второй раз подряд. Для слабовидящего это и есть тот
-     * барьер, который указание вида 1 обещало снимать словами ([[ovz-adaptation-measured]]).
+     * Первая редакция клала в alt заголовок ПЛЮС начало раздела. Ревью показало, что это хуже, а
+     * не лучше: иллюстрация рисуется ИЗ этого же текста, нового знания в ней нет, и диктор читал
+     * бы абзац дважды подряд - сперва как alt, потом как сам абзац (WCAG F30/H67 о дублировании
+     * соседнего текста). Заодно в alt утекали строки-артефакты: у ребенка с НОДА раздел
+     * начинается с «Шаг 1. ...», и картинка описывалась бы списком действий.
      *
-     * Длина ограничена: alt читается голосом целиком, и абзац в нем был бы хуже короткой фразы.
+     * Что alt действительно добавляет - это ЧТО ЭТО ТАКОЕ. Прежний голый заголовок диктор читал
+     * сразу после самого заголовка, и ребенок слышал название дважды, не понимая, что между ними
+     * картинка. Подпись эту разницу и несет.
      */
-    private static function alt_text(string $heading, string $lead): string {
-        $lead = trim((string)preg_replace('/[#*_`]+/u', '', $lead));
-        if ($lead === '') {
-            return $heading;
+    private static function alt_text(string $heading): string {
+        $heading = trim($heading);
+        if ($heading === '') {
+            return 'Иллюстрация к уроку';
         }
-        if (\core_text::strlen($lead) > self::ALT_LEAD_LEN) {
-            $cut  = \core_text::substr($lead, 0, self::ALT_LEAD_LEN);
-            $sp   = \core_text::strrpos($cut, ' ');
-            $lead = $sp > 0 ? \core_text::substr($cut, 0, $sp) : $cut;
+        if (\core_text::strlen($heading) > self::ALT_HEADING_LEN) {
+            $cut     = \core_text::substr($heading, 0, self::ALT_HEADING_LEN);
+            $sp      = \core_text::strrpos($cut, ' ');
+            $heading = ($sp > 0 ? \core_text::substr($cut, 0, $sp) : $cut) . '...';
         }
-        return $heading === '' ? $lead : $heading . '. ' . $lead;
+        return 'Иллюстрация к разделу «' . $heading . '»';
     }
 
     /** Разметка одной картинки. Класс - хук для стиля в _unics-pages.scss. */

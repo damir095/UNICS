@@ -90,14 +90,54 @@ final class lecture_illustrator_test extends \basic_testcase {
         $out  = lecture_illustrator::insert_images($md, $secs,
             [0 => 'lecture-1.jpg', 1 => 'lecture-2.jpg']);
 
-        // Alt несет заголовок И начало раздела: одного заголовка экранному диктору мало, он
-        // повторяет название второй раз подряд и о картинке не говорит ничего.
-        $this->assertStringContainsString('alt="Краткое введение. Текст."', $out);
-        $this->assertStringContainsString('alt="Виды пород. Текст."', $out);
+        // Alt - ПОДПИСЬ, а не пересказ раздела: иллюстрация рисуется из этого же текста, нового
+        // знания в ней нет, и диктор читал бы абзац дважды подряд (найдено ревью).
+        $this->assertStringContainsString('alt="Иллюстрация к разделу «Краткое введение»"', $out);
+        $this->assertStringContainsString('alt="Иллюстрация к разделу «Виды пород»"', $out);
         $this->assertStringNotContainsString('alt="#', $out);
-        $this->assertStringNotContainsString('alt="**', $out);
-        // Разметка не утекает в alt и из начала раздела, не только из заголовка.
-        $this->assertStringNotContainsString('alt="Виды пород. **', $out);
+
+    }
+
+    /**
+     * Разметка ВНУТРИ заголовка тоже не должна доезжать до alt.
+     *
+     * Прежняя чистка снимала #, * и _ только по краям строки: «Что такое **порода**?»
+     * возвращалось со звездочками, потому что хвостовой якорь не срабатывал из-за вопросительного
+     * знака. Целиком обернутый случай чистился и потому единственный стоял в тесте (найдено ревью).
+     */
+    public function test_alt_has_no_markup_inside_the_heading(): void {
+        $md   = "#### Что такое **порода**?
+
+Текст.
+
+#### **Круговорот** воды
+
+Текст.";
+        $secs = lecture_illustrator::split_sections($md, 'Тема');
+        $out  = lecture_illustrator::insert_images($md, $secs,
+            [0 => 'lecture-1.jpg', 1 => 'lecture-2.jpg']);
+
+        $this->assertStringContainsString('alt="Иллюстрация к разделу «Что такое порода?»"', $out);
+        $this->assertStringContainsString('alt="Иллюстрация к разделу «Круговорот воды»"', $out);
+    }
+
+    /**
+     * Строки-артефакты не попадают в подпись картинки.
+     *
+     * У ребенка с НОДА раздел начинается с «Шаг 1. ...», и alt из начала раздела описывал бы
+     * картинку списком действий.
+     */
+    public function test_alt_does_not_carry_artifact_lines(): void {
+        $md   = "#### Испарение
+
+Шаг 1. Нагрей воду.
+
+Шаг 2. Дождись пара.";
+        $secs = lecture_illustrator::split_sections($md, 'Тема');
+        $out  = lecture_illustrator::insert_images($md, $secs, [0 => 'lecture-1.jpg']);
+
+        $this->assertStringContainsString('alt="Иллюстрация к разделу «Испарение»"', $out);
+        $this->assertStringNotContainsString('alt="Испарение. Шаг', $out);
     }
 
     public function test_prompt_for_zpr_asks_for_single_object(): void {
@@ -147,7 +187,7 @@ final class lecture_illustrator_test extends \basic_testcase {
 
         $this->assertStringContainsString(
             '#### Раздел 1' . "\n\n" . '<p class="unics-lecture-img">'
-            . '<img src="@@PLUGINFILE@@/lecture-1.jpg" alt="Раздел 1. Текст раздела 1. Второе предложение раздела 1."></p>', $out);
+            . '<img src="@@PLUGINFILE@@/lecture-1.jpg" alt="Иллюстрация к разделу «Раздел 1»"></p>', $out);
         $this->assertStringContainsString('@@PLUGINFILE@@/lecture-2.jpg', $out);
     }
 
@@ -170,7 +210,7 @@ final class lecture_illustrator_test extends \basic_testcase {
         $out  = lecture_illustrator::insert_images($md, $secs, [0 => 'lecture-1.jpg']);
 
         $this->assertStringStartsWith('<p class="unics-lecture-img">', $out);
-        $this->assertStringContainsString('alt="Вода в природе. Сплошной текст без заголовков."', $out);
+        $this->assertStringContainsString('alt="Иллюстрация к разделу «Вода в природе»"', $out);
         $this->assertStringEndsWith('Сплошной текст без заголовков.', $out);
     }
 
