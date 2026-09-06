@@ -80,11 +80,15 @@ abstract class fake_raw_generator extends ai_generator {
     /** Промты генерации, по порядку. Промт судьи сюда НЕ попадает. */
     public array $prompts = [];
 
+    /** Потолок токенов каждого вызова генерации, по порядку. Как у соседней заглушки. */
+    public array $limits = [];
+
     protected function generate_text_gigachat(string $prompt, int $max_tokens = 1024): string {
         // Промт слепого судьи идет последним и перебивал бы сохраненный промт генерации, ради
         // которого заглушка и заведена.
         if (!str_contains($prompt, answer_judge::PROMPT_MARKER)) {
             $this->prompts[] = $prompt;
+            $this->limits[]  = $max_tokens;
         }
         return $this->reply($prompt);
     }
