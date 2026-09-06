@@ -116,10 +116,14 @@ final class cat_readiness_test extends \advanced_testcase {
     public function test_flat_discrimination_with_enough_answers_is_not_a_countdown(): void {
         // Ответов набралось, а дискриминация оценена и вышла около единицы: это измеренный
         // результат, а не нехватка данных, и «еще N ответов» тут было бы неправдой.
+        //
+        // Число ответов задается САМИМ порогом, а не константой 30. Когда порог поднялся с 20 до
+        // 200 по замеру, фикстура на 30 ответов стала описывать противоположный случай -
+        // дискриминацию, которая еще НЕ измерена, - и тест падал, хотя код был прав.
         $this->resetAfterTest();
         $this->setAdminUser();
         [$cid, $eid] = $this->make_codifier();
-        $this->make_calibrated_item($eid, 1.0, 30);
+        $this->make_calibrated_item($eid, 1.0, item_irt_manager::MIN_N_FOR_2PL);
 
         $rows = codifier_analytics::element_bank_readiness($cid);
 
