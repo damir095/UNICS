@@ -140,6 +140,7 @@ class codifier_analytics {
         }
         $elementIds = array_keys($elements);
 
+
         // 1. Per-question прямые баллы (приоритет): [eid => [sum, cnt]].
         $q = self::question_scores($mdl_user_id, $elementIds);
 
@@ -273,6 +274,11 @@ class codifier_analytics {
             $elements[(int)$e->id] = $e;
         }
         $elementIds = array_keys($elements);
+        // Сколько РАЗНЫХ учащихся вообще есть. Наблюдение в калибровке - это пара «ученик-задание»
+        // (item_irt_manager::response_matrix() схлопывает повторные попытки одного ребенка), то
+        // есть calibrated_n считает учащихся, а не ответы. Если детей меньше порога, 2PL
+        // недостижим ни при каком усердии, и обратный отсчет обещал бы невозможное.
+        $students_total = $DB->count_records('unics_students');
 
         // Direct-счётчики на элемент: тегированные вопросы (type=2) + калибровка из item_irt.
         list($insql, $params) = $DB->get_in_or_equal($elementIds, SQL_PARAMS_NAMED);
@@ -383,6 +389,9 @@ class codifier_analytics {
                 // заданий нет, либо ответов хватает и дискриминация оценена (см. flat_2pl_n).
                 'to_2pl_n'     => ($tagged > 0 && $r2pl === 0 && $best > 0)
                     ? max(0, item_irt_manager::MIN_N_FOR_2PL - $best) : 0,
+                // Достижим ли порог в принципе при нынешнем числе учащихся. Без этого методист
+                // видел «нужно еще 184» там, где детей всего шестнадцать (найдено ревью).
+                'to_2pl_reachable' => $students_total >= item_irt_manager::MIN_N_FOR_2PL,
                 // Заданий, где ответов достаточно, а дискриминация вышла плоской. Это не
                 // «мало данных», а измеренный результат, и ждать тут нечего.
                 'flat_2pl_n'   => $flat,

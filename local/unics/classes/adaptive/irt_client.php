@@ -117,13 +117,31 @@ class irt_client {
     }
 
     public static function health(): bool {
+        return self::health_info() !== null;
+    }
+
+    /**
+     * Ответ /health целиком или null при недоступности.
+     *
+     * Нужен из-за порогов: сервис отдает свои значения, а плагин держит их копию
+     * (item_irt_manager::MIN_N_FOR_2PL) - методисту надо показывать расстояние до 2PL. Копия
+     * держалась на одной лишь фразе «при изменении порога в сервисе править и здесь» и разъехалась
+     * при первом же изменении (найдено ревью). Сверку делает проверка здоровья.
+     *
+     * @return array|null разобранный ответ или null
+     */
+    public static function health_info(): ?array {
         try {
             $curl = new \curl(['ignoresecurity' => true]);
-            $curl->get(self::base_url() . '/health', [],
+            $raw = $curl->get(self::base_url() . '/health', [],
                 ['CURLOPT_TIMEOUT' => self::TIMEOUT, 'CURLOPT_CONNECTTIMEOUT' => self::TIMEOUT]);
-            return !$curl->get_errno() && (int)($curl->info['http_code'] ?? 0) === 200;
+            if ($curl->get_errno() || (int)($curl->info['http_code'] ?? 0) !== 200) {
+                return null;
+            }
+            $data = json_decode((string)$raw, true);
+            return is_array($data) ? $data : [];
         } catch (\Throwable $e) {
-            return false;
+            return null;
         }
     }
 }

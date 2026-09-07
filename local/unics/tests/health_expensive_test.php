@@ -57,6 +57,48 @@ final class health_expensive_test extends \advanced_testcase {
     }
 
     /**
+     * Разошедшиеся пороги - повод сказать вслух, а не промолчать.
+     *
+     * Порог 2PL живет в двух местах: в сервисе и копией в item_irt_manager. Копия держалась на
+     * одной лишь фразе «при изменении порога в сервисе править и здесь» и разъехалась при первом
+     * же изменении (найдено ревью). Молчаливое расхождение делает колонку «2PL» и подсказку
+     * «нужно еще N учащихся» неверными.
+     */
+    public function test_threshold_drift_is_reported(): void {
+        $this->resetAfterTest();
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+        $check = new irt_service();
+        $check->probe = fn() => ['ok' => true, 'message' => 'ok',
+            'min_n_for_2pl' => \local_unics\item_irt_manager::MIN_N_FOR_2PL + 1];
+
+        $res = $check->run();
+
+        $this->assertSame(check_result::ATTENTION, $res->level);
+        $this->assertStringContainsString('пороги разошлись', $res->summary);
+    }
+
+    /**
+     * И то, что срабатывать НЕ должно: совпадающие пороги и старый сервис без порогов.
+     *
+     * Второй случай важен отдельно: сервис, который порогов не отдает, сверять не с чем, и
+     * тревожить администратора там не за что.
+     */
+    public function test_matching_or_absent_threshold_is_ok(): void {
+        $this->resetAfterTest();
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+
+        $same = new irt_service();
+        $same->probe = fn() => ['ok' => true, 'message' => 'ok',
+            'min_n_for_2pl' => \local_unics\item_irt_manager::MIN_N_FOR_2PL];
+        $this->assertSame(check_result::OK, $same->run()->level);
+
+        $old = new irt_service();
+        $old->probe = fn() => ['ok' => true, 'message' => 'ok'];
+        $this->assertSame(check_result::OK, $old->run()->level,
+            'старый сервис порогов не отдает - сверять нечего');
+    }
+
+    /**
      * Дорогих в РЕЕСТРЕ ровно две. Озвучка сюда не входит: она читает метку tts_status, без сети.
      *
      * Список берется из health_report::checks(), а не перечисляется руками (найдено ревью:

@@ -113,6 +113,51 @@ final class cat_readiness_test extends \advanced_testcase {
         $this->assertSame(0, (int)$rows[0]->to_2pl_n, 'без тегов расстоянию неоткуда взяться');
     }
 
+    /**
+     * Обратный отсчёт до 2PL не показывается, если порог недостижим при нынешнем числе детей.
+     *
+     * Наблюдение в калибровке - это пара «ученик-задание»: повторные попытки одного ребенка
+     * схлопываются, значит calibrated_n считает УЧАЩИХСЯ, а не ответы. На пилоте из шестнадцати
+     * детей методист видел «ближайшему заданию нужно еще 184 ответов» - неверную единицу и
+     * обещание невозможного (найдено ревью).
+     */
+    public function test_countdown_hidden_when_cohort_is_smaller_than_threshold(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.0, 5);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertGreaterThan(0, (int)$rows[0]->to_2pl_n, 'до порога еще далеко');
+        $this->assertFalse((bool)$rows[0]->to_2pl_reachable,
+            'учащихся в системе меньше порога, а отсчет обещает достижимость');
+    }
+
+    /**
+     * И то, что срабатывать НЕ должно: при достаточной когорте отсчет остается.
+     */
+    public function test_countdown_shown_when_cohort_is_large_enough(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.0, 5);
+        // Заводим ровно столько учащихся, сколько требует порог.
+        for ($i = 0; $i < item_irt_manager::MIN_N_FOR_2PL; $i++) {
+            $DB->insert_record('unics_students', (object)[
+                'mdl_user_id' => $this->getDataGenerator()->create_user()->id,
+                'difficulty_level' => 1, 'class_number' => 5,
+            ]);
+        }
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertTrue((bool)$rows[0]->to_2pl_reachable,
+            'когорта дотягивает до порога, а отсчет спрятан');
+    }
+
     public function test_flat_discrimination_with_enough_answers_is_not_a_countdown(): void {
         // Ответов набралось, а дискриминация оценена и вышла около единицы: это измеренный
         // результат, а не нехватка данных, и «еще N ответов» тут было бы неправдой.

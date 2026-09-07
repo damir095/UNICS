@@ -40,6 +40,21 @@ class irt_service implements check {
         }
         $res = $this->probe !== null ? ($this->probe)() : $this->live_probe();
         if (!empty($res['ok'])) {
+            // Порог 2PL живет в ДВУХ местах: в сервисе и копией у нас - методисту надо показывать
+            // расстояние до оценки дискриминации. Копия держалась на одной лишь фразе «при
+            // изменении порога в сервисе править и здесь» и разъехалась при первом же изменении
+            // (найдено ревью). Сверяем вслух: молчаливое расхождение делает колонку «2PL» и
+            // подсказку «нужно еще N учащихся» неверными.
+            $theirs = $res['min_n_for_2pl'] ?? null;
+            $ours   = \local_unics\item_irt_manager::MIN_N_FOR_2PL;
+            if ($theirs !== null && (int)$theirs !== $ours) {
+                return check_result::attention(
+                    'Отвечает, но пороги разошлись: у сервиса ' . (int)$theirs . ', у нас ' . $ours,
+                    'Приведите item_irt_manager::MIN_N_FOR_2PL к значению сервиса '
+                    . '(MIN_RESPONSES_FOR_2PL в ai-service/app/irt.py). Пока они разные, колонка '
+                    . '«2PL» и подсказка «нужно еще N учащихся» считаются по неверному порогу.'
+                );
+            }
             return check_result::ok('Отвечает');
         }
         return check_result::alarm(
@@ -53,8 +68,16 @@ class irt_service implements check {
     /** `irt_client::health()` уже есть в проекте - свой HTTP не изобретаем. */
     private function live_probe(): array {
         try {
-            $ok = \local_unics\adaptive\irt_client::health();
-            return ['ok' => $ok, 'message' => $ok ? 'ok' : 'нет ответа'];
+            $info = \local_unics\adaptive\irt_client::health_info();
+            if ($info === null) {
+                return ['ok' => false, 'message' => 'нет ответа'];
+            }
+            return [
+                'ok'      => true,
+                'message' => 'ok',
+                // Старый сервис порогов не отдает - тогда сверять нечего, и это не повод тревожить.
+                'min_n_for_2pl' => $info['thresholds']['min_responses_for_2pl'] ?? null,
+            ];
         } catch (\Throwable $e) {
             return ['ok' => false, 'message' => $e->getMessage()];
         }
