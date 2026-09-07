@@ -114,48 +114,50 @@ final class cat_readiness_test extends \advanced_testcase {
     }
 
     /**
-     * Обратный отсчёт до 2PL не показывается, если порог недостижим при нынешнем числе детей.
+     * Граница достижимости пинается ТОЧНО на пороге.
      *
-     * Наблюдение в калибровке - это пара «ученик-задание»: повторные попытки одного ребенка
-     * схлопываются, значит calibrated_n считает УЧАЩИХСЯ, а не ответы. На пилоте из шестнадцати
-     * детей методист видел «ближайшему заданию нужно еще 184 ответов» - неверную единицу и
-     * обещание невозможного (найдено ревью).
+     * Прежние два теста давали ноль учащихся и ровно порог, и мутация «>= 1» их переживала:
+     * ноль давал ложь, двести - истину при любом разумном сравнении (найдено ревью). Значение
+     * внедряется параметром, поэтому проверить 199 и 200 стоит одного вызова, а не когорты из
+     * двухсот детей.
      */
-    public function test_countdown_hidden_when_cohort_is_smaller_than_threshold(): void {
-        global $DB;
+    public function test_cohort_boundary_is_exactly_the_threshold(): void {
         $this->resetAfterTest();
-        $this->setAdminUser();
-        [$cid, $eid] = $this->make_codifier();
-        $this->make_calibrated_item($eid, 1.0, 5);
+        $n = item_irt_manager::MIN_N_FOR_2PL;
 
-        $rows = codifier_analytics::element_bank_readiness($cid);
-
-        $this->assertGreaterThan(0, (int)$rows[0]->to_2pl_n, 'до порога еще далеко');
-        $this->assertFalse((bool)$rows[0]->to_2pl_reachable,
-            'учащихся в системе меньше порога, а отсчет обещает достижимость');
+        $this->assertFalse(codifier_analytics::cohort_reaches_2pl($n - 1),
+            'на единицу ниже порога 2PL недостижим');
+        $this->assertTrue(codifier_analytics::cohort_reaches_2pl($n),
+            'ровно на пороге 2PL достижим');
+        $this->assertFalse(codifier_analytics::cohort_reaches_2pl(0));
     }
 
     /**
-     * И то, что срабатывать НЕ должно: при достаточной когорте отсчет остается.
+     * Считаются только АКТИВНЫЕ учащиеся.
+     *
+     * Прямой count_records() по таблице учитывал архивных, выпущенных и удаленных - они новых
+     * попыток не дадут, и достижимость выходила ложной (найдено ревью). Проверяем на трех детях,
+     * а не на когорте: важна выборка, а не число.
      */
-    public function test_countdown_shown_when_cohort_is_large_enough(): void {
+    public function test_archived_and_graduated_are_not_counted(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
-        [$cid, $eid] = $this->make_codifier();
-        $this->make_calibrated_item($eid, 1.0, 5);
-        // Заводим ровно столько учащихся, сколько требует порог.
-        for ($i = 0; $i < item_irt_manager::MIN_N_FOR_2PL; $i++) {
-            $DB->insert_record('unics_students', (object)[
+
+        $mk = function (array $extra) use ($DB) {
+            return $DB->insert_record('unics_students', (object)([
                 'mdl_user_id' => $this->getDataGenerator()->create_user()->id,
                 'difficulty_level' => 1, 'class_number' => 5,
-            ]);
-        }
+            ] + $extra));
+        };
+        $mk([]);                              // активный
+        $mk(['archived_at' => time()]);       // архивный
+        $mk(['graduated_at' => time()]);      // выпущенный
 
-        $rows = codifier_analytics::element_bank_readiness($cid);
-
-        $this->assertTrue((bool)$rows[0]->to_2pl_reachable,
-            'когорта дотягивает до порога, а отсчет спрятан');
+        // Через ТОТ метод, которым пользуется предикат: проверка самого student_helper не увидела
+        // бы подмену на прямой count_records() внутри предиката (найдено мутацией).
+        $this->assertSame(1, codifier_analytics::active_cohort_size(),
+            'в счет попали архивные или выпущенные');
     }
 
     public function test_flat_discrimination_with_enough_answers_is_not_a_countdown(): void {

@@ -78,6 +78,27 @@ final class health_expensive_test extends \advanced_testcase {
     }
 
     /**
+     * Путь до поля в ответе /health проверяется отдельно.
+     *
+     * Оба теста сверки подставляют зонд, то есть саму раскладку ответа не трогают. Сервис живет в
+     * ОТДЕЛЬНОМ репозитории и меняется независимо: переименуй поле - и `?? null` съел бы это
+     * молча, а страница вечно говорила бы «Отвечает» при разошедшихся порогах (найдено ревью).
+     *
+     * Образец взят с живого ответа сервиса.
+     */
+    public function test_threshold_is_read_from_the_real_health_shape(): void {
+        $this->resetAfterTest();
+
+        $this->assertSame(200, irt_service::threshold_from_health(
+            ['status' => 'ok', 'thresholds' => ['min_responses_for_2pl' => 200]]));
+        // Старый сервис: порогов нет вовсе.
+        $this->assertNull(irt_service::threshold_from_health(['status' => 'ok']));
+        // Поле переехало или переименовано - молча за ноль не считаем.
+        $this->assertNull(irt_service::threshold_from_health(
+            ['status' => 'ok', 'thresholds' => ['min_n' => 200]]));
+    }
+
+    /**
      * И то, что срабатывать НЕ должно: совпадающие пороги и старый сервис без порогов.
      *
      * Второй случай важен отдельно: сервис, который порогов не отдает, сверять не с чем, и

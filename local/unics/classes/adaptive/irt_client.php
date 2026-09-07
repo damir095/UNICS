@@ -116,10 +116,6 @@ class irt_client {
         ];
     }
 
-    public static function health(): bool {
-        return self::health_info() !== null;
-    }
-
     /**
      * Ответ /health целиком или null при недоступности.
      *

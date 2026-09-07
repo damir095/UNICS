@@ -48,11 +48,17 @@ class irt_service implements check {
             $theirs = $res['min_n_for_2pl'] ?? null;
             $ours   = \local_unics\item_irt_manager::MIN_N_FOR_2PL;
             if ($theirs !== null && (int)$theirs !== $ours) {
+                // Совет пишется для АДМИНИСТРАТОРА ШКОЛЫ без знания PHP - так требует контракт
+                // check_result. Прежняя редакция велела ему править константу в классе, чего он
+                // сделать не может, и расхождение осталось бы (найдено ревью). Техническая деталь
+                // ушла в подробности - там ее прочтет разработчик.
                 return check_result::attention(
                     'Отвечает, но пороги разошлись: у сервиса ' . (int)$theirs . ', у нас ' . $ours,
-                    'Приведите item_irt_manager::MIN_N_FOR_2PL к значению сервиса '
-                    . '(MIN_RESPONSES_FOR_2PL в ai-service/app/irt.py). Пока они разные, колонка '
-                    . '«2PL» и подсказка «нужно еще N учащихся» считаются по неверному порогу.'
+                    'Сообщите разработчику: расчетный сервис и плагин ждут разного числа ответов '
+                    . 'для оценки задания. Пока они разные, колонка «2PL» и подсказка о нехватке '
+                    . 'учащихся считаются по неверному порогу.',
+                    ['Привести item_irt_manager::MIN_N_FOR_2PL к MIN_RESPONSES_FOR_2PL '
+                     . 'из ai-service/app/irt.py']
                 );
             }
             return check_result::ok('Отвечает');
@@ -65,7 +71,20 @@ class irt_service implements check {
         );
     }
 
-    /** `irt_client::health()` уже есть в проекте - свой HTTP не изобретаем. */
+    /**
+     * Порог 2PL из ответа /health или null, если сервис его не отдает.
+     *
+     * Вынесено отдельно, чтобы путь до поля проверялся тестом. Оба теста сверки подставляют зонд,
+     * то есть саму раскладку ответа не трогают: переименуй поле на стороне сервиса (он живет в
+     * ОТДЕЛЬНОМ репозитории и меняется независимо) - и `?? null` съел бы это молча, а страница
+     * вечно говорила бы «Отвечает» при разошедшихся порогах (найдено ревью).
+     */
+    public static function threshold_from_health(array $info): ?int {
+        $v = $info['thresholds']['min_responses_for_2pl'] ?? null;
+        return is_numeric($v) ? (int)$v : null;
+    }
+
+    /** Ответ сервиса целиком: свой HTTP не изобретаем, берем `irt_client::health_info()`. */
     private function live_probe(): array {
         try {
             $info = \local_unics\adaptive\irt_client::health_info();
@@ -75,8 +94,7 @@ class irt_service implements check {
             return [
                 'ok'      => true,
                 'message' => 'ok',
-                // Старый сервис порогов не отдает - тогда сверять нечего, и это не повод тревожить.
-                'min_n_for_2pl' => $info['thresholds']['min_responses_for_2pl'] ?? null,
+                'min_n_for_2pl' => self::threshold_from_health($info),
             ];
         } catch (\Throwable $e) {
             return ['ok' => false, 'message' => $e->getMessage()];
