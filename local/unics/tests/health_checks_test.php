@@ -172,10 +172,12 @@ final class health_checks_test extends \advanced_testcase {
     /**
      * Недостижимый порог точности - повод сказать администратору, а не молчать.
      *
-     * Замер 2026-09-08: порог 0.3, стоявший на стенде, не сработал НИ РАЗУ - четыреста сессий из
-     * четырехсот остановились по лимиту заданий. Индикатор готовности показывает это методисту,
-     * но ЧИСЛО вводит администратор в настройках, и там его никто не предупреждал
-     * ([[cat-attainable-precision]]).
+     * Замер 2026-09-08: порог 0.3 не сработал НИ РАЗУ - четыреста сессий из четырехсот
+     * остановились по пределу заданий. Число вводит администратор в настройках, и там его никто
+     * не предупреждал ([[cat-attainable-precision]]).
+     *
+     * Вопрос о НАСТРОЙКАХ, а не о базе: больше предела ребенку не дадут, сколько заданий ни
+     * накопи, поэтому пол ошибки считается из одного предела.
      */
     public function test_unreachable_threshold_is_reported(): void {
         $this->resetAfterTest();
@@ -183,47 +185,92 @@ final class health_checks_test extends \advanced_testcase {
         set_config('cat_se_threshold', '0.3', 'local_unics');
         set_config('cat_max_items', 20, 'local_unics');
 
-        $check = new cat_threshold();
-        $check->probe = fn() => 5;   // лучший пул установки - пять заданий
-
-        $res = $check->run();
+        $res = (new cat_threshold())->run();
 
         $this->assertSame(check_result::ATTENTION, $res->level);
         $this->assertStringContainsString('недостижим', $res->summary);
-        // Совет обязан назвать ЧИСЛО заданий: без него администратор не знает, что делать.
-        // Число считается из порога: SE = 1/sqrt(1 + n/4) при 0.3 дает 41.
-        $this->assertStringContainsString('около 41 ', $res->action);
-        $this->assertStringContainsString('на одну тему', $res->action);
+        // Совет обязан быть ВЫПОЛНИМЫМ. Первая редакция звала набрать 41 задание, а предел резал
+        // пул на двадцати - 41 задание при пределе 20 дает 0.408, а не 0.30 (найдено ревью).
+        $this->assertStringContainsString('увеличьте предел заданий', $res->action);
+        $this->assertStringContainsString('до 41 задания', $res->action);
+        // И проверяем, что совет действительно достигает порога.
+        set_config('cat_max_items', 41, 'local_unics');
+        $this->assertSame(check_result::OK, (new cat_threshold())->run()->level,
+            'совет выполнен, а проверка все еще тревожит - значит совет неверен');
     }
 
     /**
-     * И то, что срабатывать НЕ должно: достижимый порог, выключенная проверка, пустая база.
+     * Ровно на поле точности остановки НЕ будет: сервис требует строго меньше порога.
      *
-     * Три разные причины молчания, и все три обязаны молчать по-своему: тревожить администратора
-     * там, где он ничего не может сделать, - худший вид проверки здоровья.
+     * estimate_precision::is_provisional держит ту же границу. Нестрогое сравнение делало бы
+     * проверку немой ровно на пороге, который не срабатывает никогда.
      */
-    public function test_reachable_or_irrelevant_threshold_is_ok(): void {
+    public function test_threshold_exactly_at_the_floor_is_reported(): void {
+        $this->resetAfterTest();
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+        // Предел 12 выбран НЕ случайно: 1 + 12/4 = 4, корень ровно 2, пол ровно 0.5. Первая
+        // редакция брала предел 20 и порог (string)(1/sqrt(6)) - строка теряла разряды, точного
+        // равенства не выходило, и мутация «нестрогое сравнение» тест переживала.
+        set_config('cat_max_items', 12, 'local_unics');
+        set_config('cat_se_threshold', '0.5', 'local_unics');
+
+        $this->assertSame(check_result::ATTENTION, (new cat_threshold())->run()->level,
+            'ровно на поле точность не достигается, а проверка промолчала');
+    }
+
+    /**
+     * И то, что срабатывать НЕ должно: достижимый порог и выключенная проверка.
+     */
+    public function test_reachable_or_disabled_threshold_is_ok(): void {
         $this->resetAfterTest();
         set_config('cat_max_items', 20, 'local_unics');
 
-        // Порог мягкий, пул богатый - достижимо.
         set_config('adaptive_cat_enabled', 1, 'local_unics');
         set_config('cat_se_threshold', '0.6', 'local_unics');
-        $easy = new cat_threshold();
-        $easy->probe = fn() => 20;
-        $this->assertSame(check_result::OK, $easy->run()->level);
+        $res = (new cat_threshold())->run();
+        $this->assertSame(check_result::OK, $res->level);
+        $this->assertStringContainsString('Достижим', $res->summary);
 
-        // Калиброванных заданий нет вовсе - это забота индикатора готовности, а не порога.
-        $empty = new cat_threshold();
-        $empty->probe = fn() => 0;
-        $this->assertSame(check_result::OK, $empty->run()->level);
-
-        // Адаптивная проверка выключена - порог ни на что не влияет.
         set_config('adaptive_cat_enabled', 0, 'local_unics');
-        $off = new cat_threshold();
-        $off->probe = function () {
-            $this->fail('при выключенной проверке пул считать незачем');
-        };
-        $this->assertSame(check_result::OK, $off->run()->level);
+        set_config('cat_se_threshold', '0.3', 'local_unics');
+        $this->assertSame(check_result::OK, (new cat_threshold())->run()->level,
+            'при выключенной проверке порог ни на что не влияет');
+    }
+
+    /**
+     * Незаданный предел заданий не означает «предела нет».
+     *
+     * cat_session_manager::config() подставляет свой запас, и считать по другому значило бы
+     * обещать точность, которой сессия не даст.
+     */
+    public function test_unset_item_cap_uses_the_shared_default(): void {
+        $this->resetAfterTest();
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+        set_config('cat_se_threshold', '0.3', 'local_unics');
+        unset_config('cat_max_items', 'local_unics');
+
+        $res = (new cat_threshold())->run();
+
+        $this->assertSame(check_result::ATTENTION, $res->level);
+        $this->assertStringContainsString(
+            'пределе в ' . \local_unics\learning\cat_session_manager::DEFAULT_MAX_ITEMS,
+            $res->summary);
+    }
+
+    /**
+     * Подробности идут парами «метка - значение», как их рисует страница здоровья.
+     */
+    public function test_details_are_labelled(): void {
+        $this->resetAfterTest();
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+        set_config('cat_se_threshold', '0.3', 'local_unics');
+        set_config('cat_max_items', 20, 'local_unics');
+
+        $res = (new cat_threshold())->run();
+
+        $this->assertNotEmpty($res->details);
+        foreach ($res->details as $k => $v) {
+            $this->assertIsString($k, 'подробности со списковым ключом рисуются как «0: ...»');
+        }
     }
 }

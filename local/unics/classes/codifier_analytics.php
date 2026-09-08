@@ -426,7 +426,7 @@ class codifier_analytics {
         // от элемента, а в цикле это сорок обращений к кешу настроек на одно и то же число.
         $maxitems = (int)get_config('local_unics', 'cat_max_items');
         if ($maxitems <= 0) {
-            $maxitems = 20;
+            $maxitems = \local_unics\learning\cat_session_manager::DEFAULT_MAX_ITEMS;
         }
 
         // Роллап по поддереву (через path) + вердикт.
