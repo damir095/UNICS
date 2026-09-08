@@ -200,6 +200,67 @@ final class health_checks_test extends \advanced_testcase {
     }
 
     /**
+     * СОВЕТ ОБЯЗАН БЫТЬ ВЫПОЛНИМЫМ - на всех порогах и пределах, а не на одном удобном.
+     *
+     * Прежний тест проверял выполнимость ровно при пороге 0.3 и пределе 20, а там обе формулы
+     * срабатывали случайно: 0.40825 округлилось вверх само, и инверсия дала 41 вместо 40. Ревью
+     * посчитало остальные комбинации: совет «поднимите порог» уводил НИЖЕ пола на пяти пределах из
+     * шести, а совет «увеличьте предел» приводил ровно в отвергаемую точку на трех порогах из
+     * четырех. Оба дефекта пережили зеленый сьют.
+     *
+     * Проверяется то, что администратор ЧИТАЕТ, а не то, что возвращают функции: числа
+     * выковыриваются из текста совета и подставляются обратно в настройки.
+     *
+     * ЧЕГО ЭТОТ ТЕСТ НЕ ЛОВИТ, и это надо назвать: десятичную запятую. Третий дефект ревью в том,
+     * что format_float() под русской локалью дает «0,41», а clean_param('0,41', PARAM_FLOAT) -
+     * ноль, то есть совет не правил бы настройку, а обнулял. Окружение PHPUnit английское
+     * (в phpunit_moodledata нет пакета ru), decsep там точка, и мутация «убрать $localized=false»
+     * тест ПЕРЕЖИВАЕТ. Дефект и починка проверены на живом стенде: format_float(0.408, 3) дает
+     * «0,408», с false - «0.408». Проверка clean_param ниже оставлена как страховка на случай
+     * русского тестового окружения, но покрытием ее считать нельзя.
+     */
+    public function test_advice_is_executable_on_every_threshold_and_cap(): void {
+        $this->resetAfterTest();
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+        $seen = 0;
+        foreach ([0.2, 0.25, 0.3, 0.4, 0.5] as $t) {
+            foreach ([10, 12, 20, 21, 30, 40] as $cap) {
+                set_config('cat_se_threshold', (string)$t, 'local_unics');
+                set_config('cat_max_items', $cap, 'local_unics');
+                if ((new cat_threshold())->run()->level !== check_result::ATTENTION) {
+                    continue;
+                }
+                $seen++;
+                $action = (new cat_threshold())->run()->action;
+                $where = "порог {$t}, предел {$cap}: ";
+
+                $this->assertSame(1, preg_match('/поднимите порог до ([0-9.,]+)/u', $action, $m1),
+                    $where . 'в совете нет порога');
+                $this->assertSame(1, preg_match('/за сессию до ([0-9]+)/u', $action, $m2),
+                    $where . 'в совете нет предела');
+
+                // Число из совета администратор переносит в поле PARAM_FLOAT руками.
+                $advised = clean_param($m1[1], PARAM_FLOAT);
+                $this->assertGreaterThan(0.0, $advised,
+                    $where . 'совет набран так, что настройка обнулится: ' . $m1[1]);
+
+                // Совет первый: поднять порог, предел оставить.
+                set_config('cat_se_threshold', (string)$advised, 'local_unics');
+                $this->assertSame(check_result::OK, (new cat_threshold())->run()->level,
+                    $where . 'порог поднят до ' . $advised . ' по совету, а тревога осталась');
+
+                // Совет второй: увеличить предел, порог оставить.
+                set_config('cat_se_threshold', (string)$t, 'local_unics');
+                set_config('cat_max_items', (int)$m2[1], 'local_unics');
+                $this->assertSame(check_result::OK, (new cat_threshold())->run()->level,
+                    $where . 'предел поднят до ' . $m2[1] . ' по совету, а тревога осталась');
+            }
+        }
+        // Сам перебор тоже может стать пустым - тогда тест зелен, ничего не проверив.
+        $this->assertGreaterThanOrEqual(10, $seen, 'недостижимых сочетаний почти не набралось');
+    }
+
+    /**
      * Ровно на поле точности остановки НЕ будет: сервис требует строго меньше порога.
      *
      * estimate_precision::is_provisional держит ту же границу. Нестрогое сравнение делало бы
@@ -253,7 +314,7 @@ final class health_checks_test extends \advanced_testcase {
 
         $this->assertSame(check_result::ATTENTION, $res->level);
         $this->assertStringContainsString(
-            'пределе в ' . \local_unics\learning\cat_session_manager::DEFAULT_MAX_ITEMS,
+            'пределе в ' . \local_unics\learning\cat_limits::DEFAULT_MAX_ITEMS,
             $res->summary);
     }
 
