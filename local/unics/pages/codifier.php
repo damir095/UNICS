@@ -192,8 +192,11 @@ foreach (codifier_analytics::element_bank_readiness((int)$codifier->id) as $rr) 
 // один раз: прежде он лежал в каждой строке результата и повторялся бы сорока одинаковыми фразами
 // в таблице из сорока элементов (найдено ревью).
 $cohort_reaches_2pl = \local_unics\codifier_analytics::cohort_reaches_2pl();
+// Порог точности, заданный в настройках. Нужен, чтобы сказать методисту, когда его пул этого
+// порога не даст: замер показал, что настроенные 0.3 не достигались ни в одной сессии.
+$cat_se_threshold = (float)get_config('local_unics', 'cat_se_threshold');
 
-$readycell = function (?object $rr) use ($cohort_reaches_2pl) {
+$readycell = function (?object $rr) use ($cohort_reaches_2pl, $cat_se_threshold) {
     if ($rr === null) {
         return html_writer::tag('td', '-', ['class' => 'text-muted']);
     }
@@ -235,6 +238,14 @@ $readycell = function (?object $rr) use ($cohort_reaches_2pl) {
                 // это измеренный результат, а не нехватка данных.
                 $line .= ', дискриминация оценена и вышла плоской';
             }
+        }
+        // Достижимая точность. Показываем ТОЛЬКО когда пул не дает заданного порога: иначе это
+        // лишний шум. Порог точности, который никогда не срабатывает, вводит методиста в
+        // заблуждение сильнее, чем отсутствие настройки ([[cat-attainable-precision]]).
+        if ($rr->attainable_se !== null && $cat_se_threshold > 0
+                && (float)$rr->attainable_se > $cat_se_threshold) {
+            $line .= '. Точнее ' . format_float((float)$rr->attainable_se, 2)
+                . ' этот пул не даст, а порог задан ' . format_float($cat_se_threshold, 2);
         }
         $counts = html_writer::tag('div', $line, ['class' => 'text-muted small']);
     }

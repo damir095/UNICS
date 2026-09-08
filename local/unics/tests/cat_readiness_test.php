@@ -114,6 +114,49 @@ final class cat_readiness_test extends \advanced_testcase {
     }
 
     /**
+     * Достижимая точность считается по размеру пула и упирается в лимит заданий.
+     *
+     * Замер 2026-09-07: настроенный порог 0.3 не достигался НИ РАЗУ - четыреста смоделированных
+     * сессий из четырехсот остановились по лимиту заданий, живые сессии стенда - по исчерпанию
+     * пула с SE от 0.75 до 0.97. Порог, который никогда не срабатывает, вводит методиста в
+     * заблуждение сильнее, чем его отсутствие.
+     *
+     * Формула проверена против наблюдений: 4 задания дают 0.707 при наблюдаемых 0.77, 20 заданий -
+     * 0.408 при наблюдаемых 0.453. Это ПОЛ, реальность чуть хуже.
+     */
+    public function test_attainable_se_follows_pool_and_item_cap(): void {
+        $this->resetAfterTest();
+        set_config('cat_max_items', 20, 'local_unics');
+
+        // 1 / sqrt(1 + 0.25 * n)
+        $this->assertEqualsWithDelta(0.707, codifier_analytics::attainable_se(4), 0.001);
+        $this->assertEqualsWithDelta(0.408, codifier_analytics::attainable_se(20), 0.001);
+        // Пул больше лимита заданий точности не добавляет: ребенку все равно дадут не больше
+        // лимита, и обещать по размеру банка было бы неправдой.
+        $this->assertEqualsWithDelta(codifier_analytics::attainable_se(20),
+            codifier_analytics::attainable_se(200), 0.001);
+        // Пустой пул - априорная единица.
+        $this->assertEqualsWithDelta(1.0, codifier_analytics::attainable_se(0), 0.001);
+    }
+
+    /**
+     * Достижимая точность попадает в строку готовности.
+     */
+    public function test_readiness_row_carries_attainable_se(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        set_config('cat_max_items', 20, 'local_unics');
+        [$cid, $eid] = $this->make_codifier();
+        $this->make_calibrated_item($eid, 1.0, item_irt_manager::MIN_CALIBRATED_N);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(1, (int)$rows[0]->calibrated_n);
+        $this->assertEqualsWithDelta(0.89, (float)$rows[0]->attainable_se, 0.01,
+            'одно задание дает 1/sqrt(1.25)');
+    }
+
+    /**
      * Граница достижимости пинается ТОЧНО на пороге.
      *
      * Прежние два теста давали ноль учащихся и ровно порог, и мутация «>= 1» их переживала:
