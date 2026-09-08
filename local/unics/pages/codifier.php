@@ -192,9 +192,10 @@ foreach (codifier_analytics::element_bank_readiness((int)$codifier->id) as $rr) 
 // один раз: прежде он лежал в каждой строке результата и повторялся бы сорока одинаковыми фразами
 // в таблице из сорока элементов (найдено ревью).
 $cohort_reaches_2pl = \local_unics\codifier_analytics::cohort_reaches_2pl();
-// Порог точности, заданный в настройках. Нужен, чтобы сказать методисту, когда его пул этого
-// порога не даст: замер показал, что настроенные 0.3 не достигались ни в одной сессии.
-$cat_se_threshold = (float)get_config('local_unics', 'cat_se_threshold');
+// Порог точности берется у ЕДИНСТВЕННОГО источника, который зовет и сам CAT. Сырой get_config
+// давал ноль при незаданной настройке, предупреждение гасло для всех элементов - а проверка при
+// этом продолжала применять умолчание 0.3 и упираться в недостижимый порог (найдено ревью).
+$cat_se_threshold = \local_unics\adaptive\estimate_precision::threshold();
 
 $readycell = function (?object $rr) use ($cohort_reaches_2pl, $cat_se_threshold) {
     if ($rr === null) {
@@ -242,8 +243,9 @@ $readycell = function (?object $rr) use ($cohort_reaches_2pl, $cat_se_threshold)
         // Достижимая точность. Показываем ТОЛЬКО когда пул не дает заданного порога: иначе это
         // лишний шум. Порог точности, который никогда не срабатывает, вводит методиста в
         // заблуждение сильнее, чем отсутствие настройки ([[cat-attainable-precision]]).
-        if ($rr->attainable_se !== null && $cat_se_threshold > 0
-                && (float)$rr->attainable_se > $cat_se_threshold) {
+        // Сравнение по НЕОКРУГЛЕННОМУ значению: сорок заданий дают 0.30151, и округление до 0.30
+        // глушило предупреждение ровно в той точке, ради которой оно написано (найдено ревью).
+        if ($rr->attainable_se !== null && (float)$rr->attainable_se > $cat_se_threshold) {
             $line .= '. Точнее ' . format_float((float)$rr->attainable_se, 2)
                 . ' этот пул не даст, а порог задан ' . format_float($cat_se_threshold, 2);
         }

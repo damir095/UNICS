@@ -252,46 +252,35 @@ class codifier_analytics {
     }
 
     /**
-     * Готовность банка к CAT по элементам кодификатора (read-only индикатор).
-     * На каждый элемент: сколько вопросов поддерева протегировано (type=2), сколько из
-     * них калибровано (есть строка в unics_item_irt) и сколько 2PL (model='2pl'), плюс
-     * вердикт по настройке cat_min_items. Роллап по поддереву через path, как
-     * cohort_element_progress. [[cat-readiness-indicator-design]]. Read-only.
-     *
-     * @return array<int,object> {id,code,title,parent_id,path,depth,tagged_n,calibrated_n,
-     *         ready_2pl_n,to_2pl_n,flat_2pl_n,verdict}
-     *         verdict in {'no_tags','low_calib','ready'}.
-     */
-    /**
-     * Информация Фишера одного задания Раша, попавшего точно в способность ребенка.
-     *
-     * Для 2PL это a^2 * p * (1-p); при a = 1 и p = 0.5 выходит 0.25. Наши задания идут с a = 1
-     * (гард Раша ниже порога 2PL), а CAT подбирает задание по близости b к theta, то есть целится
-     * ровно в p = 0.5. Это ПОТОЛОК информации: реальное попадание хуже, значит и оценка ниже -
-     * оптимистичная граница, и подписывать ее надо как «точнее не будет».
-     */
-    private const ITEM_INFO_BEST = 0.25;
-
-    /**
      * Какая точность оценки достижима при таком пуле - в лучшем случае.
      *
-     * Замер 2026-09-07 ([[cat-attainable-precision]]): настроенный на стенде порог 0.3 не
+     * Замер 2026-09-08 ([[cat-attainable-precision]]): настроенный на стенде порог 0.3 не
      * достигался НИ РАЗУ - четыреста смоделированных сессий из четырехсот остановились по лимиту
      * заданий, а живые сессии стенда останавливались по исчерпанию пула с SE от 0.75 до 0.97.
      * Порог точности, который никогда не срабатывает, - decorative setting: методист думает, что
      * задал требование, а оно не исполняется.
      *
-     * Априор N(0,1) дает единицу информации, каждое задание добавляет ITEM_INFO_BEST:
-     * SE = 1 / sqrt(1 + 0.25 * n). Проверено против наблюдений: при 4 заданиях формула дает 0.707
-     * при наблюдаемых 0.77, при 20 - 0.408 при наблюдаемых 0.453. То есть это ПОЛ, реальность
-     * чуть хуже.
+     * Информация задания в лучшем случае - a^2 * p * (1-p) при p = 0.5, то есть a^2 / 4. Берется
+     * РЕАЛЬНАЯ дискриминация каждого задания, а не единица: при переходе банка на 2PL задание с
+     * a = 1.6 несет 0.64 информации вместо 0.25, и формула, прибитая к единице, объявила бы
+     * недостижимым то, что достижимо (найдено ревью).
      *
-     * @param int $pool сколько заданий элемента годятся для CAT
+     * Априор N(0,1) дает единицу информации, дальше суммируются лучшие $cap заданий - больше
+     * ребенку и не дадут. Проверено против наблюдений при a = 1: четыре задания дают 0.707 при
+     * наблюдаемых 0.77, двадцать - 0.408 при 0.453. Это ПОЛ: подбор задания в способность не
+     * идеален, реальность чуть хуже, и подписывать надо «точнее не будет».
+     *
+     * @param float[] $discriminations дискриминации годных для CAT заданий пула
+     * @param int $cap потолок числа заданий за сессию
+     * @return float стандартная ошибка, ниже которой этот пул не опустится
      */
-    public static function attainable_se(int $pool): float {
-        $cap = (int)get_config('local_unics', 'cat_max_items');
-        $n = $cap > 0 ? min($pool, $cap) : $pool;
-        return 1.0 / sqrt(1.0 + self::ITEM_INFO_BEST * max(0, $n));
+    public static function attainable_se(array $discriminations, int $cap): float {
+        $info = array_map(static fn(float $a): float => ($a * $a) / 4.0, $discriminations);
+        rsort($info);
+        if ($cap > 0) {
+            $info = array_slice($info, 0, $cap);
+        }
+        return 1.0 / sqrt(1.0 + array_sum($info));
     }
 
     /**
@@ -329,6 +318,19 @@ class codifier_analytics {
         return \local_unics\identity\student_helper::count_active_students();
     }
 
+    /**
+     * Готовность банка к CAT по элементам кодификатора (read-only индикатор).
+     * На каждый элемент: сколько вопросов поддерева протегировано (type=2), сколько из
+     * них калибровано (есть строка в unics_item_irt) и сколько 2PL (model='2pl'), плюс
+     * вердикт по настройке cat_min_items. Роллап по поддереву через path, как
+     * cohort_element_progress. [[cat-readiness-indicator-design]]. Read-only.
+     *
+     * @return array<int,object> {id,code,title,parent_id,path,depth,tagged_n,calibrated_n,
+     *         ready_2pl_n,to_2pl_n,flat_2pl_n,attainable_se,verdict}
+     *         verdict in {'no_tags','low_calib','ready'};
+     *         attainable_se - НЕокругленная нижняя граница точности при этом пуле
+     *         ([[cat-attainable-precision]]), округляет показ.
+     */
     public static function element_bank_readiness(int $codifier_id): array {
         global $DB;
         $ordered = codifier_manager::get_tree($codifier_id);
@@ -355,7 +357,8 @@ class codifier_analytics {
         // задании - ровно то расхождение, которое эта задача и убирает.
         $params['atol'] = item_irt_manager::A_TOLERANCE;
         $rows = $DB->get_records_sql(
-            "SELECT l.id AS linkid, l.element_id,
+            "SELECT l.id AS linkid, l.element_id, l.target_id,
+                    COALESCE(i.a, 1) AS discrimination,
                     CASE WHEN i.id IS NOT NULL AND i.calibrated_n >= :mincal2
                          THEN 1 ELSE 0 END AS calibrated,
                     CASE WHEN i.model = '2pl' AND i.calibrated_n >= :mincal
@@ -379,18 +382,25 @@ class codifier_analytics {
         // вообще: порог сервиса (MIN_N_FOR_2PL) намного выше нашего порога калибровки.
         $directBest = [];
         $directFlat = [];
+        // Дискриминации годных для CAT заданий, по РАЗНЫМ target_id. Считать по строкам привязок
+        // нельзя: вопрос, размеченный и в раздел, и в его тему, дал бы два задания там, где пул
+        // CAT видит одно (там DISTINCT target_id), и достижимая точность вышла бы завышенной
+        // (найдено ревью).
+        $directA = [];
         foreach ($elementIds as $eid) {
             $directTagged[$eid] = 0;
             $directCalib[$eid]  = 0;
             $direct2pl[$eid]    = 0;
             $directBest[$eid]   = 0;
             $directFlat[$eid]   = 0;
+            $directA[$eid]      = [];
         }
         foreach ($rows as $r) {
             $eid = (int)$r->element_id;
             $directTagged[$eid]++;
             if ((int)$r->calibrated === 1) {
                 $directCalib[$eid]++;
+                $directA[$eid][(int)$r->target_id] = (float)$r->discrimination;
             }
             if ((int)$r->is2pl === 1) {
                 $direct2pl[$eid]++;
@@ -410,6 +420,15 @@ class codifier_analytics {
             $minitems = 5;
         }
 
+        // Тот же запас, что подставляет cat_session_manager::config(). Без него незаданная
+        // настройка означала бы «лимита нет», и точность обещалась бы по всему банку, хотя ребенку
+        // дадут не больше двадцати заданий (найдено ревью). Читаем один раз: значение не зависит
+        // от элемента, а в цикле это сорок обращений к кешу настроек на одно и то же число.
+        $maxitems = (int)get_config('local_unics', 'cat_max_items');
+        if ($maxitems <= 0) {
+            $maxitems = 20;
+        }
+
         // Роллап по поддереву (через path) + вердикт.
         $out = [];
         foreach ($elements as $e) {
@@ -418,6 +437,9 @@ class codifier_analytics {
             $r2pl   = 0;
             $best   = 0;
             $flat   = 0;
+            // Объединение по КЛЮЧУ target_id, а не сложение счетчиков: один вопрос, размеченный
+            // и в раздел, и в его тему, обязан войти в пул один раз.
+            $avals  = [];
             foreach ($elements as $d) {
                 if (strpos((string)$d->path, (string)$e->path) !== 0) {
                     continue;
@@ -427,6 +449,7 @@ class codifier_analytics {
                 $r2pl   += $direct2pl[(int)$d->id];
                 $best    = max($best, $directBest[(int)$d->id]);
                 $flat   += $directFlat[(int)$d->id];
+                $avals  += $directA[(int)$d->id];
             }
             if ($tagged === 0) {
                 $verdict = 'no_tags';
@@ -457,7 +480,14 @@ class codifier_analytics {
                 'flat_2pl_n'   => $flat,
                 // Точность, которой этот пул позволяет достичь в ЛУЧШЕМ случае. Нужна методисту,
                 // чтобы порог точности не выглядел исполнимым там, где он недостижим.
-                'attainable_se' => $calib > 0 ? round(self::attainable_se($calib), 2) : null,
+                //
+                // НЕ округляем: сравнение с порогом идет по этому числу, а округление глушило
+                // предупреждение ровно на границе - сорок заданий дают 0.30151, что округлялось до
+                // 0.30 и переставало быть «больше 0.3» (найдено ревью). Округляет показ.
+                //
+                // Пустой пул тоже получает число, а не null: SE = 1.0 - худший случай, и молчать
+                // о нем неверно, там порог недостижим при любой настройке.
+                'attainable_se' => self::attainable_se(array_values($avals), $maxitems),
                 'verdict'      => $verdict,
             ];
         }

@@ -128,15 +128,89 @@ final class cat_readiness_test extends \advanced_testcase {
         $this->resetAfterTest();
         set_config('cat_max_items', 20, 'local_unics');
 
-        // 1 / sqrt(1 + 0.25 * n)
-        $this->assertEqualsWithDelta(0.707, codifier_analytics::attainable_se(4), 0.001);
-        $this->assertEqualsWithDelta(0.408, codifier_analytics::attainable_se(20), 0.001);
+        $rasch = fn(int $n): array => array_fill(0, $n, 1.0);
+
+        // Информация задания a^2/4, априор дает единицу: 1 / sqrt(1 + 0.25n) при a = 1.
+        $this->assertEqualsWithDelta(0.707, codifier_analytics::attainable_se($rasch(4), 20), 0.001);
+        $this->assertEqualsWithDelta(0.408, codifier_analytics::attainable_se($rasch(20), 20), 0.001);
         // Пул больше лимита заданий точности не добавляет: ребенку все равно дадут не больше
         // лимита, и обещать по размеру банка было бы неправдой.
-        $this->assertEqualsWithDelta(codifier_analytics::attainable_se(20),
-            codifier_analytics::attainable_se(200), 0.001);
-        // Пустой пул - априорная единица.
-        $this->assertEqualsWithDelta(1.0, codifier_analytics::attainable_se(0), 0.001);
+        $this->assertEqualsWithDelta(codifier_analytics::attainable_se($rasch(20), 20),
+            codifier_analytics::attainable_se($rasch(200), 20), 0.001);
+        // Пустой пул - априорная единица, а не молчание: там порог недостижим при любой настройке.
+        $this->assertEqualsWithDelta(1.0, codifier_analytics::attainable_se([], 20), 0.001);
+
+        // Дискриминация берется РЕАЛЬНАЯ: задание 2PL с a = 1.6 несет 0.64 информации вместо 0.25,
+        // и формула, прибитая к единице, объявила бы недостижимым достижимое.
+        $this->assertLessThan(codifier_analytics::attainable_se($rasch(10), 20),
+            codifier_analytics::attainable_se(array_fill(0, 10, 1.6), 20),
+            'высокая дискриминация обязана давать точность лучше, а не такую же');
+
+        // Граница, ради которой предупреждение и написано: сорок заданий дают чуть БОЛЬШЕ 0.3,
+        // то есть порог 0.3 недостижим. Округление до сотых стирало это различие.
+        $this->assertGreaterThan(0.3, codifier_analytics::attainable_se($rasch(40), 40));
+        $this->assertEqualsWithDelta(0.30151, codifier_analytics::attainable_se($rasch(40), 40), 0.0001);
+
+    }
+
+    /**
+     * Один вопрос, размеченный и в раздел, и в его тему, идет в пул ОДИН раз.
+     *
+     * Достижимая точность считалась по строкам привязок, а пул CAT берет DISTINCT target_id
+     * (codifier_link_manager::get_questions_for_element). Двойная разметка - обычное дело при
+     * разметке банка ИИ, и точность обещалась бы вдвое лучше настоящей (найдено ревью). Для
+     * счетчиков тегов расхождение было косметическим, для числа про точность - нет.
+     */
+    public function test_question_tagged_twice_counts_once_for_precision(): void {
+        global $DB, $USER;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        set_config('cat_max_items', 20, 'local_unics');
+        [$cid, $parent] = $this->make_codifier();
+        $child = (int)$DB->insert_record('unics_codifier_element', (object)[
+            'codifier_id' => $cid, 'parent_id' => $parent, 'code' => '1.1', 'title' => 'Подтема',
+            'ordinal' => 0, 'path' => '/' . $cid . '/' . $parent . '/', 'timecreated' => time(),
+        ]);
+        // Задание висит на теме, и ТО ЖЕ САМОЕ - на разделе.
+        $qbe = $this->make_calibrated_item($child, 1.0, item_irt_manager::MIN_CALIBRATED_N);
+        \local_unics\codifier_link_manager::link_question($parent, $qbe, (int)$USER->id);
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+        $byid = [];
+        foreach ($rows as $r) {
+            $byid[(int)$r->id] = $r;
+        }
+
+        $this->assertEqualsWithDelta(
+            codifier_analytics::attainable_se([1.0], 20),
+            (float)$byid[$parent]->attainable_se, 0.001,
+            'один вопрос посчитан дважды - точность обещана лучше настоящей');
+    }
+
+    /**
+     * Незаданный лимит заданий не означает «лимита нет».
+     *
+     * cat_session_manager::config() подставляет 20, а индикатор при пустой настройке брал ВЕСЬ
+     * пул: элемент с двумя сотнями заданий обещал бы 0.14 там, где ребенку дадут двадцать и SE
+     * выйдет 0.41 (найдено ревью). Прежние тесты выставляли лимит явно и эту ветку не трогали.
+     */
+    public function test_unset_item_cap_falls_back_to_twenty(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        unset_config('cat_max_items', 'local_unics');
+        [$cid, $eid] = $this->make_codifier();
+        // Пул заведомо больше запасного лимита.
+        for ($i = 0; $i < 25; $i++) {
+            $this->make_calibrated_item($eid, 1.0, item_irt_manager::MIN_CALIBRATED_N);
+        }
+
+        $rows = codifier_analytics::element_bank_readiness($cid);
+
+        $this->assertSame(25, (int)$rows[0]->calibrated_n);
+        $this->assertEqualsWithDelta(
+            codifier_analytics::attainable_se(array_fill(0, 20, 1.0), 20),
+            (float)$rows[0]->attainable_se, 0.001,
+            'при пустой настройке точность обещана по всему пулу, а не по двадцати заданиям');
     }
 
     /**
