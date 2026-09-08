@@ -23,6 +23,7 @@ class health_report {
             new checks\ai_queue_stuck(),
             new checks\adhoc_backlog(),
             new checks\estimator_sanity(),
+            new checks\cat_threshold(),
             new checks\ai_queue_failures(),
             new checks\gigachat(),
             new checks\salute_speech(),

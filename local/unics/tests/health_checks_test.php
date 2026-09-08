@@ -2,6 +2,7 @@
 namespace local_unics;
 
 use local_unics\health\check_result;
+use local_unics\health\checks\cat_threshold;
 use local_unics\health\checks\cron_freshness;
 
 /**
@@ -166,5 +167,63 @@ final class health_checks_test extends \advanced_testcase {
             'timecreated'   => time() - 2 * DAYSECS,
         ]);
         $this->assertSame(check_result::ALARM, (new \local_unics\health\checks\adhoc_backlog())->run()->level);
+    }
+
+    /**
+     * Недостижимый порог точности - повод сказать администратору, а не молчать.
+     *
+     * Замер 2026-09-08: порог 0.3, стоявший на стенде, не сработал НИ РАЗУ - четыреста сессий из
+     * четырехсот остановились по лимиту заданий. Индикатор готовности показывает это методисту,
+     * но ЧИСЛО вводит администратор в настройках, и там его никто не предупреждал
+     * ([[cat-attainable-precision]]).
+     */
+    public function test_unreachable_threshold_is_reported(): void {
+        $this->resetAfterTest();
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+        set_config('cat_se_threshold', '0.3', 'local_unics');
+        set_config('cat_max_items', 20, 'local_unics');
+
+        $check = new cat_threshold();
+        $check->probe = fn() => 5;   // лучший пул установки - пять заданий
+
+        $res = $check->run();
+
+        $this->assertSame(check_result::ATTENTION, $res->level);
+        $this->assertStringContainsString('недостижим', $res->summary);
+        // Совет обязан назвать ЧИСЛО заданий: без него администратор не знает, что делать.
+        // Число считается из порога: SE = 1/sqrt(1 + n/4) при 0.3 дает 41.
+        $this->assertStringContainsString('около 41 ', $res->action);
+        $this->assertStringContainsString('на одну тему', $res->action);
+    }
+
+    /**
+     * И то, что срабатывать НЕ должно: достижимый порог, выключенная проверка, пустая база.
+     *
+     * Три разные причины молчания, и все три обязаны молчать по-своему: тревожить администратора
+     * там, где он ничего не может сделать, - худший вид проверки здоровья.
+     */
+    public function test_reachable_or_irrelevant_threshold_is_ok(): void {
+        $this->resetAfterTest();
+        set_config('cat_max_items', 20, 'local_unics');
+
+        // Порог мягкий, пул богатый - достижимо.
+        set_config('adaptive_cat_enabled', 1, 'local_unics');
+        set_config('cat_se_threshold', '0.6', 'local_unics');
+        $easy = new cat_threshold();
+        $easy->probe = fn() => 20;
+        $this->assertSame(check_result::OK, $easy->run()->level);
+
+        // Калиброванных заданий нет вовсе - это забота индикатора готовности, а не порога.
+        $empty = new cat_threshold();
+        $empty->probe = fn() => 0;
+        $this->assertSame(check_result::OK, $empty->run()->level);
+
+        // Адаптивная проверка выключена - порог ни на что не влияет.
+        set_config('adaptive_cat_enabled', 0, 'local_unics');
+        $off = new cat_threshold();
+        $off->probe = function () {
+            $this->fail('при выключенной проверке пул считать незачем');
+        };
+        $this->assertSame(check_result::OK, $off->run()->level);
     }
 }
