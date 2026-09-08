@@ -2,6 +2,7 @@
 namespace local_unics\health\checks;
 
 use local_unics\adaptive\estimate_precision;
+use local_unics\codifier_analytics;
 use local_unics\health\check;
 use local_unics\health\check_result;
 use local_unics\learning\cat_session_manager;
@@ -30,7 +31,7 @@ defined('MOODLE_INTERNAL') || die();
 class cat_threshold implements check {
 
     /**
-     * Информация задания Раша, попавшего точно в способность: a^2 * p * (1-p) при a = 1, p = 0.5.
+     * ДОПУЩЕНИЕ формулы пола, и его надо называть.
      *
      * ДОПУЩЕНИЕ, и его надо называть: у заданий с оцененной дискриминацией a может быть больше
      * единицы, и тогда пол ошибки ниже. Но оценка дискриминации включается только с
@@ -39,8 +40,6 @@ class cat_threshold implements check {
      * ПЕССИМИСТИЧНОЙ - предупредит там, где порог уже достижим; поэтому в тексте сказано «при
      * пределе в N заданий», а не «недостижим никогда».
      */
-    private const ITEM_INFO_RASCH = 0.25;
-
     public function name(): string {
         return 'cat_threshold';
     }
@@ -65,8 +64,10 @@ class cat_threshold implements check {
             $maxitems = cat_session_manager::DEFAULT_MAX_ITEMS;
         }
 
-        // Априор N(0,1) дает единицу информации, каждое задание добавляет ITEM_INFO_RASCH.
-        $floor = 1.0 / sqrt(1.0 + self::ITEM_INFO_RASCH * $maxitems);
+        // Формула ОДНА на всех потребителей: она же считает пол в индикаторе готовности и в
+        // описании самой настройки. Три копии одного выражения разъехались бы, как уже
+        // разъезжались пороги между сервисом и плагином.
+        $floor = codifier_analytics::rasch_floor($maxitems);
 
         // Сравнение строгое в пользу тревоги: сервис останавливается по «se СТРОГО меньше порога»,
         // значит ровно на поле точность не достигнута и остановки не будет
@@ -78,7 +79,7 @@ class cat_threshold implements check {
         }
 
         // Сколько заданий за сессию нужно для этого порога: SE = 1/sqrt(1 + n/4).
-        $needitems = (int)ceil((1.0 / ($threshold * $threshold) - 1.0) / self::ITEM_INFO_RASCH);
+        $needitems = (int)ceil((1.0 / ($threshold * $threshold) - 1.0) * 4.0);
         // lib.php грузится НЕ везде: проверка дешевая и считается на каждой штабной странице, а
         // зовется и из CLI. Без этой строки склонение уронило бы страницу «undefined function».
         global $CFG;

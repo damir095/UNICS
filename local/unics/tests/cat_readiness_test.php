@@ -188,6 +188,28 @@ final class cat_readiness_test extends \advanced_testcase {
     }
 
     /**
+     * Замкнутая формула пола и расчет по пулу обязаны давать ОДНО число.
+     *
+     * Формулу зовут три потребителя: индикатор готовности (по реальным дискриминациям), проверка
+     * здоровья и описание самой настройки (обе - по пределу вопросов). Три копии одного выражения
+     * разъехались бы, как уже разъезжались пороги между сервисом и плагином, и администратор читал
+     * бы в настройках одно число, а на странице кодификатора другое.
+     */
+    public function test_closed_form_floor_matches_pool_computation(): void {
+        $this->resetAfterTest();
+        foreach ([1, 4, 12, 20, 41] as $cap) {
+            $this->assertEqualsWithDelta(
+                codifier_analytics::attainable_se(array_fill(0, $cap, 1.0), $cap),
+                codifier_analytics::rasch_floor($cap), 1e-12,
+                "предел {$cap}: замкнутая форма разошлась с расчетом по пулу");
+        }
+        // Предел 12 выбран как точно представимый: 1 + 12/4 = 4, корень ровно два.
+        $this->assertSame(0.5, codifier_analytics::rasch_floor(12));
+        // Пустой предел - априорная единица, а не деление на ноль.
+        $this->assertSame(1.0, codifier_analytics::rasch_floor(0));
+    }
+
+    /**
      * Незаданный лимит заданий не означает «лимита нет».
      *
      * cat_session_manager::config() подставляет 20, а индикатор при пустой настройке брал ВЕСЬ
